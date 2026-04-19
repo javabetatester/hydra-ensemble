@@ -34,6 +34,8 @@ function on<T>(channel: string, handler: (payload: T) => void): () => void {
 
 const api: HydraEnsembleApi = {
   pty: {
+    spawn: (opts) => ipcRenderer.invoke('pty:spawn', opts),
+    kill: (sessionId) => ipcRenderer.invoke('pty:kill', { sessionId }),
     write: (sessionId, data) => ipcRenderer.invoke('pty:write', { sessionId, data }),
     resize: (sessionId, cols, rows) =>
       ipcRenderer.invoke('pty:resize', { sessionId, cols, rows }),

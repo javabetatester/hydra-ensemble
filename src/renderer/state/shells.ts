@@ -3,12 +3,12 @@ import { create } from 'zustand'
 /**
  * Plain shell terminals — the kind you spawn to run `npm run dev`,
  * `tail -f log`, `htop`, or any side process you want to keep tabs on
- * while your Claude agents do their thing. Independent from `session`
- * (which always exec's claude inside).
+ * while your Claude agents do their thing.
  *
- * Each shell is a thin record over a PTY id. The PTY itself is owned
- * by main's PtyManager and survives renderer reloads via the same
- * subscription contract as session PTYs.
+ * Shells are NOT agent sessions. They go directly through window.api.pty
+ * (no SessionManager, no JSONL watcher, no analyzer, no entry in the
+ * Sessions panel) so the two concepts stay clean: session = a running
+ * Claude agent; shell = an interactive bash you happen to need.
  */
 export interface Shell {
   id: string // ptyId
@@ -38,24 +38,20 @@ export const useShells = create<ShellsState>((set, get) => ({
 
   spawn: async (cwd, name) => {
     const id = newId()
-    const result = await window.api.pty.write !== undefined
-      ? await window.api.session.create({
-          name: name ?? `shell-${get().shells.length + 1}`,
-          cwd,
-          cols: 120,
-          rows: 30,
-          shellOnly: true
-        })
-      : null
-    if (!result || !result.ok) {
+    const result = await window.api.pty.spawn({
+      sessionId: id,
+      cwd,
+      cols: 120,
+      rows: 30
+    })
+    if (!result.ok) {
       // eslint-disable-next-line no-console
-      console.error('[shells] spawn failed', result)
+      console.error('[shells] spawn failed:', result.error)
       return null
     }
-    // Reuse the session's ptyId as the shell id so writes/data flow naturally.
     const shell: Shell = {
-      id: result.session.ptyId,
-      name: result.session.name,
+      id,
+      name: name ?? `shell-${get().shells.length + 1}`,
       cwd,
       createdAt: Date.now()
     }
@@ -64,8 +60,7 @@ export const useShells = create<ShellsState>((set, get) => ({
   },
 
   destroy: async (id) => {
-    // Find the underlying session id (ptyId === sessionId in our wiring).
-    await window.api.session.destroy(id)
+    await window.api.pty.kill(id)
     set((s) => {
       const shells = s.shells.filter((sh) => sh.id !== id)
       const activeId =

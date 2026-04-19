@@ -257,6 +257,11 @@ export interface PRCheck {
 
 export interface HydraEnsembleApi {
   pty: {
+    /** Spawn a raw PTY (no claude exec). Used by the Terminals panel for
+     *  plain shells that should NOT appear as agent sessions. */
+    spawn: (opts: PtySpawnOptions) => Promise<PtySpawnResult>
+    /** Kill a raw PTY by id. Used to close a Terminals tab. */
+    kill: (sessionId: string) => Promise<void>
     write: (sessionId: string, data: string) => Promise<void>
     resize: (sessionId: string, cols: number, rows: number) => Promise<void>
     onData: (handler: (event: PtyDataEvent) => void) => () => void
