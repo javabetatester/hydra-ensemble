@@ -36,7 +36,8 @@ export default function HelpOverlay({ open, onClose }: Props) {
     {
       title: 'Sessions',
       items: [
-        { keys: fmtShortcut('T'), label: 'new Claude session' },
+        { keys: fmtShortcut('N'), label: 'new Claude session (picker)' },
+        { keys: `${mod}${shift}N`, label: 'quick-spawn session (active cwd)' },
         { keys: fmtShortcut('W'), label: 'close active session' },
         { keys: fmtShortcut('1..9'), label: 'jump to session N' },
         { keys: `${mod}[`, label: 'previous session' },
@@ -49,10 +50,11 @@ export default function HelpOverlay({ open, onClose }: Props) {
       title: 'Panels',
       items: [
         { keys: fmtShortcut('K'), label: 'command palette' },
+        { keys: fmtShortcut('T'), label: 'terminals panel' },
+        { keys: fmtShortcut('P'), label: 'projects drawer' },
         { keys: fmtShortcut('D'), label: 'dashboard' },
-        { keys: fmtShortcut('E'), label: 'code editor (slide)' },
-        { keys: fmtShortcut('B'), label: 'project drawer' },
-        { keys: fmtShortcut('`'), label: 'quick terminal' },
+        { keys: fmtShortcut('E'), label: 'code editor' },
+        { keys: fmtShortcut('`'), label: 'terminals (alias)' },
         { keys: `${mod}${shift}P`, label: 'PR inspector' },
         { keys: `${mod}${shift}W`, label: 'watchdogs' },
         { keys: `${mod}${shift}V`, label: 'voice dictation' }

@@ -102,6 +102,10 @@ export default function App() {
       // collide with Hyprland/GNOME/KDE/Win Super+N workspace shortcuts.
       if (!hasMod(e)) return
       const key = e.key.toLowerCase()
+      // e.code is layout-independent — important because ABNT2 keyboards
+      // don't produce the backtick/apostrophe characters where a US
+      // layout would. Using code lets the same shortcut work everywhere.
+      const code = e.code
 
       if (key === 'k' && !e.shiftKey) {
         e.preventDefault()
@@ -118,19 +122,28 @@ export default function App() {
         togglePanelFor('editor')
         return
       }
-      if (key === 'b' && !e.shiftKey) {
+      if (key === 'p' && !e.shiftKey) {
+        // ⌘P toggles the projects drawer.
         e.preventDefault()
         setDrawerOpen((v) => !v)
         return
       }
       if (key === 't' && !e.shiftKey) {
+        // ⌘T opens the Terminals panel — fast path for spawning a shell
+        // next to the agents, matching the user's muscle memory from
+        // VS Code / Cursor.
         e.preventDefault()
-        // ⌘T opens the picker dialog so the user explicitly chooses
-        // project + worktree. ⌘⇧T quick-spawns with the active context.
+        togglePanelFor('terminals')
+        return
+      }
+      if (key === 'n' && !e.shiftKey) {
+        // ⌘N opens the new-session picker dialog (project + worktree).
+        // ⌘⇧N quick-spawns with the active context.
+        e.preventDefault()
         showSpawn()
         return
       }
-      if (key === 't' && e.shiftKey) {
+      if (key === 'n' && e.shiftKey) {
         e.preventDefault()
         void createSession({ cwd: contextCwd ?? undefined })
         return
@@ -165,12 +178,17 @@ export default function App() {
         if (next) setActive(next.id)
         return
       }
-      if (e.key === '`' && !e.shiftKey) {
+      // Backtick alias — some US-muscle-memory users still expect ⌘` for
+      // the terminal panel. Using e.code so the key is recognised on
+      // ABNT2 layouts where the physical key produces apostrophe.
+      if ((code === 'Backquote' || e.key === '`' || e.key === "'") && !e.shiftKey) {
         e.preventDefault()
         togglePanelFor('terminals')
         return
       }
       if (key === 'p' && e.shiftKey) {
+        // ⌘⇧P opens the PR inspector (kept shift to avoid clashing with
+        // the new ⌘P projects drawer).
         if (!contextCwd) return
         e.preventDefault()
         if (activePanel === 'pr') {
@@ -247,7 +265,7 @@ export default function App() {
                   ? 'border-border-mid bg-bg-4 text-text-1'
                   : 'border-transparent text-text-3 hover:bg-bg-3 hover:text-text-1'
               }`}
-              title="toggle projects (Cmd/Ctrl+B)"
+              title="toggle projects (Cmd/Ctrl+P)"
             >
               <FolderTree size={12} strokeWidth={1.75} />
               <span className="font-mono">
