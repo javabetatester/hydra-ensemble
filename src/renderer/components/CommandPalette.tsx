@@ -153,12 +153,19 @@ export default function CommandPalette({ open, onClose }: Props) {
       })
     }
 
-    // Panels / overlays
-    const panel = (id: string, label: string, shortcut: string, icon: LucideIcon, run: () => void): PaletteItem => ({
+    // Panels / overlays — render the LucideIcon via JSX so React 19's
+    // strict component-call enforcement doesn't reject the bare call.
+    const panel = (
+      id: string,
+      label: string,
+      shortcut: string,
+      Icon: LucideIcon,
+      run: () => void
+    ): PaletteItem => ({
       id,
       label,
       shortcut,
-      icon: icon({ size: 14, strokeWidth: 1.75 }) as React.ReactNode,
+      icon: <Icon size={14} strokeWidth={1.75} />,
       group: 'Panels',
       run
     })
