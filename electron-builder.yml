@@ -1,0 +1,46 @@
+appId: com.intuitivecompute.hydra-ensemble
+productName: Hydra Ensemble
+copyright: Copyright (C) 2026 Intuitive Compute
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**/*
+  - resources/**/*
+  - "!**/*.{md,ts,tsx,map,test.ts,test.tsx}"
+asarUnpack:
+  - "**/node_modules/node-pty/**"
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+  category: Development
+  maintainer: Intuitive Compute <support@intuitivecompute.com>
+  synopsis: Multi-session terminal for Claude Code
+  description: |
+    Hydra Ensemble is a multi-session terminal wrapper for Claude Code with
+    git worktree isolation, live status tracking, and a built-in toolkit.
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+mac:
+  target:
+    - target: dmg
+      arch:
+        - universal
+  category: public.app-category.developer-tools
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  shortcutName: Hydra Ensemble
+publish:
+  provider: github
+  owner: intuitive-compute
+  repo: hydra-ensemble
