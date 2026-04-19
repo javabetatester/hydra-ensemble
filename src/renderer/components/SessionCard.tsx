@@ -1,9 +1,11 @@
-import { GitBranch, X, RotateCw, Edit3 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { GitBranch, X, RotateCw, Edit3, Copy } from 'lucide-react'
 import type { SessionMeta } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
 import AgentAvatar from './AgentAvatar'
 import { defaultAgentColor, hexAlpha } from '../lib/agent'
 import { fmtShortcut } from '../lib/platform'
+import { useSessions } from '../state/sessions'
 
 interface Props {
   session: SessionMeta
@@ -13,6 +15,7 @@ interface Props {
   onDestroy: () => void
   onRestart?: () => void
   onEdit?: () => void
+  onClone?: () => void
 }
 
 function relativeAge(iso: string): string {
@@ -42,9 +45,35 @@ export default function SessionCard({
   onClick,
   onDestroy,
   onRestart,
-  onEdit
+  onEdit,
+  onClone
 }: Props) {
   const accent = session.accentColor || defaultAgentColor(session.id)
+  const unread = useSessions((s) => !!s.unread[session.id] && !active)
+  const renameSession = useSessions((s) => s.renameSession)
+
+  const [editingName, setEditingName] = useState(false)
+  const [draftName, setDraftName] = useState(session.name)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editingName) setDraftName(session.name)
+  }, [session.name, editingName])
+
+  useEffect(() => {
+    if (editingName) {
+      nameInputRef.current?.focus()
+      nameInputRef.current?.select()
+    }
+  }, [editingName])
+
+  const commitName = async (): Promise<void> => {
+    const trimmed = draftName.trim()
+    if (trimmed && trimmed !== session.name) {
+      await renameSession(session.id, trimmed)
+    }
+    setEditingName(false)
+  }
 
   // Active card uses the agent's accent for a left rule + soft tinted ring.
   // No global df-glow-accent so the colour respects the per-agent identity
@@ -72,16 +101,57 @@ export default function SessionCard({
     >
       {/* row 1: avatar + name + (hover actions | kbd badge) */}
       <div className="flex items-start gap-2.5">
-        <AgentAvatar session={session} size={28} />
+        <div className="relative">
+          <AgentAvatar session={session} size={28} />
+          {unread ? (
+            <span
+              className="df-pulse absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent-500 ring-2 ring-bg-3"
+              title="new activity"
+              aria-label="new activity"
+            />
+          ) : null}
+        </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <span className="truncate text-[13px] font-semibold tracking-tight text-text-1">
-              {session.name}
-            </span>
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                onBlur={() => void commitName()}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void commitName()
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setDraftName(session.name)
+                    setEditingName(false)
+                  }
+                }}
+                className="min-w-0 flex-1 rounded-sm border border-accent-500 bg-bg-1 px-1.5 py-0 text-[13px] font-semibold tracking-tight text-text-1 outline-none"
+              />
+            ) : (
+              <span
+                className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight text-text-1"
+                onDoubleClick={(e) => {
+                  e.stopPropagation()
+                  setEditingName(true)
+                }}
+                title="double-click to rename"
+              >
+                {session.name}
+              </span>
+            )}
             <div className="flex shrink-0 items-center gap-0.5">
               {/* hover actions appear to the LEFT of the kbd badge so the
                   ⌘N shortcut hint is never covered by them */}
               <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
+                {onClone ? (
+                  <ActionBtn onClick={onClone} title="clone session" Icon={Copy} />
+                ) : null}
                 {onEdit ? (
                   <ActionBtn onClick={onEdit} title="edit agent" Icon={Edit3} />
                 ) : null}

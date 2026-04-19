@@ -20,6 +20,7 @@ import ToolkitEditorDialog from './components/Toolkit/EditorDialog'
 import WatchdogPanel from './components/Watchdog/Panel'
 import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
+import HelpOverlay from './components/HelpOverlay'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
@@ -33,6 +34,7 @@ export default function App() {
   const [claudePath, setClaudePath] = useState<string | null | undefined>(undefined)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const sessions = useSessions((s) => s.sessions)
   const activeId = useSessions((s) => s.activeId)
@@ -76,6 +78,17 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // '?' toggles the keyboard help overlay from anywhere, as long as
+      // the user isn't typing in an input — in which case '?' is a real
+      // character they meant to type.
+      if (e.key === '?' && !hasMod(e)) {
+        const t = e.target as HTMLElement | null
+        const tag = t?.tagName?.toLowerCase()
+        if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return
+        e.preventDefault()
+        setHelpOpen((v) => !v)
+        return
+      }
       // hasMod ignores Super (metaKey) on Linux/Windows so we don't
       // collide with Hyprland/GNOME/KDE/Win Super+N workspace shortcuts.
       if (!hasMod(e)) return
@@ -330,6 +343,7 @@ export default function App() {
       <ToolkitEditorDialog />
       <Toasts />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   )
 }

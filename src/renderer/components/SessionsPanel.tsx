@@ -10,6 +10,7 @@ export default function SessionsPanel() {
   const activeId = useSessions((s) => s.activeId)
   const setActive = useSessions((s) => s.setActive)
   const create = useSessions((s) => s.createSession)
+  const clone = useSessions((s) => s.cloneSession)
   const destroy = useSessions((s) => s.destroySession)
   const isCreating = useSessions((s) => s.isCreating)
 
@@ -113,6 +114,7 @@ export default function SessionsPanel() {
             onClick={() => setActive(s.id)}
             onDestroy={() => destroy(s.id)}
             onEdit={() => setEditing(s)}
+            onClone={() => void clone(s.id)}
           />
         ))}
       </div>
