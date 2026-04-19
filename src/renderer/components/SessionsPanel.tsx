@@ -2,6 +2,8 @@ import { Plus, Activity, RefreshCw, Inbox } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSessions } from '../state/sessions'
 import SessionCard from './SessionCard'
+import AgentEditDialog from './AgentEditDialog'
+import type { SessionMeta } from '../../shared/types'
 
 export default function SessionsPanel() {
   const sessions = useSessions((s) => s.sessions)
@@ -12,6 +14,7 @@ export default function SessionsPanel() {
   const isCreating = useSessions((s) => s.isCreating)
 
   const [tab, setTab] = useState<'sessions' | 'activity'>('sessions')
+  const [editing, setEditing] = useState<SessionMeta | null>(null)
 
   // Re-render every 30s so the relative ages stay roughly fresh.
   const [, force] = useState(0)
@@ -79,6 +82,8 @@ export default function SessionsPanel() {
           <span>⌘] Next</span>
         </footer>
       ) : null}
+
+      <AgentEditDialog session={editing} onClose={() => setEditing(null)} />
     </aside>
   )
 
@@ -107,6 +112,7 @@ export default function SessionsPanel() {
             active={s.id === activeId}
             onClick={() => setActive(s.id)}
             onDestroy={() => destroy(s.id)}
+            onEdit={() => setEditing(s)}
           />
         ))}
       </div>

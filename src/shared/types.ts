@@ -38,12 +38,29 @@ export interface SessionMeta {
   claudeConfigDir: string
   createdAt: string
   ptyId: string
+  /** Emoji or short string shown as the agent's avatar. */
+  avatar?: string
+  /** Hex colour used for the agent's accent ring. */
+  accentColor?: string
+  /** Optional one-line description / role hint. */
+  description?: string
   state?: SessionState
+  /** Finer-grained activity, e.g. "editing src/foo.ts" or "running npm test". */
+  subStatus?: string
+  /** Optional target the agent is currently acting on (file/command). */
+  subTarget?: string
   cost?: number
   tokensIn?: number
   tokensOut?: number
   model?: string
   latestAssistantText?: string
+}
+
+export interface SessionUpdate {
+  name?: string
+  avatar?: string
+  accentColor?: string
+  description?: string
 }
 
 export type SessionState =
@@ -230,6 +247,7 @@ export interface HydraEnsembleApi {
     destroy: (id: string) => Promise<void>
     list: () => Promise<SessionMeta[]>
     rename: (id: string, name: string) => Promise<void>
+    update: (id: string, patch: SessionUpdate) => Promise<void>
     onChange: (handler: (sessions: SessionMeta[]) => void) => () => void
     onState: (handler: (event: { sessionId: string; state: SessionState }) => void) => () => void
     onJsonl: (handler: (update: JsonlUpdate) => void) => () => void

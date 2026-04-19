@@ -16,7 +16,8 @@ import { getStore, patchStore } from '../store'
 import type {
   SessionCreateOptions,
   SessionCreateResult,
-  SessionMeta
+  SessionMeta,
+  SessionUpdate
 } from '../../shared/types'
 
 export interface SessionManagerDeps {
@@ -165,6 +166,20 @@ export class SessionManager {
     const trimmed = name.trim()
     if (!trimmed) return
     meta.name = trimmed
+    this.persist()
+    this.notifyChange()
+  }
+
+  update(id: string, patch: SessionUpdate): void {
+    const meta = this.sessions.get(id)
+    if (!meta) return
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim()
+      if (trimmed) meta.name = trimmed
+    }
+    if (patch.avatar !== undefined) meta.avatar = patch.avatar
+    if (patch.accentColor !== undefined) meta.accentColor = patch.accentColor
+    if (patch.description !== undefined) meta.description = patch.description.trim()
     this.persist()
     this.notifyChange()
   }

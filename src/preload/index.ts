@@ -16,6 +16,7 @@ import type {
   SessionCreateOptions,
   SessionMeta,
   SessionState,
+  SessionUpdate,
   ToolkitItem,
   ToolkitRunResult,
   WatchdogFireEvent,
@@ -45,6 +46,8 @@ const api: HydraEnsembleApi = {
     list: () => ipcRenderer.invoke('session:list'),
     rename: (id: string, name: string) =>
       ipcRenderer.invoke('session:rename', { id, name }),
+    update: (id: string, patch: SessionUpdate) =>
+      ipcRenderer.invoke('session:update', { id, patch }),
     onChange: (handler) => on<SessionMeta[]>('session:changed', handler),
     onState: (handler) =>
       on<{ sessionId: string; state: SessionState }>('session:state', handler),
