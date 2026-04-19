@@ -145,20 +145,35 @@ export const useSessions = create<SessionsState>((set, get) => ({
     window.api.session.onState((evt: { sessionId: string; state: SessionState }) => {
       const prev = get().sessions.find((s) => s.id === evt.sessionId)
       get().patchSession(evt.sessionId, { state: evt.state })
-      // Surface attention transitions as a toast so a backgrounded agent
-      // doesn't get stuck waiting unnoticed.
-      if (
-        evt.state === 'needsAttention' &&
-        prev &&
-        prev.state !== 'needsAttention' &&
-        get().activeId !== evt.sessionId
-      ) {
+
+      if (!prev || get().activeId === evt.sessionId) return
+
+      // Surface attention transitions so a backgrounded agent doesn't
+      // get stuck waiting unnoticed.
+      if (evt.state === 'needsAttention' && prev.state !== 'needsAttention') {
         useToasts.getState().push({
           kind: 'attention',
           title: `${prev.name} needs attention`,
           body: prev.subStatus
             ? `${prev.subStatus}${prev.subTarget ? ' · ' + prev.subTarget : ''}`
             : 'agent is waiting for permission',
+          sessionId: evt.sessionId
+        })
+        return
+      }
+
+      // "Your turn again" transition: agent was working (thinking /
+      // generating), and now it's settled into an input prompt. Toast
+      // so the user knows that backgrounded session is ready to chat.
+      const wasWorking = prev.state === 'thinking' || prev.state === 'generating'
+      const nowReady = evt.state === 'userInput' || evt.state === 'idle'
+      if (wasWorking && nowReady) {
+        useToasts.getState().push({
+          kind: 'success',
+          title: `${prev.name} is ready`,
+          body: prev.latestAssistantText
+            ? prev.latestAssistantText.slice(0, 100)
+            : 'agent finished — your turn',
           sessionId: evt.sessionId
         })
       }
