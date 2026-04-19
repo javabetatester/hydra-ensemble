@@ -18,6 +18,7 @@ import ToolkitGrid from './components/ToolkitGrid'
 import ActiveAgentBar from './components/ActiveAgentBar'
 import ToolkitEditorDialog from './components/Toolkit/EditorDialog'
 import WatchdogPanel from './components/Watchdog/Panel'
+import Toasts from './components/Toasts'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
@@ -300,6 +301,7 @@ export default function App() {
       <PRInspector cwd={contextCwd} open={ghOpen} onClose={closeGh} />
       <WatchdogPanel />
       <ToolkitEditorDialog />
+      <Toasts />
     </div>
   )
 }

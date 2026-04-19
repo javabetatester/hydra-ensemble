@@ -5,6 +5,7 @@ import type {
   SessionMeta,
   SessionState
 } from '../../shared/types'
+import { useToasts } from './toasts'
 
 interface SessionsState {
   sessions: SessionMeta[]
@@ -88,8 +89,25 @@ export const useSessions = create<SessionsState>((set, get) => ({
       get().setSessions(next)
     })
     window.api.session.onState((evt: { sessionId: string; state: SessionState }) => {
-      // sessionId here is the ptyId — sessions use the same string in Phase 1
+      const prev = get().sessions.find((s) => s.id === evt.sessionId)
       get().patchSession(evt.sessionId, { state: evt.state })
+      // Surface attention transitions as a toast so a backgrounded agent
+      // doesn't get stuck waiting unnoticed.
+      if (
+        evt.state === 'needsAttention' &&
+        prev &&
+        prev.state !== 'needsAttention' &&
+        get().activeId !== evt.sessionId
+      ) {
+        useToasts.getState().push({
+          kind: 'attention',
+          title: `${prev.name} needs attention`,
+          body: prev.subStatus
+            ? `${prev.subStatus}${prev.subTarget ? ' · ' + prev.subTarget : ''}`
+            : 'agent is waiting for permission',
+          sessionId: evt.sessionId
+        })
+      }
     })
     window.api.session.onJsonl((update: JsonlUpdate) => {
       get().patchSession(update.sessionId, {
