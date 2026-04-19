@@ -141,13 +141,24 @@ app.whenReady().then(() => {
   const win = createWindow()
   initUpdater(win)
 
+  // Rehydrate persisted sessions after the renderer has mounted and
+  // subscribed to IPC events. did-finish-load + a short tick is enough
+  // for contextBridge listeners to be wired up in practice.
+  win.webContents.once('did-finish-load', () => {
+    setTimeout(() => {
+      void sessionManager.rehydrate()
+    }, 400)
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
+// On close, kill PTYs but preserve the per-session CLAUDE_CONFIG_DIR so
+// sessions can be rehydrated on the next launch (history + credentials).
 app.on('window-all-closed', () => {
-  void sessionManager.destroyAll()
+  sessionManager.shutdown()
   jsonlManager.stopAll()
   analyzerManager.disposeAll()
   ptyManager.killAll()
@@ -155,7 +166,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  void sessionManager.destroyAll()
+  sessionManager.shutdown()
   jsonlManager.stopAll()
   analyzerManager.disposeAll()
   ptyManager.killAll()
