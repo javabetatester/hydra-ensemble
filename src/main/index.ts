@@ -121,7 +121,9 @@ jsonlManager.onAnyUpdate = (update: JsonlUpdate) => {
     tokensIn: update.tokensIn,
     tokensOut: update.tokensOut,
     model: update.model,
-    latestAssistantText: update.latestAssistantText
+    latestAssistantText: update.latestAssistantText,
+    subStatus: update.subStatus,
+    subTarget: update.subTarget
   })
 }
 

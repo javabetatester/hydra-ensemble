@@ -96,6 +96,10 @@ export interface JsonlUpdate {
   model: string
   latestAssistantText?: string
   latestAssistantAt?: string
+  /** Coarse activity verb derived from the latest tool call (e.g. "editing"). */
+  subStatus?: string
+  /** Concrete target — file path, command snippet, search pattern. */
+  subTarget?: string
 }
 
 // =============================================================================

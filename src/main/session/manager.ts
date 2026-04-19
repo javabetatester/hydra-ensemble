@@ -184,11 +184,21 @@ export class SessionManager {
     this.notifyChange()
   }
 
-  /** Patch a session's live fields (state, cost, tokens, model). */
+  /** Patch a session's live fields (state, cost, tokens, model, sub-status). */
   patchLive(
     sessionId: string,
     patch: Partial<
-      Pick<SessionMeta, 'state' | 'cost' | 'tokensIn' | 'tokensOut' | 'model' | 'latestAssistantText'>
+      Pick<
+        SessionMeta,
+        | 'state'
+        | 'cost'
+        | 'tokensIn'
+        | 'tokensOut'
+        | 'model'
+        | 'latestAssistantText'
+        | 'subStatus'
+        | 'subTarget'
+      >
     >
   ): void {
     const meta = this.sessions.get(sessionId)

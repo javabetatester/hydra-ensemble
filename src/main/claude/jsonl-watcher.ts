@@ -67,6 +67,91 @@ export function shortModelName(model: string): string {
 
 type ContentBlock = { type?: string; text?: string; [k: string]: unknown }
 
+interface SubStatus {
+  status: string
+  target?: string
+}
+
+const TOOL_VERB: Record<string, string> = {
+  Read: 'reading',
+  Write: 'writing',
+  Edit: 'editing',
+  Update: 'editing',
+  MultiEdit: 'editing',
+  NotebookEdit: 'editing',
+  Bash: 'running',
+  Grep: 'searching',
+  Glob: 'finding',
+  Task: 'delegating',
+  WebFetch: 'fetching',
+  WebSearch: 'searching',
+  TodoWrite: 'planning'
+}
+
+function shortenTarget(s: string, max = 48): string {
+  const trimmed = s.replace(/\s+/g, ' ').trim()
+  if (trimmed.length <= max) return trimmed
+  return trimmed.slice(0, max - 1) + '…'
+}
+
+function targetFromInput(name: string, input: Record<string, unknown> | undefined): string | undefined {
+  if (!input) return undefined
+  const pickStr = (k: string): string | undefined => {
+    const v = input[k]
+    return typeof v === 'string' && v.length > 0 ? v : undefined
+  }
+  switch (name) {
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+    case 'Update':
+    case 'MultiEdit':
+    case 'NotebookEdit':
+      return pickStr('file_path') ?? pickStr('path') ?? pickStr('notebook_path')
+    case 'Bash':
+      return pickStr('command') ? shortenTarget(pickStr('command') as string) : undefined
+    case 'Grep':
+    case 'Glob':
+      return pickStr('pattern') ?? pickStr('query')
+    case 'Task':
+      return pickStr('description') ? shortenTarget(pickStr('description') as string) : undefined
+    case 'WebFetch':
+      return pickStr('url')
+    case 'WebSearch':
+      return pickStr('query')
+    case 'TodoWrite': {
+      const todos = input['todos']
+      return Array.isArray(todos) ? `${todos.length} item${todos.length === 1 ? '' : 's'}` : undefined
+    }
+    default:
+      return undefined
+  }
+}
+
+/**
+ * Inspect a content array for the latest `tool_use` block and return the
+ * verb + target snapshot suitable for rendering as the agent's substatus.
+ */
+export function extractSubStatus(content: unknown): SubStatus | null {
+  if (!Array.isArray(content)) return null
+  for (let i = content.length - 1; i >= 0; i--) {
+    const raw = content[i]
+    if (!raw || typeof raw !== 'object') continue
+    const block = raw as ContentBlock
+    if (block['type'] !== 'tool_use') continue
+    const name = typeof block['name'] === 'string' ? (block['name'] as string) : ''
+    if (!name) continue
+    const verb = TOOL_VERB[name] ?? name.toLowerCase()
+    const input =
+      block['input'] && typeof block['input'] === 'object'
+        ? (block['input'] as Record<string, unknown>)
+        : undefined
+    const target = targetFromInput(name, input)
+    return target ? { status: verb, target } : { status: verb }
+  }
+  return null
+}
+
 /**
  * Extract concatenated text from a JSONL `content` field. The field can be
  * either a plain string (rare) or an array of `{"type": "text", ...}` blocks
@@ -113,6 +198,8 @@ export class JsonlWatcher {
 
   private readonly sessionId: string
   private readonly onUpdate: (u: JsonlUpdate) => void
+  private latestSubStatus: string | undefined
+  private latestSubTarget: string | undefined
   private readonly projectDir: string
 
   private totalCost = 0
@@ -351,6 +438,12 @@ export class JsonlWatcher {
       this.latestAssistantAt = new Date().toISOString()
     }
 
+    const sub = extractSubStatus(msg['content'])
+    if (sub) {
+      this.latestSubStatus = sub.status
+      this.latestSubTarget = sub.target
+    }
+
     this.totalTokensIn += inputTokens + cacheCreationTokens + cacheReadTokens
     this.totalTokensOut += outputTokens
 
@@ -378,6 +471,12 @@ export class JsonlWatcher {
     }
     if (this.latestAssistantAt !== undefined) {
       update.latestAssistantAt = this.latestAssistantAt
+    }
+    if (this.latestSubStatus !== undefined) {
+      update.subStatus = this.latestSubStatus
+    }
+    if (this.latestSubTarget !== undefined) {
+      update.subTarget = this.latestSubTarget
     }
     this.onUpdate(update)
   }
