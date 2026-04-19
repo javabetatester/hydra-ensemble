@@ -3,6 +3,7 @@ import type { SessionMeta } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
 import AgentAvatar from './AgentAvatar'
 import { defaultAgentColor, hexAlpha } from '../lib/agent'
+import { fmtShortcut } from '../lib/platform'
 
 interface Props {
   session: SessionMeta
@@ -69,7 +70,7 @@ export default function SessionCard({
           : 'border-border-soft hover:-translate-y-px hover:border-border-mid hover:bg-bg-4'
       }`}
     >
-      {/* row 1: avatar + name + index */}
+      {/* row 1: avatar + name + (hover actions | kbd badge) */}
       <div className="flex items-start gap-2.5">
         <AgentAvatar session={session} size={28} />
         <div className="min-w-0 flex-1">
@@ -77,11 +78,24 @@ export default function SessionCard({
             <span className="truncate text-[13px] font-semibold tracking-tight text-text-1">
               {session.name}
             </span>
-            {index <= 9 ? (
-              <span className="shrink-0 rounded-sm border border-border-soft bg-bg-2/80 px-1 py-0 text-[10px] leading-4 text-text-4">
-                ⌘{index === 9 ? 0 : index}
-              </span>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-0.5">
+              {/* hover actions appear to the LEFT of the kbd badge so the
+                  ⌘N shortcut hint is never covered by them */}
+              <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
+                {onEdit ? (
+                  <ActionBtn onClick={onEdit} title="edit agent" Icon={Edit3} />
+                ) : null}
+                {onRestart ? (
+                  <ActionBtn onClick={onRestart} title="restart" Icon={RotateCw} />
+                ) : null}
+                <ActionBtn onClick={onDestroy} title="close" Icon={X} danger />
+              </div>
+              {index <= 9 ? (
+                <span className="rounded-sm border border-border-soft bg-bg-2/80 px-1 py-0 text-[10px] leading-4 text-text-4">
+                  {fmtShortcut(String(index === 9 ? 0 : index))}
+                </span>
+              ) : null}
+            </div>
           </div>
           {session.description ? (
             <div className="truncate text-[11px] italic text-text-3">{session.description}</div>
@@ -132,16 +146,6 @@ export default function SessionCard({
         </div>
       </div>
 
-      {/* hover actions */}
-      <div className="absolute right-1 top-1 flex gap-0.5 opacity-0 transition group-hover:opacity-100">
-        {onEdit ? (
-          <ActionBtn onClick={onEdit} title="edit agent" Icon={Edit3} />
-        ) : null}
-        {onRestart ? (
-          <ActionBtn onClick={onRestart} title="restart" Icon={RotateCw} />
-        ) : null}
-        <ActionBtn onClick={onDestroy} title="close" Icon={X} danger />
-      </div>
     </div>
   )
 }

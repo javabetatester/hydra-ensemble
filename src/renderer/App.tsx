@@ -27,6 +27,7 @@ import { useProjects } from './state/projects'
 import { useGh } from './state/gh'
 import { useToolkit } from './state/toolkit'
 import { useWatchdog } from './state/watchdog'
+import { fmtShortcut, hasMod } from './lib/platform'
 
 export default function App() {
   const [claudePath, setClaudePath] = useState<string | null | undefined>(undefined)
@@ -75,8 +76,9 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const mod = e.metaKey || e.ctrlKey
-      if (!mod) return
+      // hasMod ignores Super (metaKey) on Linux/Windows so we don't
+      // collide with Hyprland/GNOME/KDE/Win Super+N workspace shortcuts.
+      if (!hasMod(e)) return
       const key = e.key.toLowerCase()
 
       if (key === 'k' && !e.shiftKey) {
@@ -212,26 +214,26 @@ export default function App() {
             <HeaderButton
               icon={<GitPullRequest size={13} strokeWidth={1.75} />}
               label="PRs"
-              shortcut="⌘⇧P"
+              shortcut={fmtShortcut('P', { shift: true })}
               onClick={() => contextCwd && openGh(contextCwd)}
               disabled={!contextCwd}
             />
             <HeaderButton
               icon={<Wand2 size={13} strokeWidth={1.75} />}
               label="watchdogs"
-              shortcut="⌘⇧W"
+              shortcut={fmtShortcut('W', { shift: true })}
               onClick={togglePanel}
             />
             <HeaderButton
               icon={<Code2 size={13} strokeWidth={1.75} />}
               label="editor"
-              shortcut="⌘E"
+              shortcut={fmtShortcut('E')}
               onClick={toggleEditor}
             />
             <HeaderButton
               icon={<LayoutDashboard size={13} strokeWidth={1.75} />}
               label="dashboard"
-              shortcut="⌘D"
+              shortcut={fmtShortcut('D')}
               onClick={toggleDashboard}
             />
             <div className="ml-2 flex items-center gap-1.5 border-l border-border-soft pl-3 font-mono text-[10px]">
