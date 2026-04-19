@@ -3,7 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { RotateCw, AlertTriangle, Trash2 } from 'lucide-react'
+import { RotateCw, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
 import type { SessionMeta } from '../../shared/types'
 import { useSessions } from '../state/sessions'
 
@@ -30,6 +30,7 @@ export default function SessionPane({ session, visible }: Props) {
   const fitRef = useRef<FitAddon | null>(null)
   const [exited, setExited] = useState<ExitInfo | null>(null)
   const [restarting, setRestarting] = useState(false)
+  const [starting, setStarting] = useState(true)
   const destroySession = useSessions((s) => s.destroySession)
 
   useEffect(() => {
@@ -70,11 +71,21 @@ export default function SessionPane({ session, visible }: Props) {
       }
     }
 
+    setStarting(true)
+    setExited(null)
+    const startTimeout = setTimeout(() => {
+      // If we still haven't received any data after 4s, leave the overlay
+      // visible so the user knows something is wrong.
+    }, 4000)
+
     const offData = window.api.pty.onData((evt) => {
-      if (evt.sessionId === ptyId) term.write(evt.data)
+      if (evt.sessionId !== ptyId) return
+      if (starting) setStarting(false)
+      term.write(evt.data)
     })
     const offExit = window.api.pty.onExit((evt) => {
       if (evt.sessionId !== ptyId) return
+      setStarting(false)
       setExited({ exitCode: evt.exitCode, signal: evt.signal, at: Date.now() })
       term.writeln(
         `\r\n\x1b[33m[hydra-ensemble] pty exited (code=${evt.exitCode}${
@@ -94,6 +105,7 @@ export default function SessionPane({ session, visible }: Props) {
     ro.observe(container)
 
     return () => {
+      clearTimeout(startTimeout)
       ro.disconnect()
       offData()
       offExit()
@@ -102,6 +114,9 @@ export default function SessionPane({ session, visible }: Props) {
       termRef.current = null
       fitRef.current = null
     }
+    // intentional: starting captured by closure is fine — we only care about
+    // the initial value when the effect re-runs on ptyId change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.ptyId])
 
   // Re-fit when this pane becomes visible (it may have been hidden).
@@ -142,6 +157,15 @@ export default function SessionPane({ session, visible }: Props) {
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+
+      {starting && !exited ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-bg-1/60 backdrop-blur-[2px]">
+          <div className="flex items-center gap-2 rounded-sm border border-border-soft bg-bg-3/90 px-3 py-2 font-mono text-[11px] text-text-3 shadow-pop df-fade-in">
+            <Loader2 size={12} strokeWidth={2} className="animate-spin text-accent-400" />
+            <span>warming up agent…</span>
+          </div>
+        </div>
+      ) : null}
 
       {exited ? (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-1/85 backdrop-blur-sm df-fade-in">
