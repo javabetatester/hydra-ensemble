@@ -96,6 +96,13 @@ export default function SessionPane({ session, visible }: Props) {
 
     const onInput = term.onData((data) => {
       void window.api.pty.write(ptyId, data)
+      // Optimistic state flip the moment the user submits a prompt: if
+      // the byte stream contains CR or LF the agent will start working
+      // on the next frame anyway, so flip immediately so the card
+      // stops showing 'awaiting input' before the analyzer catches up.
+      if (data.includes('\r') || data.includes('\n')) {
+        useSessions.getState().patchSession(session.id, { state: 'thinking' })
+      }
     })
 
     // Resize observer: debounced so a 300ms slide-in animation doesn't

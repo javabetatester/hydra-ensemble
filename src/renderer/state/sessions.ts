@@ -164,6 +164,11 @@ export const useSessions = create<SessionsState>((set, get) => ({
       }
     })
     window.api.session.onJsonl((update: JsonlUpdate) => {
+      // JSONL entries arrive as soon as Claude commits an assistant turn
+      // (text chunk, tool_use call, etc), so they're the most reliable
+      // "still working" signal. Flip the live state to generating
+      // alongside the cost/tokens patch — the analyzer will roll it
+      // back to 'idle' or 'userInput' when the terminal frame settles.
       get().patchSession(update.sessionId, {
         cost: update.cost,
         tokensIn: update.tokensIn,
@@ -171,7 +176,8 @@ export const useSessions = create<SessionsState>((set, get) => ({
         model: update.model,
         latestAssistantText: update.latestAssistantText,
         subStatus: update.subStatus,
-        subTarget: update.subTarget
+        subTarget: update.subTarget,
+        state: 'generating'
       })
     })
   }
