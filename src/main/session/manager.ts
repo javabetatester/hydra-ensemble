@@ -131,6 +131,27 @@ export class SessionManager {
     return { ok: true, session: meta }
   }
 
+  /**
+   * Kill the PTY for an existing session and respawn it inside the same
+   * isolated CLAUDE_CONFIG_DIR. Used when claude crashes or the user
+   * wants a fresh process without losing history.
+   */
+  restart(id: string): SessionCreateResult {
+    const meta = this.sessions.get(id)
+    if (!meta) return { ok: false, error: `session ${id} not found` }
+    this.teardown(meta, { removeIsolatedDir: false })
+    const result = this.spawnFor(meta, { cols: 120, rows: 30 })
+    if (!result.ok) {
+      return { ok: false, error: result.error }
+    }
+    meta.state = 'idle'
+    meta.subStatus = undefined
+    meta.subTarget = undefined
+    this.persist()
+    this.notifyChange()
+    return { ok: true, session: meta }
+  }
+
   async destroy(id: string): Promise<void> {
     const meta = this.sessions.get(id)
     if (!meta) return

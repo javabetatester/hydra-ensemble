@@ -48,6 +48,7 @@ const api: HydraEnsembleApi = {
       ipcRenderer.invoke('session:rename', { id, name }),
     update: (id: string, patch: SessionUpdate) =>
       ipcRenderer.invoke('session:update', { id, patch }),
+    restart: (id: string) => ipcRenderer.invoke('session:restart', { id }),
     onChange: (handler) => on<SessionMeta[]>('session:changed', handler),
     onState: (handler) =>
       on<{ sessionId: string; state: SessionState }>('session:state', handler),

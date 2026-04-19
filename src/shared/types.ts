@@ -257,6 +257,7 @@ export interface HydraEnsembleApi {
     list: () => Promise<SessionMeta[]>
     rename: (id: string, name: string) => Promise<void>
     update: (id: string, patch: SessionUpdate) => Promise<void>
+    restart: (id: string) => Promise<SessionCreateResult>
     onChange: (handler: (sessions: SessionMeta[]) => void) => () => void
     onState: (handler: (event: { sessionId: string; state: SessionState }) => void) => () => void
     onJsonl: (handler: (update: JsonlUpdate) => void) => () => void

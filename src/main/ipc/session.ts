@@ -12,4 +12,7 @@ export function registerSessionIpc(manager: SessionManager): void {
   ipcMain.handle('session:update', (_evt, payload: { id: string; patch: SessionUpdate }) =>
     manager.update(payload.id, payload.patch)
   )
+  ipcMain.handle('session:restart', (_evt, payload: { id: string }) =>
+    manager.restart(payload.id)
+  )
 }
