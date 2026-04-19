@@ -21,7 +21,7 @@ export default function SessionsPanel() {
   }, [])
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-l border-border-soft bg-bg-2">
+    <aside className="flex h-full min-h-0 w-full flex-col border-l border-border-soft bg-bg-2">
       {/* header */}
       <header className="flex items-center justify-between border-b border-border-soft px-3 py-2">
         <div className="flex items-center gap-3 text-sm">
@@ -67,32 +67,38 @@ export default function SessionsPanel() {
         </div>
       </header>
 
-      {/* body */}
-      <div className="df-scroll flex-1 overflow-y-auto p-2">
+      {/* body — scrolls only when content overflows the available space */}
+      <div className="df-scroll min-h-0 flex-1 overflow-y-auto p-2">
         {tab === 'sessions' ? <SessionList /> : <ActivityList />}
       </div>
 
-      {/* footer with kbd hints */}
-      <footer className="flex items-center justify-center gap-3 border-t border-border-soft px-3 py-1.5 font-mono text-[10px] text-text-4">
-        <span>⌘0–9 Jump</span>
-        <span>⌘[ Prev</span>
-        <span>⌘] Next</span>
-      </footer>
+      {sessions.length > 0 ? (
+        <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-border-soft px-3 py-1 font-mono text-[10px] text-text-4">
+          <span>⌘0–9 Jump</span>
+          <span>⌘[ Prev</span>
+          <span>⌘] Next</span>
+        </footer>
+      ) : null}
     </aside>
   )
 
   function SessionList() {
     if (sessions.length === 0) {
       return (
-        <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-          <Inbox size={32} strokeWidth={1.25} className="text-text-4" />
-          <div className="text-sm text-text-2">no sessions yet</div>
-          <div className="text-xs text-text-4">click + above to spawn a Claude session</div>
-        </div>
+        <button
+          type="button"
+          onClick={() => create({})}
+          disabled={isCreating}
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border-mid bg-bg-3/40 px-4 py-6 text-center transition hover:border-accent-500/40 hover:bg-bg-3 disabled:opacity-50"
+        >
+          <Inbox size={26} strokeWidth={1.25} className="text-text-4" />
+          <div className="text-sm text-text-2">{isCreating ? 'spawning…' : 'no sessions'}</div>
+          <div className="text-[11px] text-text-4">click here or press ⌘T to spawn</div>
+        </button>
       )
     }
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         {sessions.map((s, i) => (
           <SessionCard
             key={s.id}

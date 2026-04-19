@@ -47,7 +47,7 @@ export default function SessionCard({
   return (
     <div
       onClick={onClick}
-      className={`group relative cursor-pointer rounded-md border px-3 py-2.5 transition-all df-lift ${
+      className={`group relative cursor-pointer rounded-md border px-2.5 py-2 transition-all df-lift ${
         active
           ? 'border-accent-500/70 bg-bg-4 shadow-[0_0_0_1px_rgba(124,136,255,0.2)]'
           : 'border-border-soft bg-bg-3 hover:border-border-mid hover:bg-bg-4'
@@ -66,27 +66,29 @@ export default function SessionCard({
         ) : null}
       </div>
 
-      {/* row 2: branch + age */}
-      <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px] text-text-3">
-        <div className="flex min-w-0 items-center gap-1.5">
+      {/* compact meta row: branch · model · cost · age */}
+      <div className="mt-1 flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex min-w-0 items-center gap-2 text-text-3">
           {session.branch ? (
-            <>
-              <GitBranch size={11} strokeWidth={1.75} className="shrink-0" />
+            <span className="flex min-w-0 items-center gap-1">
+              <GitBranch size={10} strokeWidth={1.75} className="shrink-0 text-text-4" />
               <span className="truncate font-mono">{session.branch}</span>
-            </>
+            </span>
           ) : (
             <span className="text-text-4">no branch</span>
           )}
+          <span className="text-text-4">·</span>
+          <span className="font-mono text-text-3">{shortModel(session.model)}</span>
         </div>
-        <span className="shrink-0 text-text-4">{relativeAge(session.createdAt)}</span>
-      </div>
-
-      {/* row 3: model + cost */}
-      <div className="mt-1 flex items-center justify-between text-[11px] font-mono">
-        <span className="truncate text-text-3">{shortModel(session.model)}</span>
-        <span className={session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'}>
-          {formatCost(session.cost)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1.5 font-mono text-text-4">
+          <span
+            className={session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'}
+          >
+            {formatCost(session.cost)}
+          </span>
+          <span>·</span>
+          <span>{relativeAge(session.createdAt)}</span>
+        </div>
       </div>
 
       {/* hover actions */}

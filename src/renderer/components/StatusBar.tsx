@@ -56,44 +56,50 @@ export default function StatusBar() {
       className="flex h-7 shrink-0 items-center gap-4 border-t border-border-soft bg-bg-2 px-3 text-[11px] text-text-3"
       role="status"
     >
-      {/* LEFT: active session context */}
-      <span
-        className="flex items-center gap-1.5 font-mono text-text-2"
-        title="current branch"
-      >
-        <GitBranch size={12} strokeWidth={1.75} className="text-text-4" />
-        <span className="truncate">{branch}</span>
-      </span>
+      {active ? (
+        <>
+          <span className="flex items-center gap-1.5 font-mono text-text-2" title="current branch">
+            <GitBranch size={12} strokeWidth={1.75} className="text-text-4" />
+            <span className="truncate">{branch}</span>
+          </span>
+          <span className="flex items-center gap-1.5" title="model">
+            <Activity size={12} strokeWidth={1.75} className="text-text-4" />
+            <span className="font-mono text-text-2">{model}</span>
+          </span>
+          <SessionStatePill state={active.state ?? 'idle'} />
+        </>
+      ) : (
+        <span className="flex items-center gap-2 text-text-4">
+          <span className="h-1.5 w-1.5 rounded-full bg-text-4" />
+          <span>no active session</span>
+        </span>
+      )}
 
-      <span className="flex items-center gap-1.5" title="model">
-        <Activity size={12} strokeWidth={1.75} className="text-text-4" />
-        <span className="font-mono text-text-2">{model}</span>
-      </span>
-
-      <SessionStatePill state={active?.state} />
-
-      {/* RIGHT: totals */}
       <span className="ml-auto flex items-center gap-4">
-        <span
-          title="aggregate input/output tokens"
-          className="flex items-center gap-1.5 font-mono tabular-nums"
-        >
-          <Hash size={12} strokeWidth={1.75} className="text-text-4" />
-          <span className="text-text-2">{formatTokens(totals.tokensIn)}</span>
-          <span className="text-text-4">in</span>
-          <span className="text-text-2">{formatTokens(totals.tokensOut)}</span>
-          <span className="text-text-4">out</span>
-        </span>
+        {sessionCount > 0 ? (
+          <>
+            <span
+              title="aggregate input/output tokens"
+              className="flex items-center gap-1.5 font-mono tabular-nums"
+            >
+              <Hash size={12} strokeWidth={1.75} className="text-text-4" />
+              <span className="text-text-2">{formatTokens(totals.tokensIn)}</span>
+              <span className="text-text-4">in</span>
+              <span className="text-text-2">{formatTokens(totals.tokensOut)}</span>
+              <span className="text-text-4">out</span>
+            </span>
 
-        <span
-          title="aggregate cost across all sessions"
-          className={`flex items-center gap-1 font-mono tabular-nums ${
-            hasCost ? 'text-status-generating' : 'text-text-3'
-          }`}
-        >
-          <DollarSign size={12} strokeWidth={1.75} />
-          <span>{formatCost(totals.cost)}</span>
-        </span>
+            <span
+              title="aggregate cost across all sessions"
+              className={`flex items-center gap-1 font-mono tabular-nums ${
+                hasCost ? 'text-status-generating' : 'text-text-3'
+              }`}
+            >
+              <DollarSign size={12} strokeWidth={1.75} />
+              <span>{formatCost(totals.cost)}</span>
+            </span>
+          </>
+        ) : null}
 
         <span title="active sessions" className="flex items-center gap-1.5">
           <span className="font-mono tabular-nums text-text-2">{sessionCount}</span>
