@@ -1,64 +1,145 @@
-name: Build, Sign & Release DMG
+name: Release
 
 on:
   push:
     tags:
-      - "v*"
+      - "v*.*.*"
+
+# One release run at a time for a given tag
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: macos-15
-    permissions:
-      contents: write
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            dist_script: dist:linux
+          - os: windows-latest
+            platform: win
+            dist_script: dist:win
+          - os: macos-14
+            platform: mac
+            dist_script: dist:mac
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout code
+      # Pull repo at the tag ref
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Import signing certificate
+      # Node 20 LTS with npm cache
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # Linux needs build toolchain for node-pty native module
+      - name: Install Linux build deps for node-pty
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3 make g++ libx11-dev
+
+      # Prefer reproducible npm ci; fall back if Phase 0 has no lockfile yet
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "No package-lock.json found, falling back to npm install"
+            npm install
+          fi
+
+      # Rebuild node-pty against Electron's Node ABI
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild
+
+      # Build + package for this matrix OS via electron-builder
+      # PLAN.md §14 v1: skip mac notarization and Windows code-signing.
+      # To enable signing later, set repo secrets and pass them here:
+      #   macOS:   CSC_LINK / CSC_KEY_PASSWORD + APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID
+      #   Windows: WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD
+      - name: Package (${{ matrix.platform }})
         env:
-          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Disable macOS auto-discovery of signing identity for unsigned v1 builds
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run ${{ matrix.dist_script }}
+
+      # Linux artifacts: AppImage, deb, update metadata
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydra-ensemble-linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/latest-linux.yml
+          if-no-files-found: error
+          retention-days: 7
+
+      # Windows artifacts: NSIS installer, blockmap, update metadata
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydra-ensemble-win
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 7
+
+      # macOS artifacts: DMG, blockmap, update metadata
+      - name: Upload macOS artifacts
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hydra-ensemble-mac
+          path: |
+            release/*.dmg
+            release/*.dmg.blockmap
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      # Pull all platform artifacts into ./artifacts/
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Flatten artifacts directory tree for the release upload
+      - name: Flatten artifact tree
         run: |
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          mkdir -p dist
+          find artifacts -type f -exec cp {} dist/ \;
+          ls -la dist/
 
-          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          security import "$CERT_PATH" \
-            -P "$APPLE_CERTIFICATE_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k "$KEYCHAIN_PATH"
-
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security list-keychains -d user -s "$KEYCHAIN_PATH" "$(security default-keychain -d user | xargs)"
-
-      - name: Store notarization credentials
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-        run: |
-          xcrun notarytool store-credentials HYDRA_ENSEMBLE_NOTARY \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_SPECIFIC_PASSWORD"
-
-      - name: Build, sign, notarize & package DMG
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          VERSION=$VERSION scripts/package.sh --notarize
-
+      # Create or update the GitHub Release for this tag
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/Hydra Ensemble-${{ env.VERSION }}.dmg
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
           generate_release_notes: true
+          draft: false
+          prerelease: false
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

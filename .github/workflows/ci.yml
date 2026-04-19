@@ -2,28 +2,76 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "multi-os/**"
   pull_request:
     branches: [main]
 
+# Cancel in-progress runs for the same PR / branch
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-and-test:
-    runs-on: macos-15
+    name: build-and-test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+
     steps:
-      - uses: actions/checkout@v4
+      # Pull repo at the triggering ref
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install swift-format
-        run: brew install swift-format
+      # Node 20 LTS with built-in npm cache
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
 
-      - name: Lint
-        run: swift-format lint --strict --recursive Sources/ Tests/
+      # Linux needs build toolchain for node-pty native module
+      - name: Install Linux build deps for node-pty
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3 make g++ libx11-dev
 
-      - name: Build
-        run: swift build
+      # Prefer reproducible npm ci; fall back if Phase 0 has no lockfile yet
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "No package-lock.json found, falling back to npm install"
+            npm install
+          fi
 
+      # Rebuild node-pty against Electron's Node ABI
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild
+
+      # TypeScript project references typecheck
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Vitest unit tests
       - name: Test
-        run: swift test
+        run: npm run test
+
+      # electron-vite production build (no packaging here)
+      - name: Build
+        run: npm run build
+
+  lint-pr-title:
+    name: lint-pr-title
+    runs-on: ubuntu-22.04
+    # Only meaningful on PRs; safe no-op stub for now
+    if: github.event_name == 'pull_request'
+    steps:
+      # TODO: wire up amannn/action-semantic-pull-request or similar
+      - name: Stub PR title lint
+        run: echo "PR title lint placeholder - implement before v1 release"
