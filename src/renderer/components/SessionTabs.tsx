@@ -1,5 +1,6 @@
 import { Plus, X } from 'lucide-react'
 import { useSessions } from '../state/sessions'
+import { useSpawnDialog } from '../state/spawn'
 import SessionStatePill from './SessionStatePill'
 
 export default function SessionTabs() {
@@ -7,15 +8,15 @@ export default function SessionTabs() {
   const activeId = useSessions((s) => s.activeId)
   const setActive = useSessions((s) => s.setActive)
   const destroy = useSessions((s) => s.destroySession)
-  const create = useSessions((s) => s.createSession)
   const isCreating = useSessions((s) => s.isCreating)
+  const openSpawn = useSpawnDialog((s) => s.show)
 
   if (sessions.length === 0) {
     return (
       <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border-soft bg-bg-1 px-3">
         <button
           type="button"
-          onClick={() => create({})}
+          onClick={() => openSpawn()}
           disabled={isCreating}
           className="df-lift inline-flex items-center gap-1.5 rounded-md bg-accent-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-600 disabled:opacity-50"
         >
@@ -63,7 +64,7 @@ export default function SessionTabs() {
       })}
       <button
         type="button"
-        onClick={() => create({})}
+        onClick={() => openSpawn()}
         disabled={isCreating}
         className="ml-1 inline-flex shrink-0 items-center gap-1 self-center rounded-sm px-2 py-1 text-xs text-text-3 transition-colors hover:bg-bg-3 hover:text-text-1 disabled:opacity-50"
         title="new session"

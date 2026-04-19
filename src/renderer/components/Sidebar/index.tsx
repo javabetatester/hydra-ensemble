@@ -106,7 +106,7 @@ export default function Sidebar() {
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border-soft px-3">
         <span className="h-1.5 w-1.5 rounded-full bg-accent-400 df-pulse" aria-hidden />
         <span className="text-sm font-semibold tracking-tight text-text-1">
-          Hydra Ensemble
+          Conductor
         </span>
       </header>
 

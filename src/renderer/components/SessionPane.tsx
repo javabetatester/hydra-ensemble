@@ -88,7 +88,7 @@ export default function SessionPane({ session, visible }: Props) {
       setStarting(false)
       setExited({ exitCode: evt.exitCode, signal: evt.signal, at: Date.now() })
       term.writeln(
-        `\r\n\x1b[33m[hydra-ensemble] pty exited (code=${evt.exitCode}${
+        `\r\n\x1b[33m[conductor] pty exited (code=${evt.exitCode}${
           evt.signal ? `, signal=${evt.signal}` : ''
         })\x1b[0m`
       )

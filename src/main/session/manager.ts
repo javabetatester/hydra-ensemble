@@ -293,7 +293,7 @@ export class SessionManager {
       // restart overlay.
       const launch = claudePath
         ? `unset CLAUDE_CONFIG_DIR; clear && "${claudePath}"\r`
-        : `clear && echo "[hydra-ensemble] claude binary not found in PATH"\r`
+        : `clear && echo "[conductor] claude binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)
       }, 350)

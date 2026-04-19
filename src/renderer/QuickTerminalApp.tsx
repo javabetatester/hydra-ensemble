@@ -42,7 +42,7 @@ export default function QuickTerminalApp() {
     })
     const offExit = window.api.pty.onExit((evt) => {
       if (evt.sessionId === QUICK_PTY_ID) {
-        term.writeln('\r\n\x1b[33m[hydra-ensemble] quick term pty exited\x1b[0m')
+        term.writeln('\r\n\x1b[33m[conductor] quick term pty exited\x1b[0m')
       }
     })
 

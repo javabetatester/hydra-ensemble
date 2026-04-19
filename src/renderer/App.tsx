@@ -22,6 +22,7 @@ import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
 import HelpOverlay from './components/HelpOverlay'
 import NewSessionDialog from './components/NewSessionDialog'
+import { useSpawnDialog } from './state/spawn'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
@@ -36,9 +37,9 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const spawnOpen = useSpawnDialogStore((s) => s.openFlag)
-  const setSpawnOpen = (v: boolean): void =>
-    useSpawnDialogStore.setState({ openFlag: v })
+  const spawnOpen = useSpawnDialog((s) => s.open)
+  const showSpawn = useSpawnDialog((s) => s.show)
+  const hideSpawn = useSpawnDialog((s) => s.hide)
 
   const sessions = useSessions((s) => s.sessions)
   const activeId = useSessions((s) => s.activeId)
@@ -122,7 +123,7 @@ export default function App() {
         e.preventDefault()
         // ⌘T opens the picker dialog so the user explicitly chooses
         // project + worktree. ⌘⇧T quick-spawns with the active context.
-        setSpawnOpen(true)
+        showSpawn()
         return
       }
       if (key === 't' && e.shiftKey) {
@@ -212,7 +213,7 @@ export default function App() {
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-sm bg-accent-500 df-pulse" />
               <span className="font-display text-sm font-semibold tracking-tight text-text-1">
-                Hydra Ensemble
+                Conductor
               </span>
               <span className="font-mono text-[10px] text-text-4">v0.1</span>
             </div>
@@ -355,18 +356,10 @@ export default function App() {
       <Toasts />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
-      <NewSessionDialog open={spawnOpen} onClose={() => setSpawnOpen(false)} />
+      <NewSessionDialog open={spawnOpen} onClose={hideSpawn} />
     </div>
   )
 }
-
-// Tiny shared singleton so EmptyMain can open the spawn dialog without
-// drilling props through App.
-import { create as createStore } from 'zustand'
-const useSpawnDialogStore = createStore<{ open(): void; openFlag: boolean }>((set) => ({
-  openFlag: false,
-  open: () => set({ openFlag: true })
-}))
 
 function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
   const isCreating = useSessions((s) => s.isCreating)
@@ -440,7 +433,7 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
         <div className="flex flex-col items-center gap-3">
           <button
             type="button"
-            onClick={() => useSpawnDialogStore.getState().open()}
+            onClick={() => useSpawnDialog.getState().show()}
             disabled={isCreating || claudePath === null}
             className="group relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition df-lift hover:from-accent-400 hover:to-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
           >

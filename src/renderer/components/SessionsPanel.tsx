@@ -1,6 +1,7 @@
 import { Plus, Activity, RefreshCw, Inbox } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSessions } from '../state/sessions'
+import { useSpawnDialog } from '../state/spawn'
 import SessionCard from './SessionCard'
 import AgentEditDialog from './AgentEditDialog'
 import type { SessionMeta } from '../../shared/types'
@@ -9,10 +10,10 @@ export default function SessionsPanel() {
   const sessions = useSessions((s) => s.sessions)
   const activeId = useSessions((s) => s.activeId)
   const setActive = useSessions((s) => s.setActive)
-  const create = useSessions((s) => s.createSession)
   const clone = useSessions((s) => s.cloneSession)
   const destroy = useSessions((s) => s.destroySession)
   const isCreating = useSessions((s) => s.isCreating)
+  const openSpawn = useSpawnDialog((s) => s.show)
 
   const [tab, setTab] = useState<'sessions' | 'activity'>('sessions')
   const [editing, setEditing] = useState<SessionMeta | null>(null)
@@ -60,7 +61,7 @@ export default function SessionsPanel() {
           </button>
           <button
             type="button"
-            onClick={() => create({})}
+            onClick={() => openSpawn()}
             disabled={isCreating}
             className="rounded p-1 text-text-2 hover:bg-bg-3 hover:text-text-1 disabled:opacity-40"
             title="new session"
@@ -93,13 +94,13 @@ export default function SessionsPanel() {
       return (
         <button
           type="button"
-          onClick={() => create({})}
+          onClick={() => openSpawn()}
           disabled={isCreating}
           className="flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border-mid bg-bg-3/40 px-4 py-6 text-center transition hover:border-accent-500/40 hover:bg-bg-3 disabled:opacity-50"
         >
           <Inbox size={26} strokeWidth={1.25} className="text-text-4" />
           <div className="text-sm text-text-2">{isCreating ? 'spawning…' : 'no sessions'}</div>
-          <div className="text-[11px] text-text-4">click here or press ⌘T to spawn</div>
+          <div className="text-[11px] text-text-4">click to pick a project + worktree</div>
         </button>
       )
     }
