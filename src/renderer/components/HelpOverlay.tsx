@@ -55,8 +55,7 @@ export default function HelpOverlay({ open, onClose }: Props) {
         { keys: fmtShortcut('D'), label: 'dashboard' },
         { keys: fmtShortcut('E'), label: 'code editor' },
         { keys: `${mod}${shift}P`, label: 'PR inspector' },
-        { keys: `${mod}${shift}W`, label: 'watchdogs' },
-        { keys: `${mod}${shift}V`, label: 'voice dictation' }
+        { keys: `${mod}${shift}W`, label: 'watchdogs' }
       ]
     },
     {

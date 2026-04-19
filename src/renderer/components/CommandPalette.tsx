@@ -9,19 +9,20 @@ import {
   Wand2,
   FolderTree,
   Terminal,
-  Mic,
   Wrench
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useSessions } from '../state/sessions'
-import { useSessionsUi } from '../state/sessionsExtra'
 import { useEditor } from '../state/editor'
 import { useGh } from '../state/gh'
 import { useWatchdog } from '../state/watchdog'
 import { useToolkit } from '../state/toolkit'
 import { useProjects } from '../state/projects'
+import { useSlidePanel } from '../state/panels'
 import AgentAvatar from './AgentAvatar'
 import { ToolkitIcon, guessIconForLabel } from '../lib/toolkit-icons'
+import { fmtShortcut } from '../lib/platform'
+import { useSpawnDialog } from '../state/spawn'
 
 interface PaletteItem {
   id: string
@@ -46,12 +47,10 @@ export default function CommandPalette({ open, onClose }: Props) {
 
   const sessions = useSessions((s) => s.sessions)
   const setActive = useSessions((s) => s.setActive)
-  const createSession = useSessions((s) => s.createSession)
   const destroySession = useSessions((s) => s.destroySession)
   const activeId = useSessions((s) => s.activeId)
-  const toggleDashboard = useSessionsUi((s) => s.toggleDashboard)
-  const toggleEditor = useEditor((s) => s.toggleEditor)
-  const togglePanel = useWatchdog((s) => s.togglePanel)
+  const togglePanelFor = useSlidePanel((s) => s.toggle)
+  const openPanel = useSlidePanel((s) => s.open)
   const openGh = useGh((s) => s.openPanel)
   const projects = useProjects((s) => s.projects)
   const currentPath = useProjects((s) => s.currentPath)
@@ -102,12 +101,13 @@ export default function CommandPalette({ open, onClose }: Props) {
     out.push({
       id: 'cmd:new-session',
       label: 'New Claude session',
-      hint: 'spawn agent in active project / cwd',
-      shortcut: '⌘T',
+      hint: 'open the picker (project + worktree)',
+      shortcut: fmtShortcut('N'),
       icon: <Plus size={14} strokeWidth={1.75} />,
       group: 'Sessions',
       run: () => {
-        void createSession({ cwd: cwdContext ?? undefined })
+        // Route through the spawn dialog so picker flow is consistent.
+        useSpawnDialog.getState().show()
         onClose()
       }
     })
@@ -116,7 +116,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       out.push({
         id: 'cmd:close-session',
         label: `Close ${active?.name ?? 'active session'}`,
-        shortcut: '⌘W',
+        shortcut: fmtShortcut('W'),
         icon: <X size={14} strokeWidth={1.75} />,
         group: 'Sessions',
         run: () => {
@@ -170,45 +170,46 @@ export default function CommandPalette({ open, onClose }: Props) {
       run
     })
 
-    out.push(panel('cmd:dashboard', 'Dashboard', '⌘D', LayoutDashboard, () => { toggleDashboard(); onClose() }))
-    out.push(panel('cmd:editor', 'Code editor', '⌘E', Code2, () => { toggleEditor(); onClose() }))
-    out.push(panel('cmd:watchdogs', 'Watchdogs', '⌘⇧W', Wand2, () => { togglePanel(); onClose() }))
+    const mod = fmtShortcut('').slice(0, -1)
+    const shiftSym = mod.endsWith('+') ? 'Shift+' : '⇧'
+    out.push(
+      panel('cmd:dashboard', 'Dashboard', fmtShortcut('D'), LayoutDashboard, () => {
+        togglePanelFor('dashboard')
+        onClose()
+      })
+    )
+    out.push(
+      panel('cmd:editor', 'Code editor', fmtShortcut('E'), Code2, () => {
+        togglePanelFor('editor')
+        onClose()
+      })
+    )
+    out.push(
+      panel('cmd:terminals', 'Terminals panel', fmtShortcut('`'), Terminal, () => {
+        togglePanelFor('terminals')
+        onClose()
+      })
+    )
+    out.push(
+      panel('cmd:watchdogs', 'Watchdogs', `${mod}${shiftSym}W`, Wand2, () => {
+        togglePanelFor('watchdogs')
+        onClose()
+      })
+    )
     if (cwdContext) {
       out.push({
         id: 'cmd:prs',
         label: 'PR Inspector',
-        shortcut: '⌘⇧P',
+        shortcut: `${mod}${shiftSym}P`,
         icon: <GitPullRequest size={14} strokeWidth={1.75} />,
         group: 'Panels',
         run: () => {
           openGh(cwdContext)
+          openPanel('pr')
           onClose()
         }
       })
     }
-    out.push({
-      id: 'cmd:quickterm',
-      label: 'Quick terminal',
-      shortcut: '⌘`',
-      icon: <Terminal size={14} strokeWidth={1.75} />,
-      group: 'Panels',
-      run: () => {
-        void window.api.quickTerm.toggle()
-        onClose()
-      }
-    })
-    out.push({
-      id: 'cmd:voice',
-      label: 'Voice dictation',
-      shortcut: '⌘⇧V',
-      icon: <Mic size={14} strokeWidth={1.75} />,
-      group: 'Panels',
-      run: () => {
-        // VoiceButton handles the actual hotkey internally; this is just a
-        // visual entry to remind the user of the feature.
-        onClose()
-      }
-    })
 
     // Toolkit
     out.push({
@@ -244,13 +245,11 @@ export default function CommandPalette({ open, onClose }: Props) {
     toolkitItems,
     cwdContext,
     setActive,
-    createSession,
     destroySession,
     addProject,
     setCurrent,
-    toggleDashboard,
-    toggleEditor,
-    togglePanel,
+    togglePanelFor,
+    openPanel,
     openGh,
     runToolkit,
     openToolkitEditor,

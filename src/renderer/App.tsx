@@ -14,7 +14,6 @@ import Dashboard from './components/Dashboard'
 import Sidebar from './components/Sidebar'
 import CodeEditor from './components/CodeEditor'
 import PRInspector from './components/PRInspector'
-import VoiceButton from './components/VoiceButton'
 import SessionsPanel from './components/SessionsPanel'
 import ToolkitGrid from './components/ToolkitGrid'
 import ActiveAgentBar from './components/ActiveAgentBar'
@@ -368,7 +367,6 @@ export default function App() {
                 </div>
               </>
             ) : null}
-            {activeSession ? <VoiceButton /> : null}
           </div>
 
           {/* Unified slide pane — hosts whichever of editor / dashboard /
@@ -530,7 +528,7 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
               {isCreating ? 'spawning…' : 'Spawn first session'}
             </span>
             <span className="relative ml-1 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/85">
-              ⌘T
+              {fmtShortcut('N')}
             </span>
           </button>
           {claudePath === null ? (
@@ -541,13 +539,13 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
             <p className="text-[11px] text-text-4">
               Tip:{' '}
               <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">
-                {fmtShortcut('B')}
+                {fmtShortcut('T')}
               </kbd>{' '}
-              toggles the project drawer ·{' '}
+              toggles the projects drawer ·{' '}
               <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">
-                {fmtShortcut('D')}
+                {fmtShortcut('`')}
               </kbd>{' '}
-              opens the dashboard ·{' '}
+              opens the terminals panel ·{' '}
               <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">?</kbd> shows all shortcuts
             </p>
           )}
