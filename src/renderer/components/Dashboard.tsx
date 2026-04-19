@@ -183,14 +183,14 @@ export default function Dashboard({ open, onClose, mode = 'inline' }: Props) {
       {showExplainer ? (
         <div className="border-b border-border-soft bg-bg-1 px-4 py-3 text-[11px] leading-relaxed text-text-3">
           <p className="mb-1.5">
-            <strong className="text-text-2">dashboard</strong> = visão geral de TODOS os agents
-            rodando em paralelo numa grade. Cada card mostra o estado live (thinking, generating,
-            awaiting input), o último texto que o agent respondeu, e o custo acumulado.
+            <strong className="text-text-2">Dashboard</strong> — overview of every running agent
+            at once. Each card shows live state (thinking, generating, awaiting input), model,
+            cost so far and the latest assistant response.
           </p>
           <p>
-            Útil quando você tem 3+ sessions rodando e quer monitorar de relance sem ficar
-            alternando ⌘1/⌘2/⌘3. Clica num card pra "focar" — fecha o dashboard e ativa aquela
-            session no terminal principal.
+            Useful when you have several agents running in parallel and want to monitor them at a
+            glance without cycling through ⌘1 / ⌘2 / ⌘3. Click a card to focus that session —
+            the dashboard closes and the main terminal switches to it.
           </p>
         </div>
       ) : null}

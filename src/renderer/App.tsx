@@ -3,6 +3,7 @@ import {
   Code2,
   FolderTree,
   GitPullRequest,
+  HelpCircle,
   LayoutDashboard,
   Wand2
 } from 'lucide-react'
@@ -18,12 +19,14 @@ import ToolkitGrid from './components/ToolkitGrid'
 import ActiveAgentBar from './components/ActiveAgentBar'
 import ToolkitEditorDialog from './components/Toolkit/EditorDialog'
 import WatchdogPanel from './components/Watchdog/Panel'
+import WatchdogRuleDialog from './components/Watchdog/RuleDialog'
 import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
 import HelpOverlay from './components/HelpOverlay'
 import NewSessionDialog from './components/NewSessionDialog'
 import WindowControls from './components/WindowControls'
 import { useSpawnDialog } from './state/spawn'
+import { useSlidePanel } from './state/panels'
 import { isMac } from './lib/platform'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
@@ -54,21 +57,18 @@ export default function App() {
   const destroySession = useSessions((s) => s.destroySession)
   const setActive = useSessions((s) => s.setActive)
 
-  const dashboardOpen = useSessionsUi((s) => s.dashboardOpen)
-  const closeDashboard = useSessionsUi((s) => s.closeDashboard)
-  const toggleDashboard = useSessionsUi((s) => s.toggleDashboard)
-
-  const editorOpen = useEditor((s) => s.editorOpen)
-  const closeEditor = useEditor((s) => s.closeEditor)
-  const toggleEditor = useEditor((s) => s.toggleEditor)
+  const activePanel = useSlidePanel((s) => s.current)
+  const openPanel = useSlidePanel((s) => s.open)
+  const closePanel = useSlidePanel((s) => s.close)
+  const togglePanelFor = useSlidePanel((s) => s.toggle)
 
   const initToolkit = useToolkit((s) => s.init)
   const initWatchdog = useWatchdog((s) => s.init)
-  const togglePanel = useWatchdog((s) => s.togglePanel)
   const initProjects = useProjects((s) => s.init)
   const currentProject = useProjects((s) => s.projects.find((p) => p.path === s.currentPath))
 
-  const ghOpen = useGh((s) => s.open)
+  // Keep useGh's cwd in sync when the PR panel is active so refresh works.
+  const ghCwd = useGh((s) => s.cwd)
   const openGh = useGh((s) => s.openPanel)
   const closeGh = useGh((s) => s.closePanel)
 
@@ -108,12 +108,12 @@ export default function App() {
       }
       if (key === 'd' && !e.shiftKey) {
         e.preventDefault()
-        toggleDashboard()
+        togglePanelFor('dashboard')
         return
       }
       if (key === 'e' && !e.shiftKey) {
         e.preventDefault()
-        toggleEditor()
+        togglePanelFor('editor')
         return
       }
       if (key === 'b' && !e.shiftKey) {
@@ -171,29 +171,33 @@ export default function App() {
       if (key === 'p' && e.shiftKey) {
         if (!contextCwd) return
         e.preventDefault()
-        if (ghOpen) closeGh()
-        else openGh(contextCwd)
+        if (activePanel === 'pr') {
+          closePanel()
+        } else {
+          openGh(contextCwd)
+          openPanel('pr')
+        }
         return
       }
       if (key === 'w' && e.shiftKey) {
         e.preventDefault()
-        togglePanel()
+        togglePanelFor('watchdogs')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [
-    toggleDashboard,
-    toggleEditor,
+    togglePanelFor,
+    openPanel,
+    closePanel,
+    activePanel,
     createSession,
     destroySession,
     activeId,
     sessions,
     setActive,
-    ghOpen,
     openGh,
-    closeGh,
-    togglePanel,
+    showSpawn,
     contextCwd
   ])
 
@@ -255,26 +259,42 @@ export default function App() {
               icon={<GitPullRequest size={13} strokeWidth={1.75} />}
               label="PRs"
               shortcut={fmtShortcut('P', { shift: true })}
-              onClick={() => contextCwd && openGh(contextCwd)}
+              active={activePanel === 'pr'}
+              onClick={() => {
+                if (activePanel === 'pr') closePanel()
+                else if (contextCwd) {
+                  openGh(contextCwd)
+                  openPanel('pr')
+                }
+              }}
               disabled={!contextCwd}
             />
             <HeaderButton
               icon={<Wand2 size={13} strokeWidth={1.75} />}
               label="watchdogs"
               shortcut={fmtShortcut('W', { shift: true })}
-              onClick={togglePanel}
+              active={activePanel === 'watchdogs'}
+              onClick={() => togglePanelFor('watchdogs')}
             />
             <HeaderButton
               icon={<Code2 size={13} strokeWidth={1.75} />}
               label="editor"
               shortcut={fmtShortcut('E')}
-              onClick={toggleEditor}
+              active={activePanel === 'editor'}
+              onClick={() => togglePanelFor('editor')}
             />
             <HeaderButton
               icon={<LayoutDashboard size={13} strokeWidth={1.75} />}
               label="dashboard"
               shortcut={fmtShortcut('D')}
-              onClick={toggleDashboard}
+              active={activePanel === 'dashboard'}
+              onClick={() => togglePanelFor('dashboard')}
+            />
+            <HeaderButton
+              icon={<HelpCircle size={13} strokeWidth={1.75} />}
+              label="?"
+              shortcut="?"
+              onClick={() => setHelpOpen(true)}
             />
             <div className="ml-2 flex items-center gap-1.5 border-l border-border-soft pl-3 font-mono text-[10px]">
               <span className="text-text-4">os</span>
@@ -328,22 +348,46 @@ export default function App() {
             {activeSession ? <VoiceButton /> : null}
           </div>
 
-          {/* Inline editor pane — slides in from the right with width transition.
-              Mounts only when open so CodeMirror doesn't tax the renderer when idle. */}
+          {/* Unified slide pane — hosts whichever of editor / dashboard /
+              watchdogs / PR is currently active. Width animates to 52% on
+              open, 0% on close. One slot, mutually exclusive. */}
           <div
             className="relative flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color,opacity] duration-300 ease-out"
             style={{
-              width: editorOpen ? '52%' : '0%',
-              borderLeftColor: editorOpen ? 'var(--color-border-mid)' : 'transparent',
-              opacity: editorOpen ? 1 : 0
+              width: activePanel ? '52%' : '0%',
+              borderLeftColor: activePanel ? 'var(--color-border-mid)' : 'transparent',
+              opacity: activePanel ? 1 : 0
             }}
-            aria-hidden={!editorOpen}
+            aria-hidden={!activePanel}
           >
             <div
               className="absolute inset-0 transition-transform duration-300 ease-out"
-              style={{ transform: editorOpen ? 'translateX(0)' : 'translateX(8%)' }}
+              style={{ transform: activePanel ? 'translateX(0)' : 'translateX(8%)' }}
             >
-              <CodeEditor open={editorOpen} onClose={closeEditor} mode="inline" />
+              <CodeEditor
+                open={activePanel === 'editor'}
+                onClose={closePanel}
+                mode="inline"
+              />
+              <Dashboard
+                open={activePanel === 'dashboard'}
+                onClose={closePanel}
+                mode="inline"
+              />
+              <WatchdogPanel
+                open={activePanel === 'watchdogs'}
+                onClose={closePanel}
+                mode="inline"
+              />
+              <PRInspector
+                cwd={contextCwd}
+                open={activePanel === 'pr'}
+                onClose={() => {
+                  closeGh()
+                  closePanel()
+                }}
+                mode="inline"
+              />
             </div>
           </div>
 
@@ -370,11 +414,9 @@ export default function App() {
         <StatusBar />
       </div>
 
-      {/* Overlays */}
-      <Dashboard open={dashboardOpen} onClose={closeDashboard} />
-      <PRInspector cwd={contextCwd} open={ghOpen} onClose={closeGh} />
-      <WatchdogPanel />
+      {/* True overlays (not slide panels) */}
       <ToolkitEditorDialog />
+      <WatchdogRuleDialog />
       <Toasts />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
@@ -473,9 +515,16 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
             </p>
           ) : (
             <p className="text-[11px] text-text-4">
-              Tip: <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">⌘B</kbd> toggles the
-              project drawer ·{' '}
-              <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">⌘D</kbd> opens the dashboard
+              Tip:{' '}
+              <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">
+                {fmtShortcut('B')}
+              </kbd>{' '}
+              toggles the project drawer ·{' '}
+              <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">
+                {fmtShortcut('D')}
+              </kbd>{' '}
+              opens the dashboard ·{' '}
+              <kbd className="rounded bg-bg-3 px-1 py-0.5 font-mono">?</kbd> shows all shortcuts
             </p>
           )}
         </div>
@@ -531,16 +580,21 @@ interface HeaderButtonProps {
   shortcut?: string
   onClick: () => void
   disabled?: boolean
+  active?: boolean
 }
 
-function HeaderButton({ icon, label, shortcut, onClick, disabled }: HeaderButtonProps) {
+function HeaderButton({ icon, label, shortcut, onClick, disabled, active }: HeaderButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       title={shortcut ? `${label} (${shortcut})` : label}
-      className="group flex items-center gap-1.5 rounded-sm border border-transparent px-2 py-1 text-xs text-text-3 transition hover:border-border-soft hover:bg-bg-3 hover:text-text-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3"
+      className={`group flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3 ${
+        active
+          ? 'border-accent-500/40 bg-accent-500/10 text-accent-200'
+          : 'border-transparent text-text-3 hover:border-border-soft hover:bg-bg-3 hover:text-text-1'
+      }`}
     >
       {icon}
       <span className="font-mono">{label}</span>

@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   ExternalLink,
   GitPullRequest,
+  Info,
   Loader2,
   RefreshCw,
   X
@@ -73,9 +74,11 @@ interface Props {
   cwd: string | null
   open: boolean
   onClose: () => void
+  mode?: 'inline' | 'overlay'
 }
 
 export default function PRInspector({ cwd, open, onClose }: Props) {
+  const [showExplainer, setShowExplainer] = useState(false)
   const stateCwd = useGh((s) => s.cwd)
   const prs = useGh((s) => s.prs)
   const loading = useGh((s) => s.loading)
@@ -111,41 +114,71 @@ export default function PRInspector({ cwd, open, onClose }: Props) {
   const ghMissing = error?.includes('not installed')
 
   return (
-    <aside className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[480px] max-w-[95vw] flex-col border-l border-border-mid bg-bg-2 shadow-card">
-      <header className="flex items-center justify-between border-b border-border-soft px-5 py-3">
-        <div className="flex items-center gap-2.5">
-          <GitPullRequest size={16} strokeWidth={1.75} className="text-text-2" />
-          <div className="text-sm font-semibold text-text-1">Pull Requests</div>
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <GitPullRequest size={14} strokeWidth={1.75} className="text-accent-400" />
+          <span className="font-semibold text-text-1">pull requests</span>
           {prs.length > 0 && (
-            <span className="text-xs text-text-4">{prs.length}</span>
+            <span className="font-mono text-[10px] text-text-4">· {prs.length}</span>
           )}
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onClick={() => setShowExplainer((v) => !v)}
+            className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-[10px] text-text-4 hover:bg-bg-3 hover:text-text-1"
+            title="what is the PR inspector?"
+          >
+            <Info size={11} strokeWidth={1.75} />
+            what?
+          </button>
+          <button
+            type="button"
             onClick={() => void refresh()}
             disabled={loading}
-            className="rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1 disabled:opacity-40"
-            title="Refresh"
-            aria-label="Refresh pull requests"
+            className="rounded-sm p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1 disabled:opacity-40"
+            title="refresh"
+            aria-label="refresh"
           >
             {loading ? (
-              <Loader2 size={14} className="animate-spin" />
+              <Loader2 size={13} className="animate-spin" />
             ) : (
-              <RefreshCw size={14} strokeWidth={1.75} />
+              <RefreshCw size={13} strokeWidth={1.75} />
             )}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
-            aria-label="Close PR inspector"
+            className="rounded-sm p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
+            aria-label="close"
+            title="Esc"
           >
-            <X size={16} strokeWidth={1.75} />
+            <X size={14} strokeWidth={1.75} />
           </button>
         </div>
       </header>
-      <div className="df-scroll flex-1 overflow-y-auto">
+
+      {showExplainer ? (
+        <div className="border-b border-border-soft bg-bg-1 px-4 py-3 text-[11px] leading-relaxed text-text-3">
+          <p className="mb-1.5">
+            <strong className="text-text-2">PR Inspector</strong> — lists the current repo's pull
+            requests via the GitHub CLI (
+            <code className="rounded-sm bg-bg-3 px-1 font-mono">gh</code>) without leaving Hydra.
+          </p>
+          <p className="mb-1.5">
+            Click a PR to expand it and see the <strong>description</strong>,{' '}
+            <strong>diff</strong> (colour-coded +/− lines) and <strong>checks</strong> (CI, lint,
+            tests) with a status dot per check.
+          </p>
+          <p>
+            Handy when an agent just opened a PR and you want a quick look before approving or
+            merging. Requires <code className="rounded-sm bg-bg-3 px-1 font-mono">gh auth login</code>{' '}
+            done once on your machine.
+          </p>
+        </div>
+      ) : null}
+      <div className="df-scroll min-h-0 flex-1 overflow-y-auto">
         {ghMissing && (
           <div className="m-4 rounded-md border border-status-thinking/30 bg-status-thinking/10 p-3 text-sm">
             <div className="flex items-center gap-2 font-medium text-status-thinking">
@@ -261,6 +294,6 @@ export default function PRInspector({ cwd, open, onClose }: Props) {
           })}
         </div>
       </div>
-    </aside>
+    </div>
   )
 }

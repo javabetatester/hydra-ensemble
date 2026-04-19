@@ -200,17 +200,18 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             {showExplainer ? (
               <div className="mb-2 rounded-sm border border-border-soft bg-bg-1 p-3 text-[11px] leading-relaxed text-text-3">
                 <p className="mb-1.5">
-                  <strong className="text-text-2">git worktree</strong> = uma cópia da working
-                  directory do repo na sua própria branch. Mesmo histórico, arquivos separados.
+                  <strong className="text-text-2">git worktree</strong> — a second working copy
+                  of the same repo on its own branch. Same git history, separate files on disk.
                 </p>
                 <p className="mb-1.5">
-                  Cada agent rodando em uma worktree opera como se fosse um clone independente —
-                  pode editar, commitar, rodar testes <em>sem interferir</em> nos outros.
+                  Each agent running in a worktree operates as if it were an independent clone:
+                  it can edit, commit, run tests, and install deps <em>without interfering</em>{' '}
+                  with the other worktrees.
                 </p>
                 <p>
-                  Quando o trabalho da branch acaba, você faz{' '}
-                  <code className="rounded-sm bg-bg-3 px-1 font-mono">git merge</code> normal e
-                  pode remover a worktree pelo sidebar. Branch vira commit no repo principal.
+                  When the branch is done, merge it into main with a normal{' '}
+                  <code className="rounded-sm bg-bg-3 px-1 font-mono">git merge</code> and remove
+                  the worktree from the sidebar. The branch stays in the repo as commits.
                 </p>
               </div>
             ) : null}
