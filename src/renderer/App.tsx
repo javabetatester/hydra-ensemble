@@ -261,7 +261,7 @@ export default function App() {
         </header>
 
         <main className="relative flex min-h-0 flex-1">
-          {/* Terminal area */}
+          {/* Terminal area — shrinks when editor pane slides in */}
           <div className="relative flex min-w-0 flex-1 flex-col bg-bg-1">
             {sessions.length === 0 ? <EmptyMain claudePath={claudePath} /> : null}
             {sessions.length > 0 ? (
@@ -281,6 +281,25 @@ export default function App() {
               </>
             ) : null}
             {activeSession ? <VoiceButton /> : null}
+          </div>
+
+          {/* Inline editor pane — slides in from the right with width transition.
+              Mounts only when open so CodeMirror doesn't tax the renderer when idle. */}
+          <div
+            className="relative flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color,opacity] duration-300 ease-out"
+            style={{
+              width: editorOpen ? '52%' : '0%',
+              borderLeftColor: editorOpen ? 'var(--color-border-mid)' : 'transparent',
+              opacity: editorOpen ? 1 : 0
+            }}
+            aria-hidden={!editorOpen}
+          >
+            <div
+              className="absolute inset-0 transition-transform duration-300 ease-out"
+              style={{ transform: editorOpen ? 'translateX(0)' : 'translateX(8%)' }}
+            >
+              <CodeEditor open={editorOpen} onClose={closeEditor} mode="inline" />
+            </div>
           </div>
 
           {/* Right panel: sessions on top (auto-size, capped), toolkit fills rest */}
@@ -306,7 +325,6 @@ export default function App() {
 
       {/* Overlays */}
       <Dashboard open={dashboardOpen} onClose={closeDashboard} />
-      <CodeEditor open={editorOpen} onClose={closeEditor} />
       <PRInspector cwd={contextCwd} open={ghOpen} onClose={closeGh} />
       <WatchdogPanel />
       <ToolkitEditorDialog />
