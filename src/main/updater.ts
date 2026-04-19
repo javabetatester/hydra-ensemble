@@ -1,7 +1,11 @@
 import { app, type BrowserWindow } from 'electron'
-import pkg from 'electron-updater'
 
-const { autoUpdater } = pkg
+interface AutoUpdater {
+  autoDownload: boolean
+  autoInstallOnAppQuit: boolean
+  on: (event: string, handler: (info: unknown) => void) => void
+  checkForUpdates: () => Promise<unknown>
+}
 
 let initialized = false
 
@@ -16,6 +20,16 @@ export function initUpdater(window: BrowserWindow | null): void {
 
   // Silent in dev; the updater only runs against packaged builds.
   if (!app.isPackaged) return
+
+  let autoUpdater: AutoUpdater
+  try {
+    const mod = require('electron-updater') as { autoUpdater: AutoUpdater }
+    autoUpdater = mod.autoUpdater
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[updater] electron-updater unavailable:', (err as Error).message)
+    return
+  }
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true

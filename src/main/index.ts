@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { PtyManager } from './pty/manager'
 import { AnalyzerManager } from './pty/analyzer-manager'
 import { JsonlManager } from './claude/jsonl-manager'
@@ -27,8 +26,6 @@ import { registerQuickTermIpc } from './ipc/quickTerm'
 import { initStore } from './store'
 import { initUpdater } from './updater'
 import type { JsonlUpdate, SessionState } from '../shared/types'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const ptyManager = new PtyManager()
 const analyzerManager = new AnalyzerManager()
@@ -70,7 +67,7 @@ function createWindow(): BrowserWindow {
     backgroundColor: '#0d0d0f',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false

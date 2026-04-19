@@ -10,6 +10,7 @@ files:
   - "!**/*.{md,ts,tsx,map,test.ts,test.tsx}"
 asarUnpack:
   - "**/node_modules/node-pty/**"
+extends: null
 linux:
   target:
     - target: AppImage

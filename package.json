@@ -3,7 +3,6 @@
   "version": "0.1.0-phase0",
   "description": "Multi-session terminal for Claude Code (multi-OS)",
   "main": "out/main/index.js",
-  "type": "module",
   "author": "Intuitive Compute",
   "license": "MIT",
   "scripts": {
