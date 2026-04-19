@@ -21,6 +21,7 @@ import WatchdogPanel from './components/Watchdog/Panel'
 import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
 import HelpOverlay from './components/HelpOverlay'
+import NewSessionDialog from './components/NewSessionDialog'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
@@ -35,6 +36,9 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const spawnOpen = useSpawnDialogStore((s) => s.openFlag)
+  const setSpawnOpen = (v: boolean): void =>
+    useSpawnDialogStore.setState({ openFlag: v })
 
   const sessions = useSessions((s) => s.sessions)
   const activeId = useSessions((s) => s.activeId)
@@ -115,6 +119,13 @@ export default function App() {
         return
       }
       if (key === 't' && !e.shiftKey) {
+        e.preventDefault()
+        // ⌘T opens the picker dialog so the user explicitly chooses
+        // project + worktree. ⌘⇧T quick-spawns with the active context.
+        setSpawnOpen(true)
+        return
+      }
+      if (key === 't' && e.shiftKey) {
         e.preventDefault()
         void createSession({ cwd: contextCwd ?? undefined })
         return
@@ -344,18 +355,24 @@ export default function App() {
       <Toasts />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <NewSessionDialog open={spawnOpen} onClose={() => setSpawnOpen(false)} />
     </div>
   )
 }
 
+// Tiny shared singleton so EmptyMain can open the spawn dialog without
+// drilling props through App.
+import { create as createStore } from 'zustand'
+const useSpawnDialogStore = createStore<{ open(): void; openFlag: boolean }>((set) => ({
+  openFlag: false,
+  open: () => set({ openFlag: true })
+}))
+
 function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
-  const create = useSessions((s) => s.createSession)
   const isCreating = useSessions((s) => s.isCreating)
   const projects = useProjects((s) => s.projects)
   const currentPath = useProjects((s) => s.currentPath)
   const addProject = useProjects((s) => s.addProject)
-  const cwd =
-    useProjects((s) => s.projects.find((p) => p.path === s.currentPath)?.path) ?? null
 
   return (
     <div className="df-hero-bg df-scroll flex flex-1 items-center justify-center overflow-y-auto px-8 py-12">
@@ -423,7 +440,7 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
         <div className="flex flex-col items-center gap-3">
           <button
             type="button"
-            onClick={() => void create({ cwd: cwd ?? undefined })}
+            onClick={() => useSpawnDialogStore.getState().open()}
             disabled={isCreating || claudePath === null}
             className="group relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition df-lift hover:from-accent-400 hover:to-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
           >

@@ -38,6 +38,13 @@ function formatCost(c: number | undefined): string {
   return `$${c.toFixed(2)}`
 }
 
+function formatTokens(n: number | undefined): string {
+  if (!n || n <= 0) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return `${n}`
+}
+
 export default function SessionCard({
   session,
   index,
@@ -189,7 +196,7 @@ export default function SessionCard({
         ) : null}
       </div>
 
-      {/* row 3: meta */}
+      {/* row 3: branch · model + age */}
       <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-text-4">
         <div className="flex min-w-0 items-center gap-1.5">
           {session.branch ? (
@@ -205,15 +212,23 @@ export default function SessionCard({
             </>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 tabular-nums">
-          <span
-            className={session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'}
-          >
-            {formatCost(session.cost)}
-          </span>
-          <span>·</span>
-          <span>{relativeAge(session.createdAt)}</span>
-        </div>
+        <span className="shrink-0 tabular-nums">{relativeAge(session.createdAt)}</span>
+      </div>
+
+      {/* row 4: tokens + cost (always shown so cost feels traceable) */}
+      <div
+        className="mt-0.5 flex items-center justify-between gap-2 font-mono text-[10px] tabular-nums text-text-4"
+        title={`input ${session.tokensIn ?? 0} tokens · output ${session.tokensOut ?? 0} tokens`}
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-text-3">↓ {formatTokens(session.tokensIn)}</span>
+          <span className="text-text-3">↑ {formatTokens(session.tokensOut)}</span>
+        </span>
+        <span
+          className={session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'}
+        >
+          {formatCost(session.cost)}
+        </span>
       </div>
 
     </div>
