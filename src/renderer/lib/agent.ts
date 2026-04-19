@@ -18,40 +18,44 @@ export const AGENT_COLORS = [
 ] as const
 
 /**
- * NFT avatar gallery — Bored Ape Yacht Club via the public IPFS gateway.
- * The full collection lives at ipfs://QmeSjSinHpPnmXmspMjwiXyN6zS4E9zccariGR3jxcaWtq/N
- * (N = 0..9999, no extension). We curate 36 visually distinct apes here.
+ * NFT-style avatar gallery — dicebear `pixel-art` style.
  *
- * Falls back to the deterministic emoji if the gateway image fails to load
- * (offline, gateway down, network filtered) — see AgentAvatar.
+ * dicebear is a free, CC0, deterministic avatar API. The pixel-art style
+ * generates 8-bit characters (face, hat, glasses, clothes) that hit the
+ * cryptopunks/NFT vibe without depending on a flaky IPFS gateway.
+ *
+ * Each seed produces a stable unique character. SVG so it scales crisp.
+ * Falls back to the deterministic emoji if the request fails (offline,
+ * filtered) — see AgentAvatar.
  */
-const APE_IDS = [
-  1, 7, 23, 44, 88, 109, 173, 232, 277, 318,
-  391, 420, 555, 612, 699, 777, 821, 888, 999, 1234,
-  1547, 1888, 2087, 2333, 2580, 2918, 3100, 3456, 3789, 4242,
-  4567, 5000, 6529, 7777, 8888, 9420
+const NFT_AVATAR_SEEDS = [
+  'spectre', 'oracle', 'phantom', 'cipher', 'nexus', 'vortex', 'genesis', 'echo',
+  'zenith', 'pulse', 'lucid', 'haven', 'odyssey', 'mirage', 'prism', 'helix',
+  'quantum', 'titan', 'stellar', 'comet', 'apex', 'storm', 'shadow', 'flame',
+  'frost', 'aurora', 'nova', 'rift', 'glyph', 'rune', 'tide', 'arc',
+  'zen', 'orbit', 'flux', 'core', 'pixel', 'spark', 'wave', 'spire'
 ]
 
-const APE_GATEWAYS = [
-  'https://ipfs.io/ipfs/QmeSjSinHpPnmXmspMjwiXyN6zS4E9zccariGR3jxcaWtq',
-  'https://cloudflare-ipfs.com/ipfs/QmeSjSinHpPnmXmspMjwiXyN6zS4E9zccariGR3jxcaWtq',
-  'https://gateway.pinata.cloud/ipfs/QmeSjSinHpPnmXmspMjwiXyN6zS4E9zccariGR3jxcaWtq'
-]
+const DICEBEAR_BASE = 'https://api.dicebear.com/9.x/pixel-art/svg'
 
-export const NFT_APE_URLS: readonly string[] = APE_IDS.map(
-  (id) => `${APE_GATEWAYS[0]}/${id}`
+export const NFT_AVATAR_URLS: readonly string[] = NFT_AVATAR_SEEDS.map(
+  (seed) => `${DICEBEAR_BASE}?seed=${encodeURIComponent(seed)}&radius=10`
 )
 
-/** Alternate gateways for the same id, for fallback chain. */
-export function apeGatewayChain(url: string): string[] {
-  for (const gw of APE_GATEWAYS) {
-    if (url.startsWith(gw)) {
-      const id = url.slice(gw.length + 1)
-      return APE_GATEWAYS.map((g) => `${g}/${id}`)
-    }
-  }
+/** Backwards-compat alias used by the picker in AgentEditDialog. */
+export const NFT_APE_URLS = NFT_AVATAR_URLS
+
+/**
+ * Fallback chain for an avatar URL. dicebear is a single CDN, so the chain
+ * is just the URL itself — kept as a function so AgentAvatar can later add
+ * mirrors without changing call sites.
+ */
+export function avatarFallbackChain(url: string): string[] {
   return [url]
 }
+
+/** @deprecated kept for older imports — same as avatarFallbackChain. */
+export const apeGatewayChain = avatarFallbackChain
 
 /** Detect whether an avatar string is a URL (image) vs an emoji. */
 export function isAvatarUrl(avatar: string | undefined): boolean {
