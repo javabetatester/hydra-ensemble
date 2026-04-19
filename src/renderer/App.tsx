@@ -28,6 +28,8 @@ import TerminalsPanel from './components/TerminalsPanel'
 import WindowControls from './components/WindowControls'
 import { useSpawnDialog } from './state/spawn'
 import { useSlidePanel } from './state/panels'
+import { useKeybinds, resolveBind } from './state/keybinds'
+import { comboFromEvent, matchesCombo } from './lib/keybind'
 import { isMac } from './lib/platform'
 import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
@@ -84,68 +86,74 @@ export default function App() {
     void window.api.claude.resolvePath().then(setClaudePath)
   }, [initSessions, initToolkit, initWatchdog, initProjects])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      // '?' toggles the keyboard help overlay from anywhere, as long as
-      // the user isn't typing in an input — in which case '?' is a real
-      // character they meant to type.
-      if (e.key === '?' && !hasMod(e)) {
-        const t = e.target as HTMLElement | null
-        const tag = t?.tagName?.toLowerCase()
-        if (tag === 'input' || tag === 'textarea' || t?.isContentEditable) return
-        e.preventDefault()
-        setHelpOpen((v) => !v)
-        return
-      }
-      // hasMod ignores Super (metaKey) on Linux/Windows so we don't
-      // collide with Hyprland/GNOME/KDE/Win Super+N workspace shortcuts.
-      if (!hasMod(e)) return
-      const key = e.key.toLowerCase()
-      // e.code is layout-independent — important because ABNT2 keyboards
-      // don't produce the backtick/apostrophe characters where a US
-      // layout would. Using code lets the same shortcut work everywhere.
-      const code = e.code
+  // Action handler registry — keyed by ACTIONS id. Edit a binding in the
+  // keybinds editor and the dispatcher below picks it up automatically.
+  const overrides = useKeybinds((s) => s.overrides)
+  const recording = useKeybinds((s) => s.recording)
+  const setBind = useKeybinds((s) => s.setBind)
 
-      if (key === 'k' && !e.shiftKey) {
-        e.preventDefault()
-        setPaletteOpen((v) => !v)
+  useEffect(() => {
+    const handlers: Record<string, () => void> = {
+      'session.new': () => showSpawn(),
+      'session.quickSpawn': () => void createSession({ cwd: contextCwd ?? undefined }),
+      'session.close': () => {
+        if (activeId) void destroySession(activeId)
+      },
+      'session.next': () => {
+        if (!activeId || sessions.length === 0) return
+        const i = sessions.findIndex((s) => s.id === activeId)
+        const next = sessions[(i + 1) % sessions.length]
+        if (next) setActive(next.id)
+      },
+      'session.prev': () => {
+        if (!activeId || sessions.length === 0) return
+        const i = sessions.findIndex((s) => s.id === activeId)
+        const prev = sessions[(i - 1 + sessions.length) % sessions.length]
+        if (prev) setActive(prev.id)
+      },
+      'panel.terminals': () => togglePanelFor('terminals'),
+      'drawer.projects': () => setDrawerOpen((v) => !v),
+      'panel.dashboard': () => togglePanelFor('dashboard'),
+      'panel.editor': () => togglePanelFor('editor'),
+      'panel.watchdogs': () => togglePanelFor('watchdogs'),
+      'panel.pr': () => {
+        if (!contextCwd) return
+        if (activePanel === 'pr') closePanel()
+        else {
+          openGh(contextCwd)
+          openPanel('pr')
+        }
+      },
+      'palette.open': () => setPaletteOpen((v) => !v),
+      'help.open': () => setHelpOpen((v) => !v)
+    }
+
+    const onKey = (e: KeyboardEvent): void => {
+      // Recording mode: capture the next keypress as the binding,
+      // unless user pressed Escape (cancel) or it's a modifier-only key.
+      if (recording) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          useKeybinds.getState().stopRecording()
+          return
+        }
+        const combo = comboFromEvent(e)
+        if (combo) {
+          e.preventDefault()
+          e.stopPropagation()
+          setBind(recording, combo)
+        }
         return
       }
-      if (key === 'd' && !e.shiftKey) {
-        e.preventDefault()
-        togglePanelFor('dashboard')
-        return
-      }
-      if (key === 'e' && !e.shiftKey) {
-        e.preventDefault()
-        togglePanelFor('editor')
-        return
-      }
-      if (key === 't' && !e.shiftKey) {
-        // ⌘T toggles the projects drawer.
-        e.preventDefault()
-        setDrawerOpen((v) => !v)
-        return
-      }
-      if (key === 'n' && !e.shiftKey) {
-        // ⌘N opens the new-session picker dialog (project + worktree).
-        // ⌘⇧N quick-spawns with the active context.
-        e.preventDefault()
-        showSpawn()
-        return
-      }
-      if (key === 'n' && e.shiftKey) {
-        e.preventDefault()
-        void createSession({ cwd: contextCwd ?? undefined })
-        return
-      }
-      if (key === 'w' && !e.shiftKey) {
-        if (!activeId) return
-        e.preventDefault()
-        void destroySession(activeId)
-        return
-      }
-      if (/^[0-9]$/.test(e.key) && !e.shiftKey) {
+
+      // Skip when the user is typing in an input/textarea — avoid hijacking
+      // characters like '?' or letters they're typing into a form.
+      const t = e.target as HTMLElement | null
+      const tag = t?.tagName?.toLowerCase()
+      const inField = tag === 'input' || tag === 'textarea' || !!t?.isContentEditable
+
+      // Session jump 1..9 stays hardcoded — too many to expose as actions.
+      if (!inField && hasMod(e) && /^[0-9]$/.test(e.key) && !e.shiftKey) {
         const idx = e.key === '0' ? 9 : Number.parseInt(e.key, 10) - 1
         const target = sessions[idx]
         if (!target) return
@@ -153,46 +161,19 @@ export default function App() {
         setActive(target.id)
         return
       }
-      if (e.key === '[' && !e.shiftKey) {
-        if (!activeId) return
-        e.preventDefault()
-        const i = sessions.findIndex((s) => s.id === activeId)
-        const prev = sessions[(i - 1 + sessions.length) % sessions.length]
-        if (prev) setActive(prev.id)
-        return
-      }
-      if (e.key === ']' && !e.shiftKey) {
-        if (!activeId) return
-        e.preventDefault()
-        const i = sessions.findIndex((s) => s.id === activeId)
-        const next = sessions[(i + 1) % sessions.length]
-        if (next) setActive(next.id)
-        return
-      }
-      // Backtick alias — some US-muscle-memory users still expect ⌘` for
-      // the terminal panel. Using e.code so the key is recognised on
-      // ABNT2 layouts where the physical key produces apostrophe.
-      if ((code === 'Backquote' || e.key === '`' || e.key === "'") && !e.shiftKey) {
-        e.preventDefault()
-        togglePanelFor('terminals')
-        return
-      }
-      if (key === 'p' && e.shiftKey) {
-        // ⌘⇧P opens the PR inspector (kept shift to avoid clashing with
-        // the new ⌘P projects drawer).
-        if (!contextCwd) return
-        e.preventDefault()
-        if (activePanel === 'pr') {
-          closePanel()
-        } else {
-          openGh(contextCwd)
-          openPanel('pr')
+
+      // Generic dispatcher: walk every action and try to match its
+      // current combo. First match wins.
+      for (const [id, run] of Object.entries(handlers)) {
+        const combo = resolveBind(id, overrides)
+        if (!combo) continue
+        // The '?' / non-mod bindings shouldn't fire while typing in a field.
+        if (inField && !combo.includes('mod+') && !combo.includes('shift+')) continue
+        if (matchesCombo(e, combo)) {
+          e.preventDefault()
+          run()
+          return
         }
-        return
-      }
-      if (key === 'w' && e.shiftKey) {
-        e.preventDefault()
-        togglePanelFor('watchdogs')
       }
     }
     // capture: true so we intercept BEFORE xterm.js (which has its own
@@ -202,6 +183,9 @@ export default function App() {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [
+    overrides,
+    recording,
+    setBind,
     togglePanelFor,
     openPanel,
     closePanel,
