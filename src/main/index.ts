@@ -140,6 +140,7 @@ function createWindow(): BrowserWindow {
   jsonlManager.attachWindow(win)
   projectService.attachWindow(win)
   watchdogService.attachWindow(win)
+  notificationService.attachWindow(win)
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])

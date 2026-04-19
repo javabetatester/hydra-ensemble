@@ -1,10 +1,43 @@
 import { Plus, Activity, RefreshCw, Inbox } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSessions } from '../state/sessions'
 import { useSpawnDialog } from '../state/spawn'
 import SessionCard from './SessionCard'
 import AgentEditDialog from './AgentEditDialog'
-import type { SessionMeta } from '../../shared/types'
+import type { SessionMeta, SessionState } from '../../shared/types'
+
+type Filter = 'all' | 'yours' | 'working' | 'attention'
+
+const FILTERS: Array<{ id: Filter; label: string; matches: (s: SessionMeta) => boolean }> = [
+  { id: 'all', label: 'all', matches: () => true },
+  {
+    id: 'yours',
+    label: 'your turn',
+    matches: (s) => s.state === 'userInput' || s.state === 'idle'
+  },
+  {
+    id: 'working',
+    label: 'working',
+    matches: (s) => s.state === 'thinking' || s.state === 'generating'
+  },
+  {
+    id: 'attention',
+    label: 'attention',
+    matches: (s) => s.state === 'needsAttention'
+  }
+]
+
+const FILTER_DOT: Record<Filter, string> = {
+  all: 'bg-text-4',
+  yours: 'bg-status-input',
+  working: 'bg-status-generating',
+  attention: 'bg-status-attention'
+}
+
+function countByFilter(sessions: SessionMeta[], filter: Filter): number {
+  const fn = FILTERS.find((f) => f.id === filter)?.matches
+  return fn ? sessions.filter(fn).length : sessions.length
+}
 
 export default function SessionsPanel() {
   const sessions = useSessions((s) => s.sessions)
@@ -16,7 +49,13 @@ export default function SessionsPanel() {
   const openSpawn = useSpawnDialog((s) => s.show)
 
   const [tab, setTab] = useState<'sessions' | 'activity'>('sessions')
+  const [filter, setFilter] = useState<Filter>('all')
   const [editing, setEditing] = useState<SessionMeta | null>(null)
+
+  const filtered = useMemo(() => {
+    const fn = FILTERS.find((f) => f.id === filter)?.matches ?? (() => true)
+    return sessions.filter(fn)
+  }, [sessions, filter])
 
   // Re-render every 30s so the relative ages stay roughly fresh.
   const [, force] = useState(0)
@@ -72,6 +111,17 @@ export default function SessionsPanel() {
         </div>
       </header>
 
+      {/* segmented filter — slides between all / your-turn / working / attention */}
+      {tab === 'sessions' && sessions.length > 0 ? (
+        <FilterStrip
+          active={filter}
+          onPick={setFilter}
+          counts={Object.fromEntries(
+            FILTERS.map((f) => [f.id, countByFilter(sessions, f.id)])
+          ) as Record<Filter, number>}
+        />
+      ) : null}
+
       {/* body — scrolls only when content overflows the available space */}
       <div className="df-scroll min-h-0 flex-1 overflow-y-auto p-2">
         {tab === 'sessions' ? <SessionList /> : <ActivityList />}
@@ -104,20 +154,38 @@ export default function SessionsPanel() {
         </button>
       )
     }
+    if (filtered.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-1.5 px-4 py-8 text-center">
+          <span className={`h-2 w-2 rounded-full ${FILTER_DOT[filter]}`} />
+          <div className="text-xs text-text-2">no sessions match this filter</div>
+          <button
+            type="button"
+            onClick={() => setFilter('all')}
+            className="font-mono text-[10px] text-text-4 hover:text-text-1"
+          >
+            show all →
+          </button>
+        </div>
+      )
+    }
     return (
       <div className="flex flex-col gap-1.5">
-        {sessions.map((s, i) => (
-          <SessionCard
-            key={s.id}
-            session={s}
-            index={i + 1}
-            active={s.id === activeId}
-            onClick={() => setActive(s.id)}
-            onDestroy={() => destroy(s.id)}
-            onEdit={() => setEditing(s)}
-            onClone={() => void clone(s.id)}
-          />
-        ))}
+        {filtered.map((s) => {
+          const realIndex = sessions.findIndex((x) => x.id === s.id)
+          return (
+            <SessionCard
+              key={s.id}
+              session={s}
+              index={realIndex + 1}
+              active={s.id === activeId}
+              onClick={() => setActive(s.id)}
+              onDestroy={() => destroy(s.id)}
+              onEdit={() => setEditing(s)}
+              onClone={() => void clone(s.id)}
+            />
+          )
+        })}
       </div>
     )
   }
@@ -161,4 +229,40 @@ export default function SessionsPanel() {
       </div>
     )
   }
+}
+
+function FilterStrip({
+  active,
+  onPick,
+  counts
+}: {
+  active: Filter
+  onPick: (f: Filter) => void
+  counts: Record<Filter, number>
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-0.5 border-b border-border-soft px-2 py-1.5">
+      {FILTERS.map((f) => {
+        const isActive = active === f.id
+        const n = counts[f.id]
+        return (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onPick(f.id)}
+            className={`flex items-center gap-1.5 rounded-sm px-2 py-1 text-[10px] transition ${
+              isActive
+                ? 'bg-bg-4 text-text-1'
+                : 'text-text-3 hover:bg-bg-3 hover:text-text-1'
+            }`}
+            title={`${f.label} (${n})`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${FILTER_DOT[f.id]}`} aria-hidden />
+            <span>{f.label}</span>
+            <span className="font-mono text-text-4">{n}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }

@@ -133,6 +133,29 @@ export const useSessions = create<SessionsState>((set, get) => ({
     window.api.session.onChange((next) => {
       get().setSessions(next)
     })
+    // OS notification click → focus the session it referred to.
+    const onFocus = (_evt: unknown, payload: { sessionId: string }): void => {
+      const s = get().sessions.find((s) => s.id === payload.sessionId)
+      if (s) get().setActive(s.id)
+    }
+    // Use the raw electron ipcRenderer via window for this one — it's not
+    // worth adding to the typed contextBridge for a single channel.
+    type FocusEvt = { sessionId: string }
+    type IpcLite = {
+      on: (channel: string, listener: (...args: unknown[]) => void) => void
+    }
+    const ipc = (window as unknown as { electron?: { ipcRenderer?: IpcLite } }).electron
+      ?.ipcRenderer
+    if (ipc) {
+      ipc.on('notify:focusSession', (...args) => {
+        const payload = args[args.length - 1] as FocusEvt
+        if (payload?.sessionId) {
+          const s = get().sessions.find((x) => x.id === payload.sessionId)
+          if (s) get().setActive(s.id)
+        }
+      })
+    }
+    void onFocus
     // Mark a session as unread the first time it emits data while the
     // user is looking at another tab. Only flip false -> true so the
     // high-frequency pty:data stream doesn't thrash setState.
@@ -148,17 +171,41 @@ export const useSessions = create<SessionsState>((set, get) => ({
 
       if (!prev || get().activeId === evt.sessionId) return
 
+      const sendBoth = (
+        kind: 'attention' | 'success',
+        title: string,
+        body: string
+      ): void => {
+        useToasts.getState().push({
+          kind,
+          title,
+          body,
+          sessionId: evt.sessionId
+        })
+        // OS-level notification too so the user sees it when the window
+        // is unfocused or buried under other apps. Critical when running
+        // 10+ parallel agents — toast in-app isn't enough.
+        if (!document.hasFocus()) {
+          void window.api.notify.show({
+            title,
+            body,
+            // NotificationKind uses 'completed' for the success variant.
+            kind: kind === 'success' ? 'completed' : 'attention',
+            sessionId: evt.sessionId
+          })
+        }
+      }
+
       // Surface attention transitions so a backgrounded agent doesn't
       // get stuck waiting unnoticed.
       if (evt.state === 'needsAttention' && prev.state !== 'needsAttention') {
-        useToasts.getState().push({
-          kind: 'attention',
-          title: `${prev.name} needs attention`,
-          body: prev.subStatus
+        sendBoth(
+          'attention',
+          `${prev.name} needs attention`,
+          prev.subStatus
             ? `${prev.subStatus}${prev.subTarget ? ' · ' + prev.subTarget : ''}`
-            : 'agent is waiting for permission',
-          sessionId: evt.sessionId
-        })
+            : 'agent is waiting for permission'
+        )
         return
       }
 
@@ -168,22 +215,22 @@ export const useSessions = create<SessionsState>((set, get) => ({
       const wasWorking = prev.state === 'thinking' || prev.state === 'generating'
       const nowReady = evt.state === 'userInput' || evt.state === 'idle'
       if (wasWorking && nowReady) {
-        useToasts.getState().push({
-          kind: 'success',
-          title: `${prev.name} is ready`,
-          body: prev.latestAssistantText
-            ? prev.latestAssistantText.slice(0, 100)
-            : 'agent finished — your turn',
-          sessionId: evt.sessionId
-        })
+        sendBoth(
+          'success',
+          `${prev.name} is ready`,
+          prev.latestAssistantText
+            ? prev.latestAssistantText.slice(0, 120)
+            : 'agent finished — your turn'
+        )
       }
     })
     window.api.session.onJsonl((update: JsonlUpdate) => {
-      // JSONL entries arrive as soon as Claude commits an assistant turn
-      // (text chunk, tool_use call, etc), so they're the most reliable
-      // "still working" signal. Flip the live state to generating
-      // alongside the cost/tokens patch — the analyzer will roll it
-      // back to 'idle' or 'userInput' when the terminal frame settles.
+      // JSONL only updates derived metrics — cost, tokens, model, the
+      // latest tool_use sub-status. Coarse state (thinking / generating
+      // / userInput / idle) is owned exclusively by the PTY analyzer
+      // because that's what reflects what the terminal actually shows.
+      // Two writers fighting led to a stuck 'thinking' pill after
+      // claude was clearly done.
       get().patchSession(update.sessionId, {
         cost: update.cost,
         tokensIn: update.tokensIn,
@@ -191,8 +238,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
         model: update.model,
         latestAssistantText: update.latestAssistantText,
         subStatus: update.subStatus,
-        subTarget: update.subTarget,
-        state: 'generating'
+        subTarget: update.subTarget
       })
     })
   }

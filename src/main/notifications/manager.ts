@@ -1,4 +1,4 @@
-import { Notification } from 'electron'
+import { Notification, type BrowserWindow } from 'electron'
 import type { NotificationKind, NotifyOptions } from '../../shared/types'
 
 /**
@@ -9,6 +9,12 @@ import type { NotificationKind, NotifyOptions } from '../../shared/types'
  * swallowed silently.
  */
 export class NotificationService {
+  private window: BrowserWindow | null = null
+
+  attachWindow(win: BrowserWindow): void {
+    this.window = win
+  }
+
   show(opts: NotifyOptions): void {
     try {
       if (!Notification.isSupported()) return
@@ -20,6 +26,18 @@ export class NotificationService {
       })
       notif.on('failed', () => {
         // No daemon / quota exceeded / etc. — silent on purpose.
+      })
+      // Click → bring the window to front and tell the renderer to focus
+      // the originating session so 30 parallel agents stay manageable.
+      notif.on('click', () => {
+        const win = this.window
+        if (!win) return
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        if (opts.sessionId) {
+          win.webContents.send('notify:focusSession', { sessionId: opts.sessionId })
+        }
       })
       notif.show()
     } catch {
