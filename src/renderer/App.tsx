@@ -212,7 +212,7 @@ export default function App() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header
           className={`flex h-11 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 ${
-            isMac() ? 'pl-20 pr-3' : 'pl-3 pr-0'
+            isMac() ? 'pl-20 pr-3' : 'pl-3 pr-3'
           }`}
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
@@ -247,10 +247,10 @@ export default function App() {
           </div>
 
           <div
-            className="flex items-stretch"
+            className="flex items-center gap-3"
             style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
           >
-            <div className="flex items-center gap-0.5 pr-2">
+            <div className="flex items-center gap-0.5">
             <HeaderButton
               icon={<GitPullRequest size={13} strokeWidth={1.75} />}
               label="PRs"
@@ -298,6 +298,9 @@ export default function App() {
               </span>
             </div>
             </div>
+            {/* Vertical separator + extra breathing room before the OS controls
+                so they don't crowd the os/claude badge on Linux/Windows. */}
+            <span className="h-5 w-px bg-border-soft" aria-hidden />
             <WindowControls />
           </div>
         </header>
@@ -344,15 +347,17 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right panel: sessions on top (auto-size, capped), toolkit fills rest */}
+          {/* Right panel: sessions takes remaining space at top, toolkit
+              hugs the bottom sized to its own content (capped at 55% so
+              huge toolkits don't push sessions out). */}
           <div className="flex w-80 shrink-0 flex-col overflow-hidden">
-            <div
-              className="flex shrink-0 flex-col overflow-hidden"
-              style={{ maxHeight: '55%' }}
-            >
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <SessionsPanel />
             </div>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="flex shrink-0 flex-col overflow-hidden border-t border-border-soft"
+              style={{ maxHeight: '55%' }}
+            >
               <ToolkitGrid
                 cwd={contextCwd}
                 projectName={currentProject?.name}

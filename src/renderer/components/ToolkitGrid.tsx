@@ -1,4 +1,4 @@
-import { Wrench, Settings2, Loader2, AlertCircle, Check, ChevronDown, Plus } from 'lucide-react'
+import { Wrench, Settings2, Loader2, AlertCircle, Check, ChevronDown } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToolkit } from '../state/toolkit'
 import type { ToolkitItem } from '../../shared/types'
@@ -51,11 +51,11 @@ export default function ToolkitGrid({ cwd, projectName, branch }: Props) {
         <button
           type="button"
           onClick={openEditor}
-          className="rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
-          title="edit toolkit"
-          aria-label="edit toolkit"
+          className="flex items-center gap-1 rounded-sm border border-border-soft bg-bg-3 px-2 py-1 text-[11px] text-text-2 transition hover:border-accent-500/50 hover:bg-bg-4 hover:text-text-1"
+          title="edit toolkit commands"
         >
-          <Settings2 size={13} strokeWidth={1.75} />
+          <Settings2 size={11} strokeWidth={1.75} />
+          edit
         </button>
       </header>
 
@@ -96,25 +96,9 @@ export default function ToolkitGrid({ cwd, projectName, branch }: Props) {
         )}
       </div>
 
-      <footer className="flex shrink-0 items-center gap-1 border-t border-border-soft px-2 py-1.5 text-xs">
-        <button
-          type="button"
-          onClick={openEditor}
-          className="flex items-center gap-1 rounded-sm px-2 py-1 text-text-3 hover:bg-bg-3 hover:text-text-1"
-        >
-          <Plus size={11} strokeWidth={1.75} />
-          Add
-        </button>
-        <button
-          type="button"
-          onClick={openEditor}
-          className="rounded-sm px-2 py-1 text-text-3 hover:bg-bg-3 hover:text-text-1"
-        >
-          Edit
-        </button>
-        <span className="ml-auto font-mono text-[10px] text-text-4">
-          {cwd ? items.length + ' cmds' : 'pick a project'}
-        </span>
+      <footer className="flex shrink-0 items-center justify-between border-t border-border-soft px-3 py-1.5 font-mono text-[10px] text-text-4">
+        <span>{items.length} commands</span>
+        <span>{cwd ? '✓ project ready' : 'pick a project to enable'}</span>
       </footer>
     </section>
   )

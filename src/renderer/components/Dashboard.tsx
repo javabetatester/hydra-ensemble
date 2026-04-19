@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
   DollarSign,
+  Info,
   LayoutDashboard,
   RotateCw,
   Trash2,
@@ -15,6 +16,8 @@ import SessionStatePill from './SessionStatePill'
 interface Props {
   open: boolean
   onClose: () => void
+  /** 'inline' renders a self-contained pane (no portal/backdrop). */
+  mode?: 'inline' | 'overlay'
 }
 
 interface CardProps {
@@ -57,55 +60,45 @@ function DashboardCard({ session, onFocus, onRestart, onDestroy }: CardProps) {
         </div>
       </div>
 
-      <div
-        className="font-mono text-xs leading-snug text-text-3"
-        style={{
-          display: '-webkit-box',
-          WebkitLineClamp: 4,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden'
-        }}
-      >
+      <div className="line-clamp-4 min-h-[3.5rem] font-mono text-[11px] leading-relaxed text-text-3">
         {previewText(session)}
       </div>
 
-      <div className="mt-auto flex items-center justify-end gap-1 border-t border-border-soft pt-3">
+      <div className="mt-auto flex items-center gap-1 border-t border-border-soft pt-2">
         <button
           type="button"
           onClick={() => onFocus(session.id)}
-          className="flex items-center gap-1.5 rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
-          title="Focus session"
-          aria-label="focus"
+          className="flex items-center gap-1 rounded-sm p-1 text-text-3 hover:bg-bg-2 hover:text-text-1"
+          title="focus"
         >
-          <Activity size={14} strokeWidth={1.75} />
+          <Activity size={12} strokeWidth={1.75} />
         </button>
         <button
           type="button"
           onClick={() => onRestart(session.id)}
-          className="rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
-          title="Restart session"
-          aria-label="restart"
+          className="flex items-center gap-1 rounded-sm p-1 text-text-3 hover:bg-bg-2 hover:text-text-1"
+          title="restart"
         >
-          <RotateCw size={14} strokeWidth={1.75} />
+          <RotateCw size={12} strokeWidth={1.75} />
         </button>
         <button
           type="button"
           onClick={() => onDestroy(session.id)}
-          className="rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-status-attention"
-          title="Destroy session"
-          aria-label="destroy"
+          className="ml-auto flex items-center gap-1 rounded-sm p-1 text-text-3 hover:bg-bg-2 hover:text-status-attention"
+          title="destroy"
         >
-          <Trash2 size={14} strokeWidth={1.75} />
+          <Trash2 size={12} strokeWidth={1.75} />
         </button>
       </div>
     </div>
   )
 }
 
-export default function Dashboard({ open, onClose }: Props) {
+export default function Dashboard({ open, onClose, mode = 'inline' }: Props) {
   const sessions = useSessions((s) => s.sessions)
   const setActive = useSessions((s) => s.setActive)
   const destroySession = useSessions((s) => s.destroySession)
+  const [showExplainer, setShowExplainer] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -120,30 +113,25 @@ export default function Dashboard({ open, onClose }: Props) {
     setActive(id)
     onClose()
   }
-
   const handleRestart = (id: string): void => {
-    // eslint-disable-next-line no-console
-    console.log('[dashboard] restart not implemented yet', id)
+    void window.api.session.restart(id)
   }
-
   const handleDestroy = (id: string): void => {
     void destroySession(id)
   }
 
-  const body = useMemo(() => {
+  const grid = useMemo(() => {
     if (sessions.length === 0) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16">
           <LayoutDashboard size={32} strokeWidth={1.25} className="text-text-4" />
-          <div className="text-sm text-text-2">No active sessions</div>
-          <div className="text-xs text-text-4">
-            Open a project and create a session to get started.
-          </div>
+          <div className="text-sm text-text-2">no active sessions</div>
+          <div className="text-xs text-text-4">spawn an agent to see it here.</div>
         </div>
       )
     }
     return (
-      <div className="df-scroll grid flex-1 gap-4 overflow-y-auto pr-1 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))] [grid-auto-rows:min-content]">
+      <div className="df-scroll grid flex-1 gap-3 overflow-y-auto pr-1 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))] [grid-auto-rows:min-content]">
         {sessions.map((s) => (
           <DashboardCard
             key={s.id}
@@ -160,36 +148,70 @@ export default function Dashboard({ open, onClose }: Props) {
 
   if (!open) return null
 
-  const overlay = (
+  const body = (
+    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2 text-sm">
+          <LayoutDashboard size={14} strokeWidth={1.75} className="text-accent-400" />
+          <span className="font-semibold text-text-1">dashboard</span>
+          <span className="font-mono text-[10px] text-text-4">
+            · {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowExplainer((v) => !v)}
+            className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-[10px] text-text-4 hover:bg-bg-3 hover:text-text-1"
+            title="what is the dashboard?"
+          >
+            <Info size={11} strokeWidth={1.75} />
+            what?
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-sm p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
+            aria-label="close"
+            title="Esc"
+          >
+            <X size={14} strokeWidth={1.75} />
+          </button>
+        </div>
+      </header>
+
+      {showExplainer ? (
+        <div className="border-b border-border-soft bg-bg-1 px-4 py-3 text-[11px] leading-relaxed text-text-3">
+          <p className="mb-1.5">
+            <strong className="text-text-2">dashboard</strong> = visão geral de TODOS os agents
+            rodando em paralelo numa grade. Cada card mostra o estado live (thinking, generating,
+            awaiting input), o último texto que o agent respondeu, e o custo acumulado.
+          </p>
+          <p>
+            Útil quando você tem 3+ sessions rodando e quer monitorar de relance sem ficar
+            alternando ⌘1/⌘2/⌘3. Clica num card pra "focar" — fecha o dashboard e ativa aquela
+            session no terminal principal.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="flex flex-1 flex-col overflow-hidden p-3">{grid}</div>
+    </div>
+  )
+
+  if (mode === 'inline') return body
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-0/85 p-8 backdrop-blur-md"
+      className="fixed inset-0 z-50 bg-bg-0/85 p-6 backdrop-blur-md"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="df-fade-in flex max-h-[90vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-lg border border-border-mid bg-bg-2 shadow-pop">
-        <header className="flex items-center justify-between border-b border-border-soft px-5 py-3">
-          <div className="flex items-center gap-2.5">
-            <LayoutDashboard size={16} strokeWidth={1.75} className="text-text-2" />
-            <div className="text-sm font-semibold text-text-1">Dashboard</div>
-            <div className="text-xs text-text-4">
-              {sessions.length} {sessions.length === 1 ? 'session' : 'sessions'}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
-            aria-label="Close dashboard"
-            title="Esc"
-          >
-            <X size={16} strokeWidth={1.75} />
-          </button>
-        </header>
-        <div className="flex flex-1 flex-col overflow-hidden p-5">{body}</div>
+      <div className="df-fade-in mx-auto h-full max-w-[1280px] overflow-hidden rounded-lg border border-border-mid bg-bg-2 shadow-pop">
+        {body}
       </div>
-    </div>
+    </div>,
+    document.body
   )
-
-  return createPortal(overlay, document.body)
 }

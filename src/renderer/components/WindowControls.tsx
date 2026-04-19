@@ -3,10 +3,16 @@ import { Minus, Square, Copy, X } from 'lucide-react'
 import { isMac } from '../lib/platform'
 
 /**
- * Custom titlebar controls for tiling/decoration-less environments
- * (Hyprland, sway, etc.) where the OS doesn't draw a frame. macOS gets
- * its native traffic lights via titleBarStyle: 'hiddenInset' so we hide
- * these there.
+ * Compact, monochrome titlebar controls for tiling/decoration-less
+ * environments (Hyprland, sway, GNOME without server-side decorations).
+ *
+ * Design rules:
+ * - 24x24 rounded squares — read as a CLI strip, not as OS chrome
+ * - default state has no background, only a muted icon colour
+ * - hover applies a subtle bg-bg-4 ring on minimize / maximize and
+ *   a soft tinted attention background on close (no full-red bleed)
+ * - hidden on macOS where titleBarStyle: 'hiddenInset' already gives
+ *   the OS traffic lights
  */
 export default function WindowControls() {
   const [maximized, setMaximized] = useState(false)
@@ -32,12 +38,12 @@ export default function WindowControls() {
     void window.api.window.close()
   }
 
-  // The buttons need WebkitAppRegion: 'no-drag' so clicks register instead
+  // Buttons need WebkitAppRegion: 'no-drag' so clicks register instead
   // of being eaten by the drag region applied to the parent header.
   const noDrag = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
 
   return (
-    <div className="flex shrink-0 items-stretch" style={noDrag}>
+    <div className="flex items-center gap-0.5" style={noDrag}>
       <CtrlBtn onClick={min} title="minimize" Icon={Minus} />
       <CtrlBtn
         onClick={() => void tog()}
@@ -66,11 +72,13 @@ function CtrlBtn({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`flex h-full w-10 items-center justify-center text-text-3 transition-colors ${
-        danger ? 'hover:bg-status-attention/80 hover:text-white' : 'hover:bg-bg-3 hover:text-text-1'
+      className={`flex h-6 w-6 items-center justify-center rounded-sm text-text-4 transition-colors ${
+        danger
+          ? 'hover:bg-status-attention/15 hover:text-status-attention'
+          : 'hover:bg-bg-4 hover:text-text-1'
       }`}
     >
-      <Icon size={12} strokeWidth={1.75} />
+      <Icon size={11} strokeWidth={1.75} />
     </button>
   )
 }
