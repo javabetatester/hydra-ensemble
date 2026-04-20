@@ -133,13 +133,26 @@ export class WorktreeService {
 
   /** List changed files via `git status --porcelain=v1 -uall`.
    *
+   *  Refuses to run unless `cwd` sits directly inside a git working tree —
+   *  otherwise git walks up the filesystem looking for a `.git` dir, which
+   *  can stumble into an ancestor repo (or even the user's $HOME if they
+   *  `git init` there once) and list thousands of unrelated files.
+   *
+   *  The pathspec `-- .` restricts the status to paths inside `cwd`,
+   *  ignoring changes that live elsewhere in the same repo.
+   *
    *  Hard-capped at FILE_LIST_LIMIT entries. A directory without a sensible
    *  .gitignore (think node_modules / .cache / build output) can produce
    *  hundreds of thousands of untracked rows — serialising that across the
-   *  IPC bridge AND rendering each as a DOM node freezes Electron. We stop
-   *  at the cap and flag the result so the UI can show a "truncated" hint. */
+   *  IPC bridge AND rendering each as a DOM node freezes Electron. */
   async listChangedFiles(cwd: string): Promise<GitOpResult<ChangedFile[]>> {
-    const res = await this.runGit(['-C', cwd, 'status', '--porcelain=v1', '-uall'])
+    // Is this actually a git worktree? Cheap check that also rules out the
+    // "git bubbled up to an ancestor repo" trap.
+    const inside = await this.runGit(['-C', cwd, 'rev-parse', '--is-inside-work-tree'])
+    if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
+      return { ok: false, error: 'not a git repository' }
+    }
+    const res = await this.runGit(['-C', cwd, 'status', '--porcelain=v1', '-uall', '--', '.'])
     if (res.code !== 0) {
       return { ok: false, error: res.stderr.trim() || 'git status failed' }
     }
