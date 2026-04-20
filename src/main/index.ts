@@ -133,26 +133,18 @@ function createWindow(): BrowserWindow {
     win.show()
   })
 
-  // DevTools are a dev-only affordance. In a packaged release the
-  // renderer is a product UX, not a debugging console — exposing F12 /
-  // Ctrl+Shift+I there gives users a confusing way to 'break' the app.
-  // Only wire the accelerators (and the auto-open) when the renderer is
-  // being served from Vite (i.e. we're in dev).
-  const isDev = Boolean(process.env['ELECTRON_RENDERER_URL'])
-  if (isDev) {
-    win.webContents.on('before-input-event', (_evt, input) => {
-      if (input.type !== 'keyDown') return
-      const key = input.key?.toLowerCase()
-      const toggleByF12 = key === 'f12'
-      const toggleByChord = input.control && input.shift && key === 'i'
-      if (toggleByF12 || toggleByChord) {
-        win.webContents.toggleDevTools()
-      }
-    })
-    win.webContents.once('did-finish-load', () => {
-      win.webContents.openDevTools({ mode: 'detach' })
-    })
-  }
+  // DevTools are intentionally fully disabled: no auto-open, no F12, no
+  // Ctrl+Shift+I. The renderer is a product UI — the only people who
+  // reach a JS console through it are users confused by whatever panel
+  // it dumps on them. We swallow the chord at the OS-input layer so
+  // Electron never gets a chance to toggle it, even in dev builds.
+  win.webContents.on('before-input-event', (evt, input) => {
+    if (input.type !== 'keyDown') return
+    const key = input.key?.toLowerCase()
+    const isF12 = key === 'f12'
+    const isDevChord = input.control && input.shift && key === 'i'
+    if (isF12 || isDevChord) evt.preventDefault()
+  })
 
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)

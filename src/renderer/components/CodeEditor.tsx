@@ -52,6 +52,11 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const setDiffPreview = useEditor((s) => s.setDiffPreview)
   const fileDiffs = useEditor((s) => s.fileDiffs)
   const closeAllFiles = useEditor((s) => s.closeAllFiles)
+  // Subscribe to the savedBytes map so the Save button re-renders the
+  // moment the active buffer diverges from disk. Dirty state is derived
+  // here (not from a stored flag) to stay consistent with the live
+  // buffer on every keystroke.
+  const savedBytes = useEditor((s) => s.savedBytes)
 
   // Sidebar width (Files / Changes / Search pane). Persisted + drag-resizable.
   const sidebarWidth = useEditorSidebarSize((s) => s.width)
@@ -193,6 +198,14 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const activeFile = openFiles.find((f) => f.path === activeFilePath) ?? null
   const isMarkdown = !!activeFile && /\.(md|markdown|mdx)$/i.test(activeFile.path)
   const showPreview = isMarkdown && previewMd
+  // Save is a no-op on a clean buffer — gate the button so users get
+  // an immediate visual cue (disabled = nothing to save) and can't
+  // trigger spurious writeFile round-trips by mashing Ctrl+S.
+  const isDirty =
+    !!activeFile &&
+    activeFile.encoding === 'utf-8' &&
+    savedBytes[activeFile.path] !== undefined &&
+    savedBytes[activeFile.path] !== activeFile.bytes
 
   const body = (
     <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-2">
@@ -250,12 +263,20 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
           <button
             type="button"
             onClick={() => void saveActive()}
-            disabled={!activeFile || activeFile.encoding !== 'utf-8'}
-            className="flex items-center gap-1.5 rounded-sm border border-border-soft bg-bg-3 px-2.5 py-1 text-[11px] text-text-2 hover:bg-bg-4 disabled:cursor-not-allowed disabled:opacity-40"
-            title={`Save (${fmtShortcut('S')})`}
+            disabled={!isDirty}
+            className={`flex items-center gap-1.5 rounded-sm border px-2.5 py-1 text-[11px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              isDirty
+                ? 'border-accent-500/50 bg-accent-500/15 text-accent-200 hover:bg-accent-500/25'
+                : 'border-border-soft bg-bg-3 text-text-2'
+            }`}
+            title={
+              isDirty
+                ? `Save (${fmtShortcut('S')})`
+                : 'No unsaved changes'
+            }
           >
             <Save size={12} strokeWidth={1.75} />
-            save
+            {isDirty ? 'save •' : 'save'}
             <span className="font-mono text-[10px] text-text-4">{fmtShortcut('S')}</span>
           </button>
           <button

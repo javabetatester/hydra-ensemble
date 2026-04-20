@@ -115,9 +115,23 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
       ]),
       oneDark,
       // Force full height so the editor is scrollable on its own.
+      // Also override @codemirror/search's match highlights — oneDark
+      // ships very subtle defaults that are invisible against the diff
+      // line backgrounds. VS Code uses a strong amber box around every
+      // occurrence + a hotter colour on the "current" match.
       EditorView.theme({
         '&': { height: '100%' },
-        '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit' }
+        '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit' },
+        '.cm-searchMatch': {
+          backgroundColor: 'rgba(255, 184, 41, 0.32)',
+          outline: '1px solid rgba(255, 184, 41, 0.85)',
+          borderRadius: '2px'
+        },
+        '.cm-searchMatch .cm-selectionMatch': { backgroundColor: 'transparent' },
+        '.cm-searchMatch-selected': {
+          backgroundColor: 'rgba(255, 107, 77, 0.55)',
+          outline: '1px solid rgba(255, 107, 77, 0.95)'
+        }
       }),
       langCompartment.current.of([]),
       EditorView.updateListener.of((u) => {

@@ -5,15 +5,28 @@ import {
   CheckSquare,
   GitCommit,
   Loader2,
+  Pencil,
   RefreshCw,
   Sparkles,
   Square,
 } from 'lucide-react'
 import type { ChangedFile } from '../../../shared/types'
 import { useEditor } from '../../state/editor'
+import DiffView from './DiffView'
 
 interface Props {
   cwd: string | null
+}
+
+/** Join an absolute `cwd` with a path that may be absolute or relative,
+ *  normalising away any redundant separators. Kept local to this panel
+ *  because it's the only place mixing git-reported relatives with the
+ *  fs bridge's absolute-only contract. */
+function toAbsolute(cwd: string, p: string): string {
+  if (p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p)) return p
+  const sep = cwd.includes('\\') && !cwd.includes('/') ? '\\' : '/'
+  const trimmed = cwd.endsWith('/') || cwd.endsWith('\\') ? cwd.slice(0, -1) : cwd
+  return `${trimmed}${sep}${p}`
 }
 
 const STATUS_META: Record<ChangedFile['status'], { label: string; cls: string }> = {
@@ -34,11 +47,15 @@ const STATUS_META: Record<ChangedFile['status'], { label: string; cls: string }>
  */
 export default function GitChangesPanel({ cwd }: Props) {
   const setDiffPreview = useEditor((s) => s.setDiffPreview)
-  const diffPreview = useEditor((s) => s.diffPreview)
   const setFileDiff = useEditor((s) => s.setFileDiff)
   const openFile = useEditor((s) => s.openFile)
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  // Unified patch for the currently-selected file — rendered inline below
+  // the file list (VS Code / Claude-CLI feel). Cleared on selection change
+  // and on refresh. The SAME patch is also pushed to `fileDiffs` so the
+  // main editor can paint inline green/red marks while the user edits.
+  const [currentDiff, setCurrentDiff] = useState<string>('')
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
   const [message, setMessage] = useState<string>('')
 
@@ -101,25 +118,16 @@ export default function GitChangesPanel({ cwd }: Props) {
         if (!res.ok) {
           setDiffPreview(null)
           setFileDiff(path, null)
+          setCurrentDiff('')
           setError(res.error)
           return
         }
-        const status = file?.status ?? 'modified'
-        // Route the diff to the right renderer:
-        //   • deleted / untracked / binary files can't be edited — show
-        //     the unified diff in the main editor slot (read-only).
-        //   • everything else opens the file in CodeMirror so the user
-        //     can edit with inline green/red marks beside the gutter.
-        const editable = status === 'modified' || status === 'added' || status === 'renamed'
-        if (editable) {
-          setFileDiff(path, res.value)
-          setDiffPreview(null)
-          // Fire-and-forget — if the read fails openFile logs and bails.
-          void openFile(path)
-        } else {
-          setFileDiff(path, null)
-          setDiffPreview({ path, patch: res.value, status })
-        }
+        setCurrentDiff(res.value)
+        // Clicking a file only shows its diff in the sidebar. Editing is
+        // an explicit action via the pencil button on each row — that
+        // keeps the list click cheap (no readFile) and lets the user
+        // browse diffs without stacking editor tabs.
+        setDiffPreview(null)
       } catch (err) {
         if (gen !== diffGen.current) return
         setError((err as Error).message)
@@ -140,6 +148,7 @@ export default function GitChangesPanel({ cwd }: Props) {
     setFiles([])
     setSelectedPath(null)
     setDiffPreview(null)
+    setCurrentDiff('')
     setPicked(new Set())
     setMessage('')
     setError(null)
@@ -151,9 +160,11 @@ export default function GitChangesPanel({ cwd }: Props) {
   useEffect(() => {
     if (!selectedPath) {
       setDiffPreview(null)
+      setCurrentDiff('')
       setDiffLoading(false)
       return
     }
+    setCurrentDiff('')
     void loadDiff(selectedPath)
   }, [selectedPath, loadDiff, setDiffPreview])
 
@@ -184,6 +195,29 @@ export default function GitChangesPanel({ cwd }: Props) {
   const clearAll = useCallback(() => {
     setPicked(new Set())
   }, [])
+
+  // Open the modified file in the main editor, attach the unified diff
+  // so CodeMirrorView paints inline green/red marks, and key fileDiffs
+  // by the RESOLVED path (CodeMirrorView reads patches from
+  // `fileDiffs[activeFilePath]`, and activeFilePath is the realpath the
+  // fs bridge hands back — never the relative string git reports).
+  const onEdit = useCallback(
+    async (f: ChangedFile): Promise<void> => {
+      if (!cwd) return
+      if (f.status === 'deleted') return // nothing to edit
+      const abs = toAbsolute(cwd, f.path)
+      const resolved = await openFile(abs)
+      const key = resolved ?? abs
+      // Reuse the already-loaded diff if it's this file, otherwise fetch.
+      if (selectedPath === f.path && currentDiff) {
+        setFileDiff(key, currentDiff)
+        return
+      }
+      const res = await window.api.git.getDiff(cwd, f.path, f.staged === true)
+      if (res.ok) setFileDiff(key, res.value)
+    },
+    [cwd, openFile, setFileDiff, selectedPath, currentDiff]
+  )
 
   const onGenerate = useCallback(async (): Promise<void> => {
     if (!cwd || generating) return
@@ -287,7 +321,7 @@ export default function GitChangesPanel({ cwd }: Props) {
             return (
               <li
                 key={f.path}
-                className={`flex items-center gap-1.5 px-2 py-1 text-[11px] ${
+                className={`group flex items-center gap-1.5 px-2 py-1 text-[11px] ${
                   isActive ? 'bg-bg-3' : 'hover:bg-bg-3/60'
                 }`}
               >
@@ -322,44 +356,60 @@ export default function GitChangesPanel({ cwd }: Props) {
                   </span>
                   {f.staged ? (
                     <span
-                      className="ml-auto shrink-0 rounded-sm bg-status-generating/15 px-1 font-mono text-[9px] uppercase tracking-[0.12em] text-status-generating"
+                      className="shrink-0 rounded-sm bg-status-generating/15 px-1 font-mono text-[9px] uppercase tracking-[0.12em] text-status-generating"
                       title="already staged"
                     >
                       staged
                     </span>
                   ) : null}
                 </button>
+                {f.status !== 'deleted' ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void onEdit(f)
+                    }}
+                    className="shrink-0 rounded-sm p-0.5 text-text-3 opacity-0 transition-opacity hover:bg-bg-4 hover:text-accent-300 group-hover:opacity-100"
+                    title="Edit in editor"
+                    aria-label={`Edit ${f.path}`}
+                  >
+                    <Pencil size={11} strokeWidth={1.75} />
+                  </button>
+                ) : null}
               </li>
             )
           })
         )}
       </ul>
 
-      {/* Status strip that used to host the preview. The diff itself now
-          renders full-width in the main editor slot (look to the right).
-          Keep a thin strip here so the panel is not empty when nothing is
-          selected and so the user gets feedback while the diff is loading. */}
-      <div className="flex min-h-0 flex-1 items-start overflow-hidden bg-bg-1 p-3">
+      {/* Inline diff view — Claude-CLI / VS Code style. Renders the
+          unified patch for whichever file is selected. The SAME patch is
+          pushed to the main editor via setFileDiff so the user sees
+          inline green/red marks while editing the live buffer. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-1">
+        {selectedPath ? (
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-border-soft bg-bg-2 px-2 py-1">
+            <span className="truncate font-mono text-[10.5px] text-text-2" title={selectedPath}>
+              {selectedPath}
+            </span>
+            <span className="ml-auto font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-4">
+              diff
+            </span>
+          </div>
+        ) : null}
         {diffLoading ? (
-          <div className="flex w-full items-center gap-2 text-[11px] text-text-3">
+          <div className="flex items-center gap-2 p-3 text-[11px] text-text-3">
             <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
             loading diff…
           </div>
-        ) : diffPreview ? (
-          <div className="flex w-full flex-col gap-1 text-[11px]">
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-4">
-              showing diff
-            </span>
-            <span className="truncate font-mono text-text-1" title={diffPreview.path}>
-              {diffPreview.path}
-            </span>
-            <span className="font-mono text-[10px] text-text-3">
-              rendered in the editor area →
-            </span>
+        ) : selectedPath && currentDiff ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DiffView diff={currentDiff} fill emptyLabel="no textual diff" />
           </div>
         ) : (
-          <div className="w-full text-center font-mono text-[10.5px] text-text-4">
-            select a file to preview its diff in the editor
+          <div className="p-3 text-center font-mono text-[10.5px] text-text-4">
+            select a file to view its diff
           </div>
         )}
       </div>

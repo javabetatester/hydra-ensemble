@@ -1,0 +1,141 @@
+name: Publish AUR
+
+# Runs after Release succeeds so the AUR package always points at a tag
+# whose artifacts already exist on the GitHub Release page. Bumps
+# PKGBUILD pkgver + regenerates .SRCINFO + pushes to
+# ssh://aur@aur.archlinux.org/hydra-ensemble-bin.git.
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+
+concurrency:
+  group: release-aur-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  update-aur:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Resolve tag + version
+        id: tag
+        run: |
+          TAG="${{ github.event.workflow_run.head_branch }}"
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Wait for GitHub's Release API to expose the x86_64 AppImage that
+      # the Release job just uploaded. workflow_run fires the instant the
+      # parent workflow's status flips, which can beat the release asset
+      # publish by a few seconds.
+      - name: Wait for AppImage asset
+        id: asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            URL=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+              --jq '.assets[] | select(.name | test("\\.AppImage$"; "i")) | select(.name | test("x86_64|x64|amd64"; "i") or (test("arm64|aarch64") | not)) | .browser_download_url' | head -n1 || true)
+            if [ -n "$URL" ]; then
+              echo "url=$URL" >> "$GITHUB_OUTPUT"
+              NAME=$(basename "$URL")
+              echo "name=$NAME" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "AppImage not published yet (attempt $i/30), sleeping"
+            sleep 10
+          done
+          echo "::error::AppImage asset did not appear in release $TAG"
+          exit 1
+
+      - name: Download AppImage + checksum
+        id: checksum
+        env:
+          URL: ${{ steps.asset.outputs.url }}
+        run: |
+          set -euo pipefail
+          curl -fLsS -o appimage.bin "$URL"
+          SHA=$(sha256sum appimage.bin | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH for AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<EOF
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+            User aur
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Clone AUR repo
+        run: |
+          git clone ssh://aur@aur.archlinux.org/hydra-ensemble-bin.git aur-repo
+          cd aur-repo
+          git config user.email "birisesports@gmail.com"
+          git config user.name "Hydra Release Bot"
+
+      - name: Update PKGBUILD
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA256: ${{ steps.checksum.outputs.sha256 }}
+          APPIMAGE_NAME: ${{ steps.asset.outputs.name }}
+          APPIMAGE_URL: ${{ steps.asset.outputs.url }}
+        run: |
+          set -euo pipefail
+          cd aur-repo
+          python3 - <<'PY'
+          import os, re, sys, pathlib
+          version = os.environ['VERSION']
+          sha = os.environ['SHA256']
+          appimage_url = os.environ['APPIMAGE_URL']
+          path = pathlib.Path('PKGBUILD')
+          text = path.read_text()
+          text = re.sub(r'^pkgver=.*$', f'pkgver={version}', text, flags=re.MULTILINE)
+          text = re.sub(r'^pkgrel=.*$', 'pkgrel=1', text, flags=re.MULTILINE)
+          text = re.sub(
+              r'^source=\(.*?\)$',
+              f'source=("hydra-ensemble-bin-{version}.AppImage::{appimage_url}")',
+              text,
+              flags=re.MULTILINE | re.DOTALL,
+          )
+          text = re.sub(r"^sha256sums=\(.*?\)$", f"sha256sums=('{sha}')", text, flags=re.MULTILINE | re.DOTALL)
+          path.write_text(text)
+          PY
+          cat PKGBUILD
+
+      - name: Regenerate .SRCINFO via makepkg
+        uses: addnab/docker-run-action@v3
+        with:
+          image: archlinux:latest
+          options: -v ${{ github.workspace }}/aur-repo:/pkg
+          run: |
+            useradd -m builder
+            chown -R builder:builder /pkg
+            pacman -Syu --noconfirm base-devel
+            su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO'
+
+      - name: Commit + push to AUR
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd aur-repo
+          git add PKGBUILD .SRCINFO
+          if git diff --cached --quiet; then
+            echo "No changes to publish"
+            exit 0
+          fi
+          git commit -m "Update to ${VERSION}"
+          GIT_SSH_COMMAND='ssh -F ~/.ssh/config' git push

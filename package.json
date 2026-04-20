@@ -1,6 +1,6 @@
 {
   "name": "hydra-ensemble",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hydra Ensemble — orchestrate parallel Claude Code agents (multi-OS)",
   "main": "out/main/index.js",
   "author": "Intuitive Compute",
