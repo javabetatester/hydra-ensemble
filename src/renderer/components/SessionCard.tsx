@@ -32,12 +32,6 @@ function relativeAge(iso: string): string {
   return `${day}d`
 }
 
-function formatCost(c: number | undefined): string {
-  if (!c || c <= 0) return '—'
-  if (c < 0.01) return '<$.01'
-  return `$${c.toFixed(2)}`
-}
-
 function formatTokens(n: number | undefined): string {
   if (!n || n <= 0) return '0'
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -215,20 +209,13 @@ export default function SessionCard({
         <span className="shrink-0 tabular-nums">{relativeAge(session.createdAt)}</span>
       </div>
 
-      {/* row 4: tokens + cost (always shown so cost feels traceable) */}
+      {/* row 4: tokens only — cost is intentionally hidden */}
       <div
-        className="mt-0.5 flex items-center justify-between gap-2 font-mono text-[10px] tabular-nums text-text-4"
+        className="mt-0.5 flex items-center gap-2 font-mono text-[10px] tabular-nums text-text-4"
         title={`input ${session.tokensIn ?? 0} tokens · output ${session.tokensOut ?? 0} tokens`}
       >
-        <span className="flex items-center gap-2">
-          <span className="text-text-3">↓ {formatTokens(session.tokensIn)}</span>
-          <span className="text-text-3">↑ {formatTokens(session.tokensOut)}</span>
-        </span>
-        <span
-          className={session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'}
-        >
-          {formatCost(session.cost)}
-        </span>
+        <span className="text-text-3">↓ {formatTokens(session.tokensIn)}</span>
+        <span className="text-text-3">↑ {formatTokens(session.tokensOut)}</span>
       </div>
 
     </div>

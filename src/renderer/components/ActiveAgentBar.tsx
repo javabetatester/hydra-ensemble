@@ -77,15 +77,6 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
           <span className="text-text-4">model</span>{' '}
           <span className="text-text-2">{session.model ?? '—'}</span>
         </span>
-        <span className="font-mono">
-          <span
-            className={
-              session.cost && session.cost > 0 ? 'text-status-generating' : 'text-text-4'
-            }
-          >
-            {session.cost && session.cost > 0 ? `$${session.cost.toFixed(2)}` : '<$0.01'}
-          </span>
-        </span>
         <span className="h-5 w-px bg-border-soft" aria-hidden />
         <button
           type="button"

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { GitBranch, DollarSign, Hash, Activity } from 'lucide-react'
+import { GitBranch, Hash, Activity } from 'lucide-react'
 import { useSessions } from '../state/sessions'
 import type { SessionMeta } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
@@ -8,10 +8,6 @@ function formatTokens(count: number): string {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`
   if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`
   return `${count}`
-}
-
-function formatCost(value: number): string {
-  return value.toFixed(2)
 }
 
 function activeBranch(active: SessionMeta | undefined): string {
@@ -35,21 +31,18 @@ export default function StatusBar() {
   )
 
   const totals = useMemo(() => {
-    let cost = 0
     let tokensIn = 0
     let tokensOut = 0
     for (const s of sessions) {
-      cost += s.cost ?? 0
       tokensIn += s.tokensIn ?? 0
       tokensOut += s.tokensOut ?? 0
     }
-    return { cost, tokensIn, tokensOut }
+    return { tokensIn, tokensOut }
   }, [sessions])
 
   const branch = activeBranch(active)
   const model = active?.model ?? 'sonnet'
   const sessionCount = sessions.length
-  const hasCost = totals.cost > 0
 
   return (
     <div
@@ -83,16 +76,6 @@ export default function StatusBar() {
               <span className="text-text-4">↓</span>
               <span className="text-text-2">{formatTokens(totals.tokensOut)}</span>
               <span className="text-text-4">↑</span>
-            </Cell>
-            <Sep />
-            <Cell
-              label="cost"
-              icon={<DollarSign size={10} strokeWidth={1.75} />}
-              className={hasCost ? 'text-status-generating' : ''}
-            >
-              <span className={hasCost ? 'text-status-generating' : 'text-text-2'}>
-                {formatCost(totals.cost)}
-              </span>
             </Cell>
             <Sep />
           </>

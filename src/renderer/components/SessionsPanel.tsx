@@ -2,6 +2,7 @@ import { Plus, Activity, RefreshCw, Inbox } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useSessions } from '../state/sessions'
 import { useSpawnDialog } from '../state/spawn'
+import { fmtShortcut } from '../lib/platform'
 import SessionCard from './SessionCard'
 import AgentEditDialog from './AgentEditDialog'
 import type { SessionMeta, SessionState } from '../../shared/types'
@@ -129,9 +130,9 @@ export default function SessionsPanel() {
 
       {sessions.length > 0 ? (
         <footer className="flex shrink-0 items-center justify-center gap-3 border-t border-border-soft px-3 py-1 font-mono text-[10px] text-text-4">
-          <span>⌘0–9 Jump</span>
-          <span>⌘[ Prev</span>
-          <span>⌘] Next</span>
+          <span>{fmtShortcut('0–9')} Jump</span>
+          <span>{fmtShortcut('[')} Prev</span>
+          <span>{fmtShortcut(']')} Next</span>
         </footer>
       ) : null}
 

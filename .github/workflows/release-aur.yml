@@ -157,6 +157,13 @@ jobs:
             pacman -Syu --noconfirm base-devel
             su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO'
 
+      # The Docker step above chowned /pkg to the in-container builder user.
+      # That bind-mount is the host's aur-repo/, so the runner's default user
+      # loses write access to aur-repo/.git/ and the next git commit fails
+      # with "Permission denied" on .git/index.lock. Reclaim ownership.
+      - name: Reclaim aur-repo ownership from docker
+        run: sudo chown -R "$USER:$USER" aur-repo
+
       - name: Commit + push to AUR
         env:
           VERSION: ${{ steps.tag.outputs.version }}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Loader2, Send, Coins } from 'lucide-react'
+import { Loader2, Send } from 'lucide-react'
 import type { SessionMeta, TranscriptMessage } from '../../../shared/types'
 import { useTranscripts } from '../../state/transcripts'
 import { useSessions } from '../../state/sessions'
@@ -162,11 +162,6 @@ export default function ChatView({ session, visible }: Props) {
               <span className="text-text-4">↑</span>
               {formatTokens(session.tokensOut)}
             </span>
-            {typeof session.cost === 'number' ? (
-              <span className="flex items-center gap-1 text-status-input">
-                <Coins size={11} strokeWidth={1.75} />${session.cost.toFixed(2)}
-              </span>
-            ) : null}
           </>
         }
       />

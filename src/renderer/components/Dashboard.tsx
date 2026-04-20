@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
-  DollarSign,
   Info,
   LayoutDashboard,
   RotateCw,
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useSessions } from '../state/sessions'
 import type { SessionMeta } from '../../shared/types'
+import { fmtShortcut } from '../lib/platform'
 import SessionStatePill from './SessionStatePill'
 
 interface Props {
@@ -27,10 +27,6 @@ interface CardProps {
   onDestroy: (id: string) => void
 }
 
-function formatCost(value: number): string {
-  return value.toFixed(2)
-}
-
 function previewText(session: SessionMeta): string {
   const text = session.latestAssistantText
   if (text && text.trim().length > 0) return text
@@ -38,17 +34,12 @@ function previewText(session: SessionMeta): string {
 }
 
 function DashboardCard({ session, onFocus, onRestart, onDestroy }: CardProps) {
-  const cost = session.cost ?? 0
   const model = session.model ?? 'sonnet'
 
   return (
     <div className="df-lift flex flex-col gap-3 rounded-md border border-border-soft bg-bg-3 p-4 hover:border-border-mid hover:bg-bg-4">
       <div className="flex items-start justify-between gap-2">
         <SessionStatePill state={session.state} />
-        <div className="flex items-center gap-1 font-mono text-[11px] tabular-nums text-text-3">
-          <DollarSign size={11} strokeWidth={1.75} className="text-text-4" />
-          <span className="text-text-2">{formatCost(cost)}</span>
-        </div>
       </div>
 
       <div className="min-w-0">
@@ -184,13 +175,14 @@ export default function Dashboard({ open, onClose, mode = 'inline' }: Props) {
         <div className="border-b border-border-soft bg-bg-1 px-4 py-3 text-[11px] leading-relaxed text-text-3">
           <p className="mb-1.5">
             <strong className="text-text-2">Dashboard</strong> — overview of every running agent
-            at once. Each card shows live state (thinking, generating, awaiting input), model,
-            cost so far and the latest assistant response.
+            at once. Each card shows live state (thinking, generating, awaiting input), model and
+            the latest assistant response.
           </p>
           <p>
             Useful when you have several agents running in parallel and want to monitor them at a
-            glance without cycling through ⌘1 / ⌘2 / ⌘3. Click a card to focus that session —
-            the dashboard closes and the main terminal switches to it.
+            glance without cycling through {fmtShortcut('1')} / {fmtShortcut('2')} / {fmtShortcut('3')}.
+            Click a card to focus that session — the dashboard closes and the main terminal
+            switches to it.
           </p>
         </div>
       ) : null}

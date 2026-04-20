@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Box,
-  Coins,
   Zap,
   ChevronDown,
   SlashSquare,
@@ -380,7 +379,7 @@ export default function ChatToolbar({
         ) : null}
       </div>
 
-      {/* Right side — telemetry chips (tokens / cost / etc) injected by parent. */}
+      {/* Right side — telemetry chips (tokens / etc) injected by parent. */}
       {rightChildren ? (
         <div className="ml-auto flex items-center gap-3 font-mono text-[11px] text-text-3">
           {rightChildren}
@@ -391,8 +390,3 @@ export default function ChatToolbar({
 }
 
 export { type Model }
-export function formatCost(cost: number | undefined): string {
-  if (typeof cost !== 'number') return '$0.00'
-  return `$${cost.toFixed(2)}`
-}
-export const CostIcon = Coins
