@@ -450,13 +450,13 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
       <div className="w-full max-w-2xl df-fade-in">
         {/* Hero */}
         <div className="mb-8 text-center">
-          <div className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center">
+          <div className="relative mx-auto mb-8 flex h-72 w-72 items-center justify-center">
             <div className="absolute inset-0 animate-ping rounded-full bg-accent-500/20" />
-            <div className="absolute inset-1 rounded-full bg-accent-500/10 df-pulse" />
+            <div className="absolute inset-4 rounded-full bg-accent-500/10 df-pulse" />
             <img
               src={logoUrl}
               alt="Hydra Ensemble"
-              className="relative h-16 w-16 rounded-full"
+              className="relative h-60 w-60 rounded-full"
               draggable={false}
             />
           </div>
