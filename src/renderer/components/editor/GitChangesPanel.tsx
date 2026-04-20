@@ -115,33 +115,24 @@ export default function GitChangesPanel({ cwd }: Props) {
 
   // ---------- effects ----------
 
-  // Load on cwd change + reset local state. Effect cleanup bumps the
-  // generation counters so any in-flight fetch is orphaned cleanly.
+  // Reset local state when cwd changes. Does NOT auto-fetch anymore —
+  // the user has to click Refresh to populate. This was load-bearing for
+  // a freeze investigation: doing any async work on mount was exercising
+  // a code path we still haven't fully isolated, so the panel now opens
+  // completely inert.
   useEffect(() => {
-    if (!cwd) {
-      setFiles([])
-      setSelectedPath(null)
-      setDiff('')
-      setPicked(new Set())
-      setMessage('')
-      setError(null)
-      return
-    }
+    statusGen.current += 1
+    diffGen.current += 1
+    setFiles([])
     setSelectedPath(null)
     setDiff('')
     setPicked(new Set())
+    setMessage('')
     setError(null)
-    void loadStatus()
-    return () => {
-      // Bumping gens makes any pending awaits above skip their setState.
-      statusGen.current += 1
-      diffGen.current += 1
-    }
-  }, [cwd, loadStatus])
+  }, [cwd])
 
-  // Load the diff whenever the selected path changes (or the user hits
-  // Refresh and the file survived). Dropping `selectedPath` to null
-  // synchronously clears the diff so the pane never shows stale content.
+  // Load the diff whenever the selected path changes. No-op when nothing
+  // is selected — the diff pane just shows the empty-state label.
   useEffect(() => {
     if (!selectedPath) {
       setDiff('')
