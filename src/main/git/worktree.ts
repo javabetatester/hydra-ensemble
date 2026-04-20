@@ -147,9 +147,91 @@ export class WorktreeService {
       // Renames look like "old -> new"; keep just the new path.
       const arrow = rest.indexOf(' -> ')
       const filePath = arrow >= 0 ? rest.slice(arrow + 4) : rest
-      files.push({ path: filePath, status })
+      // `staged` reflects column 1 of the porcelain code: any non-space,
+      // non-'?' char means the change is in the index. Untracked files
+      // can never be staged until `git add` runs.
+      const idx = code[0] ?? ' '
+      const staged = idx !== ' ' && idx !== '?'
+      files.push({ path: filePath, status, staged })
     }
     return { ok: true, value: files }
+  }
+
+  /**
+   * Unified diff for one file (or the whole worktree if path omitted).
+   * `staged: true` pulls from the index (HEAD..index); `staged: false`
+   * pulls worktree changes (index..worktree). Untracked files return a
+   * synthetic "added" diff so the UI can show them before staging.
+   */
+  async getDiff(
+    cwd: string,
+    filePath?: string,
+    staged: boolean = false
+  ): Promise<GitOpResult<string>> {
+    const args = ['-C', cwd, 'diff', '--no-color']
+    if (staged) args.push('--cached')
+    if (filePath !== undefined && filePath.length > 0) {
+      args.push('--', filePath)
+    }
+    const res = await this.runGit(args)
+    if (res.code !== 0) {
+      return { ok: false, error: res.stderr.trim() || 'git diff failed' }
+    }
+    // Untracked + no staged diff: synthesise by showing the file content
+    // against /dev/null so the UI can still render a preview.
+    if (!staged && res.stdout.length === 0 && filePath !== undefined) {
+      const ls = await this.runGit(['-C', cwd, 'ls-files', '--others', '--exclude-standard', '--', filePath])
+      if (ls.code === 0 && ls.stdout.trim().length > 0) {
+        const show = await this.runGit(['-C', cwd, 'diff', '--no-color', '--no-index', '/dev/null', filePath])
+        // --no-index always returns 1 on differences; treat that as success.
+        if (show.stdout.length > 0) {
+          return { ok: true, value: show.stdout }
+        }
+      }
+    }
+    return { ok: true, value: res.stdout }
+  }
+
+  /** `git add -- <path>...` — stages the given files (or the whole tree if empty). */
+  async stageFiles(cwd: string, paths: string[]): Promise<GitOpResult> {
+    const args = ['-C', cwd, 'add', '--']
+    if (paths.length === 0) {
+      args.pop()
+      args.push('-A')
+    } else {
+      args.push(...paths)
+    }
+    const res = await this.runGit(args)
+    if (res.code !== 0) {
+      return { ok: false, error: res.stderr.trim() || 'git add failed' }
+    }
+    return { ok: true, value: undefined }
+  }
+
+  /** `git reset HEAD -- <path>...` — unstages the given files. */
+  async unstageFiles(cwd: string, paths: string[]): Promise<GitOpResult> {
+    const args = ['-C', cwd, 'reset', 'HEAD', '--', ...paths]
+    const res = await this.runGit(args)
+    if (res.code !== 0) {
+      return { ok: false, error: res.stderr.trim() || 'git reset failed' }
+    }
+    return { ok: true, value: undefined }
+  }
+
+  /**
+   * `git commit -m <message>`. Pipes the message via stdin (using `-F -`)
+   * so multi-line / quote-heavy messages can't break the shell.
+   */
+  async commit(cwd: string, message: string): Promise<GitOpResult<{ sha: string }>> {
+    if (message.trim().length === 0) {
+      return { ok: false, error: 'commit message cannot be empty' }
+    }
+    const res = await this.runGit(['-C', cwd, 'commit', '-F', '-'], { stdin: message })
+    if (res.code !== 0) {
+      return { ok: false, error: res.stderr.trim() || res.stdout.trim() || 'git commit failed' }
+    }
+    const sha = await this.runGit(['-C', cwd, 'rev-parse', 'HEAD'])
+    return { ok: true, value: { sha: sha.stdout.trim() } }
   }
 
   // --------------------------------------------------------------------- //
@@ -230,16 +312,20 @@ export class WorktreeService {
    * Spawn `git` with the given args. Scrubs `GIT_*` env vars so an inherited
    * `GIT_DIR` / `GIT_WORK_TREE` doesn't redirect git to the wrong repo.
    */
-  private runGit(args: string[], opts: { cwd?: string } = {}): Promise<SpawnResult> {
+  private runGit(
+    args: string[],
+    opts: { cwd?: string; stdin?: string } = {}
+  ): Promise<SpawnResult> {
     return new Promise((resolve) => {
       const env: NodeJS.ProcessEnv = {}
       for (const [k, v] of Object.entries(process.env)) {
         if (k.startsWith('GIT_')) continue
         if (v !== undefined) env[k] = v
       }
+      const hasStdin = typeof opts.stdin === 'string'
       const spawnOpts: SpawnOptions = {
         env,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [hasStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         windowsHide: true,
       }
       if (opts.cwd) spawnOpts.cwd = opts.cwd
@@ -259,6 +345,10 @@ export class WorktreeService {
       child.on('close', (code) => {
         resolve({ code: code ?? -1, stdout, stderr })
       })
+      if (hasStdin && child.stdin) {
+        child.stdin.write(opts.stdin!)
+        child.stdin.end()
+      }
     })
   }
 }

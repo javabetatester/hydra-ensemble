@@ -203,6 +203,8 @@ export interface Worktree {
 export interface ChangedFile {
   path: string
   status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked'
+  /** True when the change is in the index (column 1 of porcelain). */
+  staged?: boolean
 }
 
 export type GitOpResult<T = void> = { ok: true; value: T } | { ok: false; error: string }
@@ -384,6 +386,17 @@ export interface HydraEnsembleApi {
     removeWorktree: (repoRoot: string, path: string) => Promise<GitOpResult>
     listChangedFiles: (cwd: string) => Promise<GitOpResult<ChangedFile[]>>
     currentBranch: (cwd: string) => Promise<string | null>
+    getDiff: (
+      cwd: string,
+      filePath?: string,
+      staged?: boolean
+    ) => Promise<GitOpResult<string>>
+    stageFiles: (cwd: string, paths: string[]) => Promise<GitOpResult>
+    unstageFiles: (cwd: string, paths: string[]) => Promise<GitOpResult>
+    commit: (cwd: string, message: string) => Promise<GitOpResult<{ sha: string }>>
+    /** Spawn `claude -p` in the background to draft a commit message from
+     *  the current staged diff. Returns the trimmed message. */
+    generateCommitMessage: (cwd: string) => Promise<GitOpResult<string>>
   }
   project: {
     list: () => Promise<ProjectMeta[]>

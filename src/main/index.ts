@@ -5,6 +5,7 @@ import { AnalyzerManager } from './pty/analyzer-manager'
 import { JsonlManager } from './claude/jsonl-manager'
 import { SessionManager } from './session/manager'
 import { WorktreeService } from './git/worktree'
+import { CommitAiService } from './git/commit-ai'
 import { ProjectService } from './project/manager'
 import { ToolkitService } from './toolkit/manager'
 import { WatchdogService } from './watchdog/manager'
@@ -38,6 +39,7 @@ let analyzerManager!: AnalyzerManager
 let jsonlManager!: JsonlManager
 let sessionManager!: SessionManager
 let worktreeService!: WorktreeService
+let commitAiService!: CommitAiService
 let projectService!: ProjectService
 let toolkitService!: ToolkitService
 let notificationService!: NotificationService
@@ -51,6 +53,7 @@ function setupServices(): void {
   analyzerManager = new AnalyzerManager()
   jsonlManager = new JsonlManager()
   worktreeService = new WorktreeService()
+  commitAiService = new CommitAiService(worktreeService)
   projectService = new ProjectService()
   toolkitService = new ToolkitService()
   notificationService = new NotificationService()
@@ -197,7 +200,7 @@ app.whenReady().then(async () => {
   registerPtyIpc(ptyManager)
   registerClaudeIpc()
   registerSessionIpc(sessionManager, analyzerManager)
-  registerGitIpc(worktreeService)
+  registerGitIpc(worktreeService, commitAiService)
   registerProjectIpc(projectService)
   registerToolkitIpc(toolkitService)
   registerWatchdogIpc(watchdogService)

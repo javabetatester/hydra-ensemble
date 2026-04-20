@@ -79,7 +79,17 @@ const api: HydraEnsembleApi = {
       ipcRenderer.invoke('git:removeWorktree', { repoRoot, path }),
     listChangedFiles: (cwd: string): Promise<GitOpResult<ChangedFile[]>> =>
       ipcRenderer.invoke('git:listChangedFiles', cwd),
-    currentBranch: (cwd: string) => ipcRenderer.invoke('git:currentBranch', cwd)
+    currentBranch: (cwd: string) => ipcRenderer.invoke('git:currentBranch', cwd),
+    getDiff: (cwd: string, filePath?: string, staged?: boolean) =>
+      ipcRenderer.invoke('git:getDiff', { cwd, filePath, staged }),
+    stageFiles: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke('git:stageFiles', { cwd, paths }),
+    unstageFiles: (cwd: string, paths: string[]) =>
+      ipcRenderer.invoke('git:unstageFiles', { cwd, paths }),
+    commit: (cwd: string, message: string) =>
+      ipcRenderer.invoke('git:commit', { cwd, message }),
+    generateCommitMessage: (cwd: string) =>
+      ipcRenderer.invoke('git:generateCommitMessage', cwd)
   },
   project: {
     list: (): Promise<ProjectMeta[]> => ipcRenderer.invoke('project:list'),
