@@ -47,4 +47,4 @@ nsis:
 publish:
   provider: github
   owner: javabetatester
-  repo: HydraEnsemble
+  repo: hydra-ensemble
