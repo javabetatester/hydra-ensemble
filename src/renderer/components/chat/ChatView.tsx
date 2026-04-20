@@ -21,6 +21,7 @@ function formatTokens(n: number | undefined): string {
 export default function ChatView({ session, visible }: Props) {
   const entry = useTranscripts((s) => s.byId[session.id])
   const refresh = useTranscripts((s) => s.refresh)
+  const appendPending = useTranscripts((s) => s.appendPending)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   /** Mirrors Claude Code's effort setting. We can't read it back from
@@ -60,14 +61,14 @@ export default function ChatView({ session, visible }: Props) {
     if (!text || sending) return
     setSending(true)
     try {
-      // Write text + CR to the PTY. Claude's TUI captures the line and
-      // sends it as a user message, which then lands in the JSONL →
-      // transcriptChanged event → re-renders this list. sendCommand
-      // also optimistically flips the state pill to 'thinking' for
-      // real prompts (not slash commands).
+      // Render the user message immediately — the authoritative copy from
+      // claude's JSONL will replace it once the TUI writes the line. Slash
+      // commands are skipped: they aren't chat turns, they'd pollute the list.
+      if (!text.trimStart().startsWith('/')) {
+        appendPending(session.id, text)
+      }
       sendCommand(text)
       setInput('')
-      // Reset auto-grown textarea height and keep focus for continued typing.
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
         textareaRef.current.focus()
@@ -134,7 +135,10 @@ export default function ChatView({ session, visible }: Props) {
   const canInteract = session.state === 'userInput' || session.state === 'idle'
   const canRewind = canInteract
   const loading = entry?.loading ?? true
-  const messages = entry?.messages ?? []
+  const pending = entry?.pending ?? []
+  const realMessages = entry?.messages ?? []
+  const messages = pending.length > 0 ? [...realMessages, ...pending] : realMessages
+  const showThinking = session.state === 'thinking'
 
   return (
     <div className="flex h-full w-full flex-col bg-bg-0">
@@ -191,6 +195,12 @@ export default function ChatView({ session, visible }: Props) {
                 canRewind={canRewind}
               />
             ))}
+            {showThinking ? (
+              <div className="flex items-center gap-2 px-4 py-3 text-xs text-text-3">
+                <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
+                <span className="font-mono">claude is thinking…</span>
+              </div>
+            ) : null}
           </div>
         )}
       </div>
