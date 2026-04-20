@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Loader2,
   Regex,
+  Replace as ReplaceIcon,
   Search as SearchIcon,
   WholeWord,
   X,
@@ -46,6 +47,14 @@ export default function SearchPanel({ cwd, onOpenMatch, initialQuery, focusNonce
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
+
+  // Replace-in-files surface — toggle the pane with the chevron on the
+  // left of the query input, VS Code-style. Keeps the search pane simple
+  // until the user actually wants to substitute.
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [replacement, setReplacement] = useState('')
+  const [replacing, setReplacing] = useState(false)
+  const [replaceSummary, setReplaceSummary] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const runId = useRef(0)
@@ -122,6 +131,39 @@ export default function SearchPanel({ cwd, onOpenMatch, initialQuery, focusNonce
     return () => clearTimeout(t)
   }, [runSearch])
 
+  const runReplaceAll = useCallback(async (): Promise<void> => {
+    if (!cwd) return
+    const q = query.trim()
+    if (q.length === 0) return
+    if (replacing) return
+    const confirmMsg = `Replace all matches of "${q}" with "${replacement}" across ${matches.length} matches? This rewrites files on disk — use git to undo.`
+    if (!window.confirm(confirmMsg)) return
+    setReplacing(true)
+    setReplaceSummary(null)
+    try {
+      const res = await window.api.editor.replaceInFiles(cwd, q, replacement, {
+        caseSensitive,
+        wholeWord,
+        regex,
+      })
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setReplaceSummary(
+        `${res.value.replacements} replacements across ${res.value.filesChanged} file${
+          res.value.filesChanged === 1 ? '' : 's'
+        }`,
+      )
+      // Re-run search so the match list reflects the post-replace state.
+      void runSearch()
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setReplacing(false)
+    }
+  }, [cwd, query, replacement, caseSensitive, wholeWord, regex, replacing, matches.length, runSearch])
+
   // Group matches by file for the display.
   const groups = useMemo((): FileGroup[] => {
     const byFile = new Map<string, FileGroup>()
@@ -174,35 +216,95 @@ export default function SearchPanel({ cwd, onOpenMatch, initialQuery, focusNonce
         ) : null}
       </header>
 
-      {/* Query input + flag toggles */}
+      {/* Query input + flag toggles — chevron on the left reveals replace */}
       <div className="flex shrink-0 flex-col gap-1 border-b border-border-soft bg-bg-2 p-2">
-        <div className="flex min-w-0 items-center rounded-sm border border-border-soft bg-bg-1 focus-within:border-accent-500/60">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search across files"
-            className="min-w-0 flex-1 bg-transparent px-2 py-1 font-mono text-[11.5px] text-text-1 placeholder:text-text-4 focus:outline-none"
-          />
-          <FlagBtn
-            active={caseSensitive}
-            onClick={() => setCaseSensitive((v) => !v)}
-            title="Match case"
+        <div className="flex items-start gap-1">
+          <button
+            type="button"
+            onClick={() => setReplaceOpen((v) => !v)}
+            className={`flex h-[26px] w-4 shrink-0 items-center justify-center rounded-sm transition-colors ${
+              replaceOpen
+                ? 'bg-accent-500/15 text-accent-200'
+                : 'text-text-3 hover:bg-bg-3 hover:text-text-1'
+            }`}
+            title={replaceOpen ? 'Hide replace' : 'Show replace'}
+            aria-label={replaceOpen ? 'Hide replace' : 'Show replace'}
+            aria-expanded={replaceOpen}
           >
-            <CaseSensitive size={11} strokeWidth={1.75} />
-          </FlagBtn>
-          <FlagBtn
-            active={wholeWord}
-            onClick={() => setWholeWord((v) => !v)}
-            title="Match whole word"
-          >
-            <WholeWord size={11} strokeWidth={1.75} />
-          </FlagBtn>
-          <FlagBtn active={regex} onClick={() => setRegex((v) => !v)} title="Use regular expression">
-            <Regex size={11} strokeWidth={1.75} />
-          </FlagBtn>
+            {replaceOpen ? (
+              <ChevronDown size={11} strokeWidth={1.75} />
+            ) : (
+              <ChevronRight size={11} strokeWidth={1.75} />
+            )}
+          </button>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <div className="flex min-w-0 items-center rounded-sm border border-border-soft bg-bg-1 focus-within:border-accent-500/60">
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search across files"
+                className="min-w-0 flex-1 bg-transparent px-2 py-1 font-mono text-[11.5px] text-text-1 placeholder:text-text-4 focus:outline-none"
+              />
+              <FlagBtn
+                active={caseSensitive}
+                onClick={() => setCaseSensitive((v) => !v)}
+                title="Match case"
+              >
+                <CaseSensitive size={11} strokeWidth={1.75} />
+              </FlagBtn>
+              <FlagBtn
+                active={wholeWord}
+                onClick={() => setWholeWord((v) => !v)}
+                title="Match whole word"
+              >
+                <WholeWord size={11} strokeWidth={1.75} />
+              </FlagBtn>
+              <FlagBtn
+                active={regex}
+                onClick={() => setRegex((v) => !v)}
+                title="Use regular expression"
+              >
+                <Regex size={11} strokeWidth={1.75} />
+              </FlagBtn>
+            </div>
+            {replaceOpen ? (
+              <div className="flex min-w-0 items-center rounded-sm border border-border-soft bg-bg-1 focus-within:border-accent-500/60">
+                <input
+                  type="text"
+                  value={replacement}
+                  onChange={(e) => setReplacement(e.target.value)}
+                  placeholder="Replace"
+                  className="min-w-0 flex-1 bg-transparent px-2 py-1 font-mono text-[11.5px] text-text-1 placeholder:text-text-4 focus:outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void runReplaceAll()
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => void runReplaceAll()}
+                  disabled={!cwd || !query.trim() || replacing || matches.length === 0}
+                  className="flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5 text-[10px] font-semibold text-accent-200 transition-colors hover:bg-accent-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+                  title={`Replace all (${matches.length})`}
+                  aria-label="Replace all"
+                >
+                  {replacing ? (
+                    <Loader2 size={11} strokeWidth={1.75} className="animate-spin" />
+                  ) : (
+                    <ReplaceIcon size={11} strokeWidth={1.75} />
+                  )}
+                  <span>all</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
+        {replaceSummary ? (
+          <div className="px-0.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-status-generating">
+            ✓ {replaceSummary}
+          </div>
+        ) : null}
         {tool ? (
           <div className="px-0.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-4">
             via {tool}

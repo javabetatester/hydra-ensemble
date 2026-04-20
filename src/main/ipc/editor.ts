@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import type { EditorFs } from '../editor/fs-bridge'
 import { findInFiles, type FindOptions } from '../editor/find-in-files'
+import { replaceInFiles, type ReplaceOptions } from '../editor/replace-in-files'
 
 /**
  * Register IPC handlers for the editor file-system bridge. Channel names
@@ -18,6 +19,19 @@ export function registerEditorIpc(fs: EditorFs): void {
     'editor:findInFiles',
     (_evt, payload: { cwd: string; query: string; opts?: FindOptions }) =>
       findInFiles(payload.cwd, payload.query, payload.opts ?? {})
+  )
+  ipcMain.handle(
+    'editor:replaceInFiles',
+    (
+      _evt,
+      payload: { cwd: string; query: string; replacement: string; opts?: ReplaceOptions }
+    ) =>
+      replaceInFiles(
+        payload.cwd,
+        payload.query,
+        payload.replacement,
+        payload.opts ?? {}
+      )
   )
   ipcMain.handle('editor:claudeDirs', (_evt, cwd: string | null) => fs.claudeDirs(cwd))
 }

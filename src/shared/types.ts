@@ -233,6 +233,22 @@ export type FindInFilesResult =
     }
   | { ok: false; error: string }
 
+export interface ReplaceInFilesOptions {
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+}
+
+export type ReplaceInFilesResult =
+  | {
+      ok: true
+      value: {
+        filesChanged: number
+        replacements: number
+      }
+    }
+  | { ok: false; error: string }
+
 export type GitOpResult<T = void> = { ok: true; value: T } | { ok: false; error: string }
 
 // =============================================================================
@@ -455,6 +471,12 @@ export interface HydraEnsembleApi {
       query: string,
       opts?: FindInFilesOptions
     ) => Promise<FindInFilesResult>
+    replaceInFiles: (
+      cwd: string,
+      query: string,
+      replacement: string,
+      opts?: ReplaceInFilesOptions
+    ) => Promise<ReplaceInFilesResult>
     claudeDirs: (cwd: string | null) => Promise<{ project: string | null; global: string | null }>
   }
   gh: {

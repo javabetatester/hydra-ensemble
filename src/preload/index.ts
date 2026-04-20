@@ -125,6 +125,13 @@ const api: HydraEnsembleApi = {
       query: string,
       opts?: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean }
     ) => ipcRenderer.invoke('editor:findInFiles', { cwd, query, opts }),
+    replaceInFiles: (
+      cwd: string,
+      query: string,
+      replacement: string,
+      opts?: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean }
+    ) =>
+      ipcRenderer.invoke('editor:replaceInFiles', { cwd, query, replacement, opts }),
     claudeDirs: (cwd: string | null) => ipcRenderer.invoke('editor:claudeDirs', cwd)
   },
   gh: {
