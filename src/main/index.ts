@@ -133,6 +133,25 @@ function createWindow(): BrowserWindow {
     win.show()
   })
 
+  // Dropping the menu (setMenu(null) above) also strips the default
+  // View → Toggle DevTools accelerator. Re-register F12 / Ctrl+Shift+I
+  // at the window level so debugging still works. In dev we also open
+  // the panel automatically so the console is there from the start.
+  win.webContents.on('before-input-event', (_evt, input) => {
+    if (input.type !== 'keyDown') return
+    const key = input.key?.toLowerCase()
+    const toggleByF12 = key === 'f12'
+    const toggleByChord = input.control && input.shift && key === 'i'
+    if (toggleByF12 || toggleByChord) {
+      win.webContents.toggleDevTools()
+    }
+  })
+  if (process.env['ELECTRON_RENDERER_URL']) {
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.openDevTools({ mode: 'detach' })
+    })
+  }
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
