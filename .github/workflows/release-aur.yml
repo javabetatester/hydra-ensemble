@@ -8,20 +8,46 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
+  # Manual re-run path — if the workflow failed mid-pipeline (usually
+  # because the GH Release API hadn't exposed the AppImage yet) we want
+  # to retry without having to bump the version and re-tag. Dispatch
+  # with the tag you want to republish (defaults to the latest release).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.1). Leave empty for the latest release."
+        required: false
+        default: ""
 
 concurrency:
-  group: release-aur-${{ github.event.workflow_run.head_branch }}
+  group: release-aur-${{ github.event.workflow_run.head_branch || github.event.inputs.tag }}
   cancel-in-progress: false
 
 jobs:
   update-aur:
-    if: ${{ github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v')) }}
     runs-on: ubuntu-22.04
     steps:
       - name: Resolve tag + version
         id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          TAG="${{ github.event.workflow_run.head_branch }}"
+          set -euo pipefail
+          if [ -n "${INPUT_TAG:-}" ]; then
+            TAG="$INPUT_TAG"
+          elif [ -n "${RUN_BRANCH:-}" ]; then
+            TAG="$RUN_BRANCH"
+          else
+            # Manual dispatch with no tag specified — pick the most recent release.
+            TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+          fi
+          if [ -z "$TAG" ] || [ "$TAG" = "null" ]; then
+            echo "::error::could not resolve a tag to publish"
+            exit 1
+          fi
           VERSION="${TAG#v}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -37,10 +63,15 @@ jobs:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
+          # electron-builder only ships a single linux AppImage per tag
+          # (x86_64 by default), so skip any arch-specific filtering and
+          # grab the first .AppImage in the release. Keeping this simple
+          # avoids the jq precedence trap that bit us the first time —
+          # the arch suffix convention is not stable across builders.
           for i in $(seq 1 30); do
             URL=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-              --jq '.assets[] | select(.name | test("\\.AppImage$"; "i")) | select(.name | test("x86_64|x64|amd64"; "i") or (test("arm64|aarch64") | not)) | .browser_download_url' | head -n1 || true)
-            if [ -n "$URL" ]; then
+              --jq '[.assets[] | select(.name | endswith(".AppImage"))][0].browser_download_url' 2>/dev/null || true)
+            if [ -n "$URL" ] && [ "$URL" != "null" ]; then
               echo "url=$URL" >> "$GITHUB_OUTPUT"
               NAME=$(basename "$URL")
               echo "name=$NAME" >> "$GITHUB_OUTPUT"
