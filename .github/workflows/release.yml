@@ -45,6 +45,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y python3 make g++ libx11-dev
 
+      # Pin Python 3.11 on macOS/Windows — Python 3.12+ removed distutils, which
+      # older node-gyp versions still rely on (causes 'No module named distutils'
+      # during node-pty rebuild).
+      - name: Setup Python 3.11 for node-gyp
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       # Prefer reproducible npm ci; fall back if Phase 0 has no lockfile yet
       - name: Install dependencies
         shell: bash
