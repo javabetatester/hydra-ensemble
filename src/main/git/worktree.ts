@@ -326,6 +326,15 @@ export class WorktreeService {
         if (k.startsWith('GIT_')) continue
         if (v !== undefined) env[k] = v
       }
+      // Neutralise anything that makes git go interactive: pagers waiting
+      // on stdin that never comes (pager.status = less, pager.diff = delta,
+      // etc.) and credential / auth prompts. Without this a worktree with
+      // `pager.diff = less` freezes the whole renderer because the IPC
+      // promise never resolves.
+      env['GIT_PAGER'] = 'cat'
+      env['PAGER'] = 'cat'
+      env['GIT_TERMINAL_PROMPT'] = '0'
+      env['GIT_OPTIONAL_LOCKS'] = '0'
       const hasStdin = typeof opts.stdin === 'string'
       const spawnOpts: SpawnOptions = {
         env,
@@ -334,9 +343,33 @@ export class WorktreeService {
       }
       if (opts.cwd) spawnOpts.cwd = opts.cwd
 
-      const child = spawn('git', args, spawnOpts)
+      // --no-pager belongs BEFORE the subcommand; it's a git-level flag,
+      // not a subcommand option. Belt to the GIT_PAGER=cat braces above.
+      const finalArgs = ['--no-pager', ...args]
+
+      const child = spawn('git', finalArgs, spawnOpts)
       let stdout = ''
       let stderr = ''
+      let settled = false
+      const settle = (result: SpawnResult): void => {
+        if (settled) return
+        settled = true
+        resolve(result)
+      }
+
+      // 20s hard ceiling — a git op that hasn't produced a result by now is
+      // stuck (network prompt, missing credential helper, huge repo on a
+      // cold cache). Better to surface a clear error than leave the UI
+      // spinning forever.
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM')
+        settle({
+          code: -1,
+          stdout,
+          stderr: stderr || `git ${finalArgs[1] ?? ''} timed out after 20s`,
+        })
+      }, 20_000)
+
       child.stdout?.on('data', (chunk: Buffer) => {
         stdout += chunk.toString('utf-8')
       })
@@ -344,10 +377,12 @@ export class WorktreeService {
         stderr += chunk.toString('utf-8')
       })
       child.on('error', (err) => {
-        resolve({ code: -1, stdout, stderr: stderr || err.message })
+        clearTimeout(timer)
+        settle({ code: -1, stdout, stderr: stderr || err.message })
       })
       child.on('close', (code) => {
-        resolve({ code: code ?? -1, stdout, stderr })
+        clearTimeout(timer)
+        settle({ code: code ?? -1, stdout, stderr })
       })
       if (hasStdin && child.stdin) {
         child.stdin.write(opts.stdin!)

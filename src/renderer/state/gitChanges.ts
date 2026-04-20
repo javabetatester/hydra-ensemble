@@ -56,8 +56,8 @@ export const useGitChanges = create<GitChangesState>((set, get) => ({
   ...EMPTY,
 
   setCwd: (cwd) => {
-    // Switching cwd invalidates everything — don't carry state between repos.
     if (cwd === get().cwd) return
+    console.log('[gitChanges] setCwd', { cwd })
     set({ cwd, ...EMPTY })
     if (cwd) void get().refresh()
   },
@@ -65,33 +65,38 @@ export const useGitChanges = create<GitChangesState>((set, get) => ({
   refresh: async () => {
     const cwd = get().cwd
     if (!cwd) return
+    console.log('[gitChanges] refresh start', { cwd })
+    const t0 = performance.now()
     set({ loading: true, error: null })
     try {
       const res = await window.api.git.listChangedFiles(cwd)
+      const t1 = performance.now()
+      console.log('[gitChanges] listChangedFiles', {
+        ms: Math.round(t1 - t0),
+        ok: res.ok,
+        count: res.ok ? res.value.length : -1,
+      })
       if (!res.ok) {
         set({ loading: false, error: res.error })
         return
       }
       const files = res.value
       const paths = new Set(files.map((f) => f.path))
-      // Drop selections whose files vanished (committed or reverted).
       const pruned = new Set<string>()
       for (const p of get().selectedForCommit) if (paths.has(p)) pruned.add(p)
-      // Keep the current diff selection if the file still exists; otherwise
-      // fall back to the first entry so the UI doesn't sit empty.
       const selectedPath = get().selectedPath
-      const nextSelected = selectedPath && paths.has(selectedPath) ? selectedPath : files[0]?.path ?? null
+      const nextSelected =
+        selectedPath && paths.has(selectedPath) ? selectedPath : files[0]?.path ?? null
       set({ files, selectedForCommit: pruned, selectedPath: nextSelected, loading: false })
       if (nextSelected && nextSelected !== selectedPath) {
         void get().selectFile(nextSelected)
       } else if (!nextSelected) {
         set({ diff: '' })
       } else if (selectedPath) {
-        // Same file still selected — refresh its diff (staging status may
-        // have changed, so the diff content might differ).
         void get().selectFile(selectedPath)
       }
     } catch (err) {
+      console.error('[gitChanges] refresh threw', err)
       set({ loading: false, error: (err as Error).message })
     }
   },
@@ -100,20 +105,26 @@ export const useGitChanges = create<GitChangesState>((set, get) => ({
     const cwd = get().cwd
     set({ selectedPath: path, diff: '' })
     if (!cwd || !path) return
+    console.log('[gitChanges] selectFile', { path })
+    const t0 = performance.now()
     set({ diffLoading: true })
     try {
       const file = get().files.find((f) => f.path === path)
-      // Prefer the staged diff when the file has staged changes; otherwise
-      // show the worktree diff. This mirrors what a user expects after
-      // `git add` — they want to see what they just staged.
       const useStaged = file?.staged === true
       const res = await window.api.git.getDiff(cwd, path, useStaged)
+      const t1 = performance.now()
+      console.log('[gitChanges] getDiff', {
+        ms: Math.round(t1 - t0),
+        ok: res.ok,
+        bytes: res.ok ? res.value.length : -1,
+      })
       if (!res.ok) {
         set({ diff: '', diffLoading: false, error: res.error })
         return
       }
       set({ diff: res.value, diffLoading: false })
     } catch (err) {
+      console.error('[gitChanges] selectFile threw', err)
       set({ diffLoading: false, error: (err as Error).message })
     }
   },
