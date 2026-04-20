@@ -65,6 +65,11 @@ export const useGitChanges = create<GitChangesState>((set, get) => ({
   refresh: async () => {
     const cwd = get().cwd
     if (!cwd) return
+    // Re-entrancy guard: if a refresh is already in flight, drop the
+    // second call. Without this, clicking Refresh while an earlier
+    // listChangedFiles is still pending can strand `loading: true`
+    // when the second response arrives out of order.
+    if (get().loading) return
     console.log('[gitChanges] refresh start', { cwd })
     const t0 = performance.now()
     set({ loading: true, error: null })

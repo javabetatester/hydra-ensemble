@@ -380,7 +380,14 @@ export class WorktreeService {
         clearTimeout(timer)
         settle({ code: -1, stdout, stderr: stderr || err.message })
       })
-      child.on('close', (code) => {
+      // 'exit' fires when the child process dies; 'close' waits for stdio
+      // pipes to also close, which can hang forever when a grandchild
+      // helper (fsmonitor daemon, credential-cache, gpg-agent) inherits
+      // our pipes and keeps holding them open after git itself exits.
+      // The IPC promise was never resolving in that case — hence the
+      // spinner that stayed stuck on 'working tree clean' even after the
+      // underlying git op had already printed its output.
+      child.on('exit', (code) => {
         clearTimeout(timer)
         settle({ code: code ?? -1, stdout, stderr })
       })
