@@ -35,12 +35,23 @@ export const useSessions = create<SessionsState>((set, get) => ({
   unread: {},
 
   setSessions: (sessions) => {
+    // Defensive dedupe: if the backend stream or restore ever ships the
+    // same session id twice (happened with 293748cd-… during restore
+    // + onChange race), React crashes with duplicate-key warnings and
+    // the whole tree starts rendering inconsistently. Keep the first
+    // occurrence of each id.
+    const seen = new Set<string>()
+    const unique = sessions.filter((s) => {
+      if (seen.has(s.id)) return false
+      seen.add(s.id)
+      return true
+    })
     set((prev) => ({
-      sessions,
+      sessions: unique,
       activeId:
-        prev.activeId && sessions.some((s) => s.id === prev.activeId)
+        prev.activeId && unique.some((s) => s.id === prev.activeId)
           ? prev.activeId
-          : (sessions[0]?.id ?? null)
+          : (unique[0]?.id ?? null)
     }))
   },
 
@@ -79,7 +90,9 @@ export const useSessions = create<SessionsState>((set, get) => ({
         return null
       }
       set((prev) => ({
-        sessions: [...prev.sessions, res.session],
+        sessions: prev.sessions.some((s) => s.id === res.session.id)
+          ? prev.sessions
+          : [...prev.sessions, res.session],
         activeId: res.session.id
       }))
       return res.session
@@ -118,7 +131,12 @@ export const useSessions = create<SessionsState>((set, get) => ({
       console.error('[session] clone failed:', res.error)
       return null
     }
-    set((prev) => ({ sessions: [...prev.sessions, res.session], activeId: res.session.id }))
+    set((prev) => ({
+      sessions: prev.sessions.some((s) => s.id === res.session.id)
+        ? prev.sessions
+        : [...prev.sessions, res.session],
+      activeId: res.session.id
+    }))
     return res.session
   },
 

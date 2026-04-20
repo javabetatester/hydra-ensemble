@@ -346,10 +346,23 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
               e.preventDefault()
               const startX = e.clientX
               const startWidth = sidebarWidth
+              // Throttle setSidebarWidth to one call per animation frame.
+              // Zustand persists width to localStorage on every setWidth,
+              // and raw mousemove fires 60+/s — syncing that many writes
+              // blocks layout and makes the drag feel stuck. rAF coalesces.
+              let rafId: number | null = null
+              let latest = startWidth
               const onMove = (ev: MouseEvent): void => {
-                setSidebarWidth(startWidth + (ev.clientX - startX))
+                latest = startWidth + (ev.clientX - startX)
+                if (rafId !== null) return
+                rafId = requestAnimationFrame(() => {
+                  rafId = null
+                  setSidebarWidth(latest)
+                })
               }
               const onUp = (): void => {
+                if (rafId !== null) cancelAnimationFrame(rafId)
+                setSidebarWidth(latest)
                 document.removeEventListener('mousemove', onMove)
                 document.removeEventListener('mouseup', onUp)
                 document.body.style.userSelect = ''
