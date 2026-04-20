@@ -23,7 +23,18 @@ export function registerGitIpc(svc: WorktreeService, ai: CommitAiService): void 
       svc.removeWorktree(payload.repoRoot, payload.path)
   )
 
-  ipcMain.handle('git:listChangedFiles', (_evt, cwd: string) => svc.listChangedFiles(cwd))
+  ipcMain.handle('git:listChangedFiles', async (_evt, cwd: string) => {
+    const t0 = Date.now()
+    console.log('[git-ipc] listChangedFiles START', { cwd })
+    const res = await svc.listChangedFiles(cwd)
+    console.log('[git-ipc] listChangedFiles END', {
+      cwd,
+      ms: Date.now() - t0,
+      ok: res.ok,
+      count: res.ok ? res.value.length : -1,
+    })
+    return res
+  })
 
   ipcMain.handle('git:currentBranch', (_evt, cwd: string) => svc.currentBranch(cwd))
 

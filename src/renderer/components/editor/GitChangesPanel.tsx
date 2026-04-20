@@ -53,20 +53,45 @@ export default function GitChangesPanel({ cwd }: Props) {
   // ---------- loaders ----------
 
   const loadStatus = useCallback(async (): Promise<void> => {
-    if (!cwd) return
+    if (!cwd) {
+      console.log('[Changes] loadStatus skipped — no cwd')
+      return
+    }
     const gen = ++statusGen.current
+    console.log('[Changes] loadStatus START', { cwd, gen })
     setLoading(true)
     setError(null)
+
+    // Safety watchdog — if the await hasn't returned in 8s, force-clear
+    // loading so the UI stops spinning no matter what. Also logs so we
+    // know the IPC never came back.
+    const watchdog = setTimeout(() => {
+      if (gen !== statusGen.current) return
+      console.warn('[Changes] loadStatus WATCHDOG fired — forcing loading=false', { gen })
+      setError('git status did not return within 8s')
+      setLoading(false)
+    }, 8000)
+
     try {
+      const t0 = performance.now()
       const res = await window.api.git.listChangedFiles(cwd)
-      if (gen !== statusGen.current) return // superseded
+      const ms = Math.round(performance.now() - t0)
+      console.log('[Changes] loadStatus IPC returned', {
+        gen,
+        ms,
+        ok: res.ok,
+        count: res.ok ? res.value.length : -1,
+      })
+      if (gen !== statusGen.current) {
+        console.log('[Changes] loadStatus superseded, dropping', { gen, current: statusGen.current })
+        return
+      }
       if (!res.ok) {
         setError(res.error)
         setFiles([])
         return
       }
       setFiles(res.value)
-      // Prune picks that no longer exist.
       setPicked((prev) => {
         const live = new Set(res.value.map((f) => f.path))
         let changed = false
@@ -77,13 +102,18 @@ export default function GitChangesPanel({ cwd }: Props) {
         }
         return changed ? next : prev
       })
-      // Invalidate the diff if the currently-selected file is gone.
       setSelectedPath((prev) => (prev && res.value.some((f) => f.path === prev) ? prev : null))
+      console.log('[Changes] loadStatus state updated', { gen })
     } catch (err) {
+      console.error('[Changes] loadStatus threw', err)
       if (gen !== statusGen.current) return
       setError((err as Error).message)
     } finally {
-      if (gen === statusGen.current) setLoading(false)
+      clearTimeout(watchdog)
+      if (gen === statusGen.current) {
+        setLoading(false)
+        console.log('[Changes] loadStatus DONE', { gen })
+      }
     }
   }, [cwd])
 
