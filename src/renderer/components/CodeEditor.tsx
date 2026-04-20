@@ -14,7 +14,7 @@ import {
 import { useEditor } from '../state/editor'
 import { useSessions } from '../state/sessions'
 import FileTree from './editor/FileTree'
-import CodeMirrorView from './editor/CodeMirrorView'
+import CodeMirrorView, { openActiveSearch } from './editor/CodeMirrorView'
 import MarkdownPreview from './editor/MarkdownPreview'
 import GitChangesPanel from './editor/GitChangesPanel'
 import { fmtShortcut, hasMod } from '../lib/platform'
@@ -62,13 +62,25 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
         onClose()
         return
       }
-      if (hasMod(e) && e.key.toLowerCase() === 's') {
+      if (hasMod(e) && e.key.toLowerCase() === 's' && !e.shiftKey) {
         e.preventDefault()
         void saveActive()
+        return
+      }
+      // Ctrl/Cmd+F — open the active CodeMirror's search panel. Fires from
+      // anywhere inside the editor shell, not just when the textarea is
+      // focused, so users coming from the sidebar or toolbar still hit it.
+      if (hasMod(e) && e.key.toLowerCase() === 'f' && !e.shiftKey) {
+        if (openActiveSearch()) {
+          e.preventDefault()
+        }
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase so we beat CodeMirror's own keymap for the Esc gate —
+    // otherwise it closes the search panel first, then our handler still
+    // sees Escape and tears down the editor.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, onClose, saveActive])
 
   if (!open) return null
