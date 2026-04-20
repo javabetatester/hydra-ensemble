@@ -20,8 +20,15 @@ interface EditorState {
    *  user clicks a file under the .claude toolkit tab. Cleared on close. */
   overrideRoot: string | null
   /** The diff preview currently shown in the main editor area, or null
-   *  when a regular file is active. Set from GitChangesPanel. */
+   *  when a regular file is active. Set from GitChangesPanel for cases
+   *  the file cannot be edited (deleted, binary, huge). Most of the time
+   *  we open the file in CodeMirror and paint the diff inline instead
+   *  (see fileDiffs). */
   diffPreview: DiffPreview | null
+  /** Map of file path → unified diff patch. Populated from
+   *  GitChangesPanel when the user clicks a changed file. CodeMirrorView
+   *  reads the current file's patch and paints gutter + line marks. */
+  fileDiffs: Record<string, string>
   openEditor: () => void
   closeEditor: () => void
   toggleEditor: () => void
@@ -31,6 +38,8 @@ interface EditorState {
   setActive: (path: string) => void
   setOverrideRoot: (root: string | null) => void
   setDiffPreview: (preview: DiffPreview | null) => void
+  setFileDiff: (path: string, patch: string | null) => void
+  clearFileDiffs: () => void
   /** Replace the buffer in memory (e.g. after the user types in CodeMirror). */
   updateActiveBuffer: (text: string) => void
   /** Persist the active buffer to disk via the IPC bridge. */
@@ -43,12 +52,21 @@ export const useEditor = create<EditorState>((set, get) => ({
   editorOpen: false,
   overrideRoot: null,
   diffPreview: null,
+  fileDiffs: {},
 
   openEditor: () => set({ editorOpen: true }),
-  closeEditor: () => set({ editorOpen: false, diffPreview: null }),
+  closeEditor: () => set({ editorOpen: false, diffPreview: null, fileDiffs: {} }),
   toggleEditor: () => set((s) => ({ editorOpen: !s.editorOpen })),
   setOverrideRoot: (root) => set({ overrideRoot: root }),
   setDiffPreview: (preview) => set({ diffPreview: preview }),
+  setFileDiff: (path, patch) =>
+    set((s) => {
+      const next = { ...s.fileDiffs }
+      if (patch === null || patch.length === 0) delete next[path]
+      else next[path] = patch
+      return { fileDiffs: next }
+    }),
+  clearFileDiffs: () => set({ fileDiffs: {} }),
 
   openFile: async (path) => {
     const existing = get().openFiles.find((f) => f.path === path)

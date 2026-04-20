@@ -50,6 +50,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const setOverrideRoot = useEditor((s) => s.setOverrideRoot)
   const diffPreview = useEditor((s) => s.diffPreview)
   const setDiffPreview = useEditor((s) => s.setDiffPreview)
+  const fileDiffs = useEditor((s) => s.fileDiffs)
   const closeAllFiles = useEditor((s) => s.closeAllFiles)
 
   // Sidebar width (Files / Changes / Search pane). Persisted + drag-resizable.
@@ -460,6 +461,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                   onChange={(text) => updateActiveBuffer(text)}
                   onSave={() => void saveActive()}
                   vimMode={vimMode}
+                  diffPatch={fileDiffs[activeFile.path] ?? null}
                 />
               )
             ) : activeFile ? (

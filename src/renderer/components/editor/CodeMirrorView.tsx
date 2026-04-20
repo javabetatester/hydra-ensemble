@@ -7,6 +7,7 @@ import { bracketMatching, indentOnInput } from '@codemirror/language'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { vim, Vim } from '@replit/codemirror-vim'
 import { loadLanguageFor } from './languages'
+import { clearDiffPatch, diffExtension, setDiffPatch } from './diff-extension'
 
 /**
  * Module-level holder for the currently-mounted editor's view. Consumed
@@ -34,6 +35,10 @@ interface Props {
   onSave: () => void
   /** When true, vim modal bindings (normal / insert / visual / command) are on. */
   vimMode?: boolean
+  /** Unified diff patch for the file, if any. Used to paint green/red
+   *  gutter markers + line backgrounds while the user edits. Pass null
+   *  or undefined to clear. */
+  diffPatch?: string | null
 }
 
 // Wire the `:w` Ex command once per module to save the active file via the
@@ -47,7 +52,7 @@ Vim.defineEx('write', 'write', () => {
   activeSaveHandler?.()
 })
 
-export default function CodeMirrorView({ path, initial, onChange, onSave, vimMode }: Props) {
+export default function CodeMirrorView({ path, initial, onChange, onSave, vimMode, diffPatch }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const langCompartment = useRef(new Compartment())
@@ -79,6 +84,9 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
       // Vim compartment FIRST so its keymap can override defaults when active.
       vimCompartment.current.of(vimMode ? vim() : []),
       lineNumbers(),
+      // Diff gutter + line backgrounds — painted from the unified patch
+      // dispatched via setDiffPatch / clearDiffPatch (see effect below).
+      diffExtension(),
       highlightActiveLine(),
       history(),
       bracketMatching(),
@@ -164,6 +172,18 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
       effects: vimCompartment.current.reconfigure(vimMode ? vim() : [])
     })
   }, [vimMode])
+
+  // Push the diff patch into CodeMirror as an effect. Empty / null patch
+  // clears the decorations so switching to a clean file shows no marks.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    if (diffPatch && diffPatch.trim().length > 0) {
+      view.dispatch({ effects: setDiffPatch.of(diffPatch) })
+    } else {
+      view.dispatch({ effects: clearDiffPatch.of(null) })
+    }
+  }, [diffPatch])
 
   return (
     <div

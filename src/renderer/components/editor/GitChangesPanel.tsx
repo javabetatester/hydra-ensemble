@@ -35,6 +35,8 @@ const STATUS_META: Record<ChangedFile['status'], { label: string; cls: string }>
 export default function GitChangesPanel({ cwd }: Props) {
   const setDiffPreview = useEditor((s) => s.setDiffPreview)
   const diffPreview = useEditor((s) => s.diffPreview)
+  const setFileDiff = useEditor((s) => s.setFileDiff)
+  const openFile = useEditor((s) => s.openFile)
   const [files, setFiles] = useState<ChangedFile[]>([])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [picked, setPicked] = useState<Set<string>>(() => new Set())
@@ -98,14 +100,26 @@ export default function GitChangesPanel({ cwd }: Props) {
         if (gen !== diffGen.current) return
         if (!res.ok) {
           setDiffPreview(null)
+          setFileDiff(path, null)
           setError(res.error)
           return
         }
-        setDiffPreview({
-          path,
-          patch: res.value,
-          status: file?.status ?? 'modified'
-        })
+        const status = file?.status ?? 'modified'
+        // Route the diff to the right renderer:
+        //   • deleted / untracked / binary files can't be edited — show
+        //     the unified diff in the main editor slot (read-only).
+        //   • everything else opens the file in CodeMirror so the user
+        //     can edit with inline green/red marks beside the gutter.
+        const editable = status === 'modified' || status === 'added' || status === 'renamed'
+        if (editable) {
+          setFileDiff(path, res.value)
+          setDiffPreview(null)
+          // Fire-and-forget — if the read fails openFile logs and bails.
+          void openFile(path)
+        } else {
+          setFileDiff(path, null)
+          setDiffPreview({ path, patch: res.value, status })
+        }
       } catch (err) {
         if (gen !== diffGen.current) return
         setError((err as Error).message)
@@ -113,7 +127,7 @@ export default function GitChangesPanel({ cwd }: Props) {
         if (gen === diffGen.current) setDiffLoading(false)
       }
     },
-    [cwd, files, setDiffPreview]
+    [cwd, files, setDiffPreview, setFileDiff, openFile]
   )
 
   // ---------- effects ----------

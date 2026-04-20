@@ -146,11 +146,21 @@ export class WorktreeService {
    *  hundreds of thousands of untracked rows — serialising that across the
    *  IPC bridge AND rendering each as a DOM node freezes Electron. */
   async listChangedFiles(cwd: string): Promise<GitOpResult<ChangedFile[]>> {
-    // Is this actually a git worktree? Cheap check that also rules out the
-    // "git bubbled up to an ancestor repo" trap.
-    const inside = await this.runGit(['-C', cwd, 'rev-parse', '--is-inside-work-tree'])
-    if (inside.code !== 0 || inside.stdout.trim() !== 'true') {
-      return { ok: false, error: 'not a git repository' }
+    // Ask git for the repo's top-level worktree. Succeeds for ordinary
+    // repos, linked worktrees, and submodules; fails for non-repos.
+    // Surface git's actual stderr so users who hit edge cases (git not
+    // on PATH, broken .git file pointing to a missing gitdir, permission
+    // issues) get a real error instead of a blanket 'not a git repo'.
+    const probe = await this.runGit(['-C', cwd, 'rev-parse', '--show-toplevel'])
+    if (probe.code !== 0) {
+      const stderr = probe.stderr.trim()
+      if (/not a git repository/i.test(stderr)) {
+        return { ok: false, error: 'not a git repository' }
+      }
+      if (!stderr && probe.code === -1) {
+        return { ok: false, error: 'git executable not found on PATH' }
+      }
+      return { ok: false, error: stderr || `git rev-parse failed (code ${probe.code})` }
     }
     const res = await this.runGit(['-C', cwd, 'status', '--porcelain=v1', '-uall', '--', '.'])
     if (res.code !== 0) {
