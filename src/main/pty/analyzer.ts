@@ -28,8 +28,27 @@ export class PtyStreamAnalyzer {
   private recentText = ''
   private readonly recentTextLimit = 2000
 
-  // Debounce delay — 50ms after last data chunk
-  private static readonly debounceMs = 50
+  // Position in recentText at the moment the user submitted (pressed
+  // Enter). Idle markers ("? for shortcuts" etc.) written before this
+  // point are stale — they belong to the previous turn. Cleared once
+  // claude renders ANY new marker after the submit, or implicitly
+  // when the recentText buffer rolls past it.
+  private submitMark: number | null = null
+
+  // UTF-8 decoder for text runs between ANSI escapes. stream:true so
+  // a multi-byte sequence split across feed() calls is buffered and
+  // resolved on the next chunk. Without this we filtered to ASCII
+  // only — claude's prompt glyph (❯), footer separator (·) and arrow
+  // markers were invisible to the heuristics.
+  private readonly decoder = new TextDecoder('utf-8')
+
+  // Throttle interval — analyzeFrame runs at most once per window.
+  // Using a throttle instead of a debounce is deliberate: during a
+  // continuous stream (claude generating output) bytes arrive faster
+  // than the window, so a debounce would keep resetting forever and
+  // analyzeFrame would never fire until claude paused — leaving the
+  // state pill frozen at whatever it was before work started.
+  private static readonly throttleMs = 80
 
   public get state(): SessionState {
     return this._state
@@ -41,45 +60,110 @@ export class PtyStreamAnalyzer {
 
   public feed(input: Uint8Array | Buffer | string): void {
     const bytes = this.toBytes(input)
+    // Accumulate contiguous text bytes (between ANSI escapes) so the
+    // UTF-8 decoder sees them as one chunk — required for multi-byte
+    // glyphs like ❯ / · / ▸ that claude's TUI uses for its footer.
+    let runStart = -1
+    const flushRun = (end: number): void => {
+      if (runStart < 0 || end <= runStart) {
+        runStart = -1
+        return
+      }
+      const slice = bytes.subarray(runStart, end)
+      const decoded = this.decoder.decode(slice, { stream: true })
+      for (const ch of decoded) {
+        const code = ch.codePointAt(0)!
+        if (code === 0x0a) {
+          // LF
+          this.frameText += '\n'
+          this.recentText += '\n'
+        } else if (code === 0x0d || code < 0x20) {
+          // CR and other control chars — ignore for analysis
+        } else {
+          this.frameText += ch
+          this.recentText += ch
+        }
+      }
+      runStart = -1
+    }
 
     for (let i = 0; i < bytes.length; i++) {
       const byte = bytes[i]!
       if (this.inEscape) {
         this.processEscapeByte(byte)
       } else if (byte === 0x1b) {
-        // ESC
+        // ESC — flush any pending text run before switching modes.
+        flushRun(i)
         this.inEscape = true
         this.escapeBuffer = [byte]
-      } else {
-        // Regular printable character or control char
-        if (byte >= 0x20 && byte < 0x7f) {
-          const ch = String.fromCharCode(byte)
-          this.frameText += ch
-          this.recentText += ch
-        } else if (byte === 0x0a) {
-          // newline
-          this.frameText += '\n'
-          this.recentText += '\n'
-        } else if (byte === 0x0d) {
-          // carriage return — ignore (we use LF for newlines)
-        }
-        // Other control chars (BEL, BS, TAB, etc.) — ignore for analysis
+      } else if (runStart < 0) {
+        runStart = i
       }
     }
+    flushRun(bytes.length)
 
     // Trim recent text buffer
     if (this.recentText.length > this.recentTextLimit) {
-      this.recentText = this.recentText.slice(this.recentText.length - this.recentTextLimit)
+      const cut = this.recentText.length - this.recentTextLimit
+      this.recentText = this.recentText.slice(cut)
+      if (this.submitMark !== null) {
+        this.submitMark = Math.max(0, this.submitMark - cut)
+      }
     }
 
-    // Debounce frame analysis — run 50ms after last data chunk
-    if (this.frameTimer !== null) {
-      clearTimeout(this.frameTimer)
+    // Throttle frame analysis — if a timer is already scheduled, do
+    // nothing and let it fire. This guarantees analyzeFrame runs at
+    // least every `throttleMs` during continuous PTY streams, so the
+    // state pill updates at real-time speed while claude is working.
+    if (this.frameTimer === null) {
+      this.frameTimer = setTimeout(() => {
+        this.frameTimer = null
+        this.analyzeFrame()
+      }, PtyStreamAnalyzer.throttleMs)
     }
-    this.frameTimer = setTimeout(() => {
-      this.frameTimer = null
-      this.analyzeFrame()
-    }, PtyStreamAnalyzer.debounceMs)
+  }
+
+  /**
+   * Sync the analyzer's internal state cache with an externally-set
+   * value (e.g., renderer-side optimistic flip on Enter). Does NOT
+   * emit — the next analyzeFrame will diff against this new baseline
+   * and fire onStateChange if the terminal disagrees.
+   *
+   * Why this matters: without syncing, an optimistic flip pushes the
+   * renderer to 'thinking' while the analyzer's cache is still
+   * 'userInput'. When claude's prompt reappears and the analyzer
+   * computes 'userInput' again, it equals the cached value and no
+   * IPC fires — leaving the card stuck on the optimistic guess.
+   */
+  public syncExternalState(state: SessionState): void {
+    this._state = state
+    // When the renderer optimistically flips us to a working state
+    // (Enter pressed), stamp the current buffer position so the next
+    // analyzeFrame doesn't latch onto the stale "? for shortcuts" the
+    // previous idle frame left behind. Cleared the moment claude
+    // writes any fresh marker past this point.
+    if (state === 'thinking' || state === 'generating') {
+      this.submitMark = this.recentText.length
+    } else {
+      this.submitMark = null
+    }
+  }
+
+  /**
+   * Force a state re-evaluation and re-emission even if the computed
+   * state hasn't changed. Used after the renderer optimistically flips
+   * state so the analyzer can "re-confirm" its view and push the card
+   * back in sync. Safe to call any time.
+   */
+  public forceReemit(): void {
+    const prev = this._state
+    // Run analyzeFrame — if it computes a different state it fires
+    // onStateChange normally; otherwise we manually re-fire so the
+    // renderer's out-of-sync value is corrected.
+    this.analyzeFrame()
+    if (this._state === prev) {
+      this.onStateChange?.(this._state)
+    }
   }
 
   /** Reset the analyzer (e.g., when restarting a session). */
@@ -90,6 +174,7 @@ export class PtyStreamAnalyzer {
     this.escapeBuffer = []
     this.frameText = ''
     this.recentText = ''
+    this.submitMark = null
     if (this.frameTimer !== null) {
       clearTimeout(this.frameTimer)
       this.frameTimer = null
@@ -206,47 +291,107 @@ export class PtyStreamAnalyzer {
   // MARK: - Frame Analysis
 
   private analyzeFrame(): void {
-    // Look at the most recent content (last ~500 chars) for bottom-of-screen indicators
-    const recentLower = this.recentText.slice(Math.max(0, this.recentText.length - 500)).toLowerCase()
+    const text = this.recentText
+    const lower = text.toLowerCase()
 
     let newState: SessionState
 
-    // Permission prompts — highest priority
-    if (recentLower.includes('allow') && recentLower.includes('deny')) {
+    // 1. Permission prompts — highest priority, override everything.
+    if (lower.includes('allow') && lower.includes('deny')) {
       newState = 'needsAttention'
-    } else if (recentLower.includes('[y/n]') || recentLower.includes('(y/n)')) {
+    } else if (lower.includes('[y/n]') || lower.includes('(y/n)')) {
       newState = 'needsAttention'
-    } else if (recentLower.includes('do you want to proceed')) {
+    } else if (
+      lower.includes('do you want to proceed') ||
+      lower.includes('press y to accept') ||
+      lower.includes('esc to reject')
+    ) {
       newState = 'needsAttention'
     }
-    // "esc to interrupt" = Claude is actively working RIGHT NOW
-    else if (recentLower.includes('esc to interrupt') || recentLower.includes('esc to cancel')) {
-      if (recentLower.includes('thinking')) {
-        newState = 'thinking'
-      } else {
-        newState = 'generating'
+    // 2. Position-based working-vs-idle. Claude's TUI writes two mutually
+    //    exclusive markers into the footer: "esc to interrupt" while
+    //    working, "? for shortcuts" (or "/ for commands", etc.) while
+    //    waiting for input. Because the screen redraws visually but the
+    //    rolling buffer accumulates both markers across the session,
+    //    presence alone is unreliable — we compare the LAST index of
+    //    each and whichever was written more recently wins. This is
+    //    self-correcting across every transition (idle → work → idle →
+    //    work → ...) without needing to clear buffers or track frames.
+    else {
+      const rawWorking = Math.max(
+        lower.lastIndexOf('esc to interrupt'),
+        lower.lastIndexOf('esc to cancel')
+      )
+      const rawIdle = Math.max(
+        lower.lastIndexOf('? for shortcuts'),
+        lower.lastIndexOf('/ for commands'),
+        lower.lastIndexOf('shift+tab to cycle')
+      )
+      // Demote pre-submit markers: anything the user hasn't caused is
+      // stale once they press Enter. Prevents the idle hint from the
+      // just-closed frame from yanking the card back to 'userInput'
+      // before claude has a chance to render its working footer.
+      const mark = this.submitMark ?? -1
+      const lastWorking = rawWorking > mark ? rawWorking : -1
+      const lastIdle = rawIdle > mark ? rawIdle : -1
+
+      // Nothing fresh since submit — claude is still processing; don't
+      // emit (keeps the optimistic 'thinking' in place).
+      if (this.submitMark !== null && lastWorking < 0 && lastIdle < 0) {
+        return
       }
-    }
-    // Claude's prompt marker — waiting for user
-    // Use the very recent text (last ~100 chars) to detect the active prompt
-    else if (
-      this.recentText.slice(Math.max(0, this.recentText.length - 100)).includes('/effort') ||
-      this.recentText.slice(Math.max(0, this.recentText.length - 50)).includes('> ')
-    ) {
-      // Claude is showing its UI but not working — at the input prompt
-      // "/effort" appears in Claude's bottom bar, ">" is the prompt
-      newState = 'userInput'
-    }
-    // Shell prompt — Claude not running
-    else if (
-      recentLower.endsWith('$ ') ||
-      recentLower.endsWith('% ') ||
-      recentLower.includes('❯')
-    ) {
-      newState = 'idle'
-    } else {
-      // Can't determine — keep current state
-      return
+
+      // Clear the mark as soon as we have a confirmed post-submit
+      // signal so subsequent frames use raw positions again.
+      if (lastWorking >= 0 || lastIdle >= 0) {
+        this.submitMark = null
+      }
+
+      if (lastWorking >= 0 && lastWorking > lastIdle) {
+        // Sub-state: inspect the ~200 chars around the footer for the
+        // claude phase word. Windowing prevents an old "thinking" from
+        // the very first footer of the turn from sticking once claude
+        // has moved on to generating.
+        const window = lower.slice(
+          Math.max(0, lastWorking - 200),
+          lastWorking + 40
+        )
+        if (
+          window.includes('thinking') ||
+          window.includes('crafting') ||
+          window.includes('planning')
+        ) {
+          newState = 'thinking'
+        } else {
+          newState = 'generating'
+        }
+      } else if (lastIdle >= 0) {
+        newState = 'userInput'
+      }
+      // 3. No claude marker at all — look at the very tail for shell or
+      //    alternate-buffer fallbacks.
+      else {
+        const tail = text.slice(Math.max(0, text.length - 120))
+        const tailLower = tail.toLowerCase()
+        if (
+          tailLower.endsWith('$ ') ||
+          tailLower.endsWith('# ') ||
+          tailLower.endsWith('% ')
+        ) {
+          newState = 'idle'
+        } else if (this._alternateBufferActive) {
+          newState = 'userInput'
+        } else if (
+          tail.includes('/effort') ||
+          tail.includes('> ') ||
+          /[>\u276f\u25b8\u2023\u203a]\s*$/.test(tail)
+        ) {
+          newState = 'userInput'
+        } else {
+          // Can't determine — keep current state.
+          return
+        }
+      }
     }
 
     this.updateState(newState)

@@ -33,6 +33,15 @@ export class AnalyzerManager {
     return analyzer
   }
 
+  /**
+   * Align an existing analyzer's cached state with an externally-set
+   * value (renderer-side optimistic flip). No-op if the session has
+   * no analyzer yet. Used by the `session:syncState` IPC handler.
+   */
+  public syncState(sessionId: string, state: SessionState): void {
+    this.analyzers.get(sessionId)?.syncExternalState(state)
+  }
+
   public dispose(sessionId: string): void {
     const analyzer = this.analyzers.get(sessionId)
     if (!analyzer) return

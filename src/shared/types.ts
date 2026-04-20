@@ -274,6 +274,9 @@ export interface HydraEnsembleApi {
     rename: (id: string, name: string) => Promise<void>
     update: (id: string, patch: SessionUpdate) => Promise<void>
     restart: (id: string) => Promise<SessionCreateResult>
+    /** Align the PTY analyzer's cached state with a renderer-side
+     *  optimistic flip so its next frame analysis emits correctly. */
+    syncState: (id: string, state: SessionState) => Promise<void>
     onChange: (handler: (sessions: SessionMeta[]) => void) => () => void
     onState: (handler: (event: { sessionId: string; state: SessionState }) => void) => () => void
     onJsonl: (handler: (update: JsonlUpdate) => void) => () => void

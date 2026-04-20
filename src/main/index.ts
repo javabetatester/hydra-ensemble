@@ -195,7 +195,7 @@ app.whenReady().then(async () => {
   registerWindowIpc()
   registerPtyIpc(ptyManager)
   registerClaudeIpc()
-  registerSessionIpc(sessionManager)
+  registerSessionIpc(sessionManager, analyzerManager)
   registerGitIpc(worktreeService)
   registerProjectIpc(projectService)
   registerToolkitIpc(toolkitService)

@@ -96,6 +96,17 @@ export default function SessionPane({ session, visible }: Props) {
 
     const onInput = term.onData((data) => {
       void window.api.pty.write(ptyId, data)
+      // Optimistic state flip the moment the user submits a prompt:
+      // CR or LF in the byte stream means "Enter pressed, agent is
+      // about to work". Flip the card to 'thinking' instantly and
+      // sync the analyzer's internal cache via IPC so when its next
+      // frame analysis computes 'generating' or 'userInput' the diff
+      // fires correctly (without the sync the analyzer stayed at
+      // 'userInput' and never emitted the correction).
+      if (data.includes('\r') || data.includes('\n')) {
+        useSessions.getState().patchSession(session.id, { state: 'thinking' })
+        void window.api.session.syncState(session.id, 'thinking')
+      }
     })
 
     // Resize observer: debounced so a 300ms slide-in animation doesn't
