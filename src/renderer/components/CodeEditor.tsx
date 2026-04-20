@@ -1,12 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Code2, Eye, File as FileIcon, Pencil, Save, Terminal as TerminalIcon, X } from 'lucide-react'
+import {
+  Code2,
+  Eye,
+  File as FileIcon,
+  FolderTree,
+  GitCommit,
+  Pencil,
+  Save,
+  Terminal as TerminalIcon,
+  X,
+} from 'lucide-react'
 import { useEditor } from '../state/editor'
 import { useSessions } from '../state/sessions'
 import FileTree from './editor/FileTree'
 import CodeMirrorView from './editor/CodeMirrorView'
 import MarkdownPreview from './editor/MarkdownPreview'
+import GitChangesPanel from './editor/GitChangesPanel'
 import { fmtShortcut, hasMod } from '../lib/platform'
+
+type SideTab = 'files' | 'changes'
 
 interface Props {
   open: boolean
@@ -30,6 +43,8 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const [vimMode, setVimMode] = useState(false)
   // Markdown preview flag — only relevant when the active file is .md.
   const [previewMd, setPreviewMd] = useState(false)
+  // Which sidebar pane is active — files tree or git changes.
+  const [sideTab, setSideTab] = useState<SideTab>('files')
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
@@ -127,16 +142,48 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="df-scroll w-56 shrink-0 overflow-y-auto border-r border-border-soft bg-bg-2">
-          {root ? (
-            <FileTree root={root} onOpenFile={(p) => void openFile(p)} />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-              <FileIcon size={28} strokeWidth={1.25} className="text-text-4" />
-              <div className="text-xs text-text-2">no active session</div>
-              <div className="text-[11px] text-text-4">open a session to browse its files.</div>
-            </div>
-          )}
+        <aside className="flex w-64 shrink-0 flex-col border-r border-border-soft bg-bg-2">
+          {/* Sidebar tabs: Files (existing tree) | Changes (git diff + commit) */}
+          <div className="flex shrink-0 items-stretch border-b border-border-soft bg-bg-2">
+            {(['files', 'changes'] as const).map((tab) => {
+              const Icon = tab === 'files' ? FolderTree : GitCommit
+              const active = sideTab === tab
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSideTab(tab)}
+                  className={`flex flex-1 items-center justify-center gap-1.5 border-r border-border-soft px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] last:border-r-0 transition ${
+                    active
+                      ? 'bg-bg-1 text-accent-300'
+                      : 'text-text-3 hover:bg-bg-3 hover:text-text-1'
+                  }`}
+                >
+                  <Icon size={11} strokeWidth={1.75} />
+                  {tab}
+                </button>
+              )
+            })}
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {sideTab === 'files' ? (
+              <div className="df-scroll h-full overflow-y-auto">
+                {root ? (
+                  <FileTree root={root} onOpenFile={(p) => void openFile(p)} />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+                    <FileIcon size={28} strokeWidth={1.25} className="text-text-4" />
+                    <div className="text-xs text-text-2">no active session</div>
+                    <div className="text-[11px] text-text-4">
+                      open a session to browse its files.
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <GitChangesPanel cwd={root} />
+            )}
+          </div>
         </aside>
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-1">
           <div className="df-scroll flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border-soft bg-bg-2 px-2 pt-1.5">
