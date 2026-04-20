@@ -401,20 +401,24 @@ export default function App() {
           </div>
 
           {/* Right panel: sessions takes remaining space at top, toolkit
-              hugs the bottom sized to its own content (capped at 55% so
-              huge toolkits don't push sessions out). */}
+              hugs the bottom at a FIXED share (45% of the column) so
+              switching between bashes/commands tabs doesn't change its
+              height. Internal scroll handles overflow. */}
           <div className="flex w-80 shrink-0 flex-col overflow-hidden">
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <SessionsPanel />
             </div>
             <div
               className="flex shrink-0 flex-col overflow-hidden border-t border-border-soft"
-              style={{ maxHeight: '55%' }}
+              style={{ height: '45%' }}
             >
               <ToolkitGrid
                 cwd={contextCwd}
-                projectName={currentProject?.name}
-                branch={activeSession?.branch}
+                activeSessionId={activeSession?.id ?? null}
+                activeSessionPtyId={activeSession?.ptyId ?? null}
+                canSendToSession={
+                  activeSession?.state === 'userInput' || activeSession?.state === 'idle'
+                }
               />
             </div>
           </div>

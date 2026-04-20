@@ -166,6 +166,28 @@ export interface TranscriptPayload {
 }
 
 // =============================================================================
+// Claude slash commands (built from `.claude/commands/*.md` files)
+// =============================================================================
+
+export type ClaudeCommandSource = 'project' | 'global'
+
+export interface ClaudeCommand {
+  /** Slash name without the leading `/` — e.g. `review`, `pre-pr`. */
+  name: string
+  filePath: string
+  source: ClaudeCommandSource
+  /** First markdown heading (if any). */
+  title?: string
+  /** Short description — first non-heading line of the file. */
+  description?: string
+}
+
+export interface ClaudeCommandsPayload {
+  cwd: string | null
+  commands: ClaudeCommand[]
+}
+
+// =============================================================================
 // Git / Worktrees
 // =============================================================================
 
@@ -347,6 +369,9 @@ export interface HydraEnsembleApi {
   }
   claude: {
     resolvePath: () => Promise<string | null>
+    /** Enumerate slash commands available in `<cwd>/.claude/commands/`
+     *  (project-local) plus `~/.claude/commands/` (global). */
+    listCommands: (cwd: string | null) => Promise<ClaudeCommandsPayload>
   }
   git: {
     repoRoot: (cwd: string) => Promise<string | null>

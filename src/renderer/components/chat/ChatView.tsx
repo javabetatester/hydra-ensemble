@@ -4,7 +4,7 @@ import type { SessionMeta, TranscriptMessage } from '../../../shared/types'
 import { useTranscripts } from '../../state/transcripts'
 import { useSessions } from '../../state/sessions'
 import ChatMessage from './ChatMessage'
-import ChatToolbar from './ChatToolbar'
+import ChatToolbar, { type Effort } from './ChatToolbar'
 
 interface Props {
   session: SessionMeta
@@ -23,6 +23,13 @@ export default function ChatView({ session, visible }: Props) {
   const refresh = useTranscripts((s) => s.refresh)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  /** Mirrors Claude Code's effort setting. We can't read it back from
+   *  the TUI, so this is the user's last explicit choice — sent via
+   *  `/effort <level>` each time it changes. */
+  const [effort, setEffort] = useState<Effort>('auto')
+  /** Mirrors `alwaysThinkingEnabled`. Toggled by writing Alt+T to the
+   *  PTY (claude's built-in keyboard shortcut for the toggle). */
+  const [thinking, setThinking] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lastCountRef = useRef(0)
@@ -56,7 +63,8 @@ export default function ChatView({ session, visible }: Props) {
       // Write text + CR to the PTY. Claude's TUI captures the line and
       // sends it as a user message, which then lands in the JSONL →
       // transcriptChanged event → re-renders this list. sendCommand
-      // also optimistically flips the state pill to 'thinking'.
+      // also optimistically flips the state pill to 'thinking' for
+      // real prompts (not slash commands).
       sendCommand(text)
       setInput('')
       // Reset auto-grown textarea height and keep focus for continued typing.
@@ -67,6 +75,24 @@ export default function ChatView({ session, visible }: Props) {
     } finally {
       setSending(false)
     }
+  }
+
+  /** Apply an effort pick: keep local state in sync + fire the real
+   *  `/effort <level>` slash command so claude actually updates its
+   *  reasoning budget. */
+  const onEffortChange = (next: Effort): void => {
+    setEffort(next)
+    sendCommand(`/effort ${next}`)
+  }
+
+  /** Toggle Claude Code's extended-thinking flag. There's no slash
+   *  command for this — the TUI uses Alt+T as the keyboard shortcut.
+   *  We write the raw escape sequence (ESC + 't') straight to the PTY
+   *  without a trailing CR so claude consumes it as a keypress rather
+   *  than a prompt line. */
+  const onThinkingToggle = (): void => {
+    setThinking((v) => !v)
+    void window.api.pty.write(session.ptyId, '\x1bt')
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -87,12 +113,21 @@ export default function ChatView({ session, visible }: Props) {
     sendCommand('/rewind')
   }
 
-  /** Single point for writing commands / messages to the PTY. Appends CR
-   *  and syncs the optimistic thinking flip so the state pill follows. */
+  /** Single point for writing commands / messages to the PTY.
+   *
+   *  Optimistic 'thinking' flip is intentionally skipped for slash
+   *  commands: they're usually instant (settings tweaks, /clear, etc.)
+   *  and never produce a "esc to interrupt" footer for the analyzer to
+   *  latch onto, so flipping leaves the pill stranded in thinking
+   *  forever. Real prompts get the flip — claude will start working
+   *  immediately and the analyzer confirms within ~80ms. */
   const sendCommand = (raw: string): void => {
     if (!raw) return
-    useSessions.getState().patchSession(session.id, { state: 'thinking' })
-    void window.api.session.syncState(session.id, 'thinking')
+    const isSlash = raw.trimStart().startsWith('/')
+    if (!isSlash) {
+      useSessions.getState().patchSession(session.id, { state: 'thinking' })
+      void window.api.session.syncState(session.id, 'thinking')
+    }
     void window.api.pty.write(session.ptyId, raw + '\r')
   }
 
@@ -103,11 +138,15 @@ export default function ChatView({ session, visible }: Props) {
 
   return (
     <div className="flex h-full w-full flex-col bg-bg-0">
-      {/* Toolbar: model selector + effort + commands palette + usage chips. */}
+      {/* Toolbar: model selector + effort + thinking + commands palette + usage. */}
       <ChatToolbar
         currentModel={session.model}
         canSend={canInteract}
         onSend={sendCommand}
+        effort={effort}
+        onEffortChange={onEffortChange}
+        thinking={thinking}
+        onThinkingToggle={onThinkingToggle}
         rightChildren={
           <>
             <span className="text-text-4">{messages.length} msgs</span>

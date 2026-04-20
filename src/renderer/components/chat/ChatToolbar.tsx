@@ -16,19 +16,29 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 type Model = 'opus' | 'sonnet' | 'haiku'
-type Effort = 'off' | 'low' | 'medium' | 'high'
+
+/**
+ * Claude Code effort levels — driven by the real `/effort <level>`
+ * slash command (docs: code.claude.com/docs/en/model-config). `auto`
+ * resets the session back to the model's default adaptive reasoning.
+ * `xhigh` is only supported on Opus 4.7; older models silently reject
+ * it but we expose the full set.
+ */
+export type Effort = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+const EFFORT_OPTIONS: { id: Effort; label: string; hint: string }[] = [
+  { id: 'auto', label: 'auto', hint: 'let claude decide (default)' },
+  { id: 'low', label: 'low', hint: 'minimum budget' },
+  { id: 'medium', label: 'medium', hint: 'balanced' },
+  { id: 'high', label: 'high', hint: 'deeper reasoning' },
+  { id: 'xhigh', label: 'xhigh', hint: 'even deeper — opus 4.7 only' },
+  { id: 'max', label: 'max', hint: 'maximum reasoning budget' }
+]
 
 const MODEL_OPTIONS: { id: Model; label: string; hint: string }[] = [
   { id: 'opus', label: 'opus', hint: 'flagship — deepest reasoning' },
   { id: 'sonnet', label: 'sonnet', hint: 'balanced — faster, still smart' },
   { id: 'haiku', label: 'haiku', hint: 'fast + cheap — quick tasks' }
-]
-
-const EFFORT_OPTIONS: { id: Effort; label: string }[] = [
-  { id: 'off', label: 'off' },
-  { id: 'low', label: 'low' },
-  { id: 'medium', label: 'med' },
-  { id: 'high', label: 'high' }
 ]
 
 interface CommandDef {
@@ -95,35 +105,58 @@ interface Props {
   canSend: boolean
   /** Send text to the PTY. Toolbar appends CR. */
   onSend: (text: string) => void
+  /** Controlled effort level — parent owns state + triggers the
+   *  `/effort <level>` slash command on change. */
+  effort: Effort
+  onEffortChange: (next: Effort) => void
+  /** Controlled thinking toggle — parent writes Alt+T (the TUI
+   *  shortcut) to the PTY when this flips. */
+  thinking: boolean
+  onThinkingToggle: () => void
   /** Optional — additional telemetry chips rendered on the right. */
   rightChildren?: React.ReactNode
 }
 
 /**
- * Visual command surface for the chat view. Replaces having to type
- * `/model`, `/effort`, etc. at the PTY. Emits slash commands via the
- * parent's `onSend` so we stay aligned with claude's canonical input
- * path — no hidden state, just shortcuts.
+ * Visual command surface for the chat view. Emits slash commands via
+ * the parent's `onSend` so we stay aligned with claude's canonical
+ * input path — no hidden state, just shortcuts.
  *
- * Effort is tracked locally (optimistic) because the JSONL doesn't
- * reflect client-side settings; model piggybacks on the JSONL model
- * for its "current" indicator.
+ * Model piggybacks on the JSONL `model` field for its "current"
+ * indicator. We deliberately do NOT expose an effort selector: Claude
+ * Code's TUI doesn't have a `/effort` slash command, so an inline
+ * `/effort high` ends up corrupted in the prompt and never actually
+ * adjusts anything (you'd see weirdness like "/effort effort high"
+ * echoed back).
  */
-export default function ChatToolbar({ currentModel, canSend, onSend, rightChildren }: Props) {
+export default function ChatToolbar({
+  currentModel,
+  canSend,
+  onSend,
+  effort,
+  onEffortChange,
+  thinking,
+  onThinkingToggle,
+  rightChildren
+}: Props) {
   const [modelOpen, setModelOpen] = useState(false)
+  const [effortOpen, setEffortOpen] = useState(false)
   const [commandsOpen, setCommandsOpen] = useState(false)
-  const [effort, setEffort] = useState<Effort>('medium')
   const [pendingConfirm, setPendingConfirm] = useState<string | null>(null)
   const modelRef = useRef<HTMLDivElement>(null)
+  const effortRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<HTMLDivElement>(null)
 
   // Dismiss popovers on outside click.
   useEffect(() => {
-    if (!modelOpen && !commandsOpen) return
+    if (!modelOpen && !effortOpen && !commandsOpen) return
     const onClick = (e: MouseEvent): void => {
       const target = e.target as Node
       if (modelOpen && modelRef.current && !modelRef.current.contains(target)) {
         setModelOpen(false)
+      }
+      if (effortOpen && effortRef.current && !effortRef.current.contains(target)) {
+        setEffortOpen(false)
       }
       if (commandsOpen && commandsRef.current && !commandsRef.current.contains(target)) {
         setCommandsOpen(false)
@@ -132,17 +165,12 @@ export default function ChatToolbar({ currentModel, canSend, onSend, rightChildr
     }
     window.addEventListener('mousedown', onClick)
     return () => window.removeEventListener('mousedown', onClick)
-  }, [modelOpen, commandsOpen])
+  }, [modelOpen, effortOpen, commandsOpen])
 
   const pickModel = (m: Model): void => {
     setModelOpen(false)
     // Claude Code accepts `/model <name>` at the prompt.
     onSend(`/model ${m}`)
-  }
-
-  const pickEffort = (e: Effort): void => {
-    setEffort(e)
-    onSend(`/effort ${e}`)
   }
 
   const runCommand = (cmd: CommandDef): void => {
@@ -215,31 +243,81 @@ export default function ChatToolbar({ currentModel, canSend, onSend, rightChildr
         ) : null}
       </div>
 
-      {/* Effort segmented control */}
-      <div className="flex items-center gap-1">
-        <Zap size={11} strokeWidth={1.75} className="text-text-4" />
-        <span className="font-mono text-[10px] text-text-4">effort</span>
-        <div className="ml-1 flex overflow-hidden border border-border-soft" style={{ borderRadius: 'var(--radius-sm)' }}>
-          {EFFORT_OPTIONS.map((opt) => {
-            const active = effort === opt.id
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => pickEffort(opt.id)}
-                disabled={!canSend}
-                className={`px-1.5 py-0.5 font-mono text-[10px] transition ${
-                  active
-                    ? 'bg-accent-500/20 text-accent-400'
-                    : 'bg-bg-2 text-text-3 hover:bg-bg-3 hover:text-text-1'
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                {opt.label}
-              </button>
-            )
-          })}
-        </div>
+      {/* Effort selector — real `/effort <level>` slash command. */}
+      <div ref={effortRef} className="relative">
+        <button
+          type="button"
+          onClick={() => setEffortOpen((v) => !v)}
+          disabled={!canSend}
+          className="flex items-center gap-1.5 rounded-sm border border-border-soft bg-bg-2 px-2 py-1 font-mono text-[11px] text-text-2 hover:border-border-mid hover:text-text-1 disabled:cursor-not-allowed disabled:opacity-50"
+          title="reasoning budget (/effort)"
+        >
+          <Zap size={11} strokeWidth={1.75} className="text-accent-400" />
+          {effort}
+          <ChevronDown
+            size={10}
+            strokeWidth={1.75}
+            className={`text-text-4 transition-transform ${effortOpen ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {effortOpen ? (
+          <div
+            className="absolute left-0 top-[calc(100%+4px)] z-20 w-56 overflow-hidden border border-border-mid bg-bg-2 shadow-pop df-fade-in"
+            style={{ borderRadius: 'var(--radius-sm)' }}
+          >
+            {EFFORT_OPTIONS.map((opt) => {
+              const active = effort === opt.id
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setEffortOpen(false)
+                    onEffortChange(opt.id)
+                  }}
+                  className={`flex w-full items-start gap-2 px-2.5 py-2 text-left hover:bg-bg-3 ${
+                    active ? 'bg-accent-500/10' : ''
+                  }`}
+                >
+                  <Zap
+                    size={12}
+                    strokeWidth={1.75}
+                    className={active ? 'mt-0.5 text-accent-400' : 'mt-0.5 text-text-3'}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-[11px] text-text-1">{opt.label}</span>
+                      {active ? (
+                        <Check size={10} strokeWidth={2} className="text-accent-400" />
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-[10px] leading-snug text-text-3">
+                      {opt.hint}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
+
+      {/* Thinking on/off — triggers Alt+T in the TUI which flips
+          `alwaysThinkingEnabled` for this session. Binary, not a level. */}
+      <button
+        type="button"
+        onClick={onThinkingToggle}
+        disabled={!canSend}
+        className={`flex items-center gap-1.5 rounded-sm border px-2 py-1 font-mono text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+          thinking
+            ? 'border-accent-500 bg-accent-500/15 text-accent-400'
+            : 'border-border-soft bg-bg-2 text-text-3 hover:border-border-mid hover:text-text-1'
+        }`}
+        title="toggle extended thinking (Alt+T)"
+      >
+        <span className={`h-1.5 w-1.5 rounded-full ${thinking ? 'bg-accent-400' : 'bg-text-4'}`} />
+        thinking
+      </button>
 
       {/* Commands palette */}
       <div ref={commandsRef} className="relative">
@@ -312,7 +390,7 @@ export default function ChatToolbar({ currentModel, canSend, onSend, rightChildr
   )
 }
 
-export { type Model, type Effort }
+export { type Model }
 export function formatCost(cost: number | undefined): string {
   if (typeof cost !== 'number') return '$0.00'
   return `$${cost.toFixed(2)}`

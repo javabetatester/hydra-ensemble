@@ -34,6 +34,13 @@ export class PtyStreamAnalyzer {
   // claude renders ANY new marker after the submit, or implicitly
   // when the recentText buffer rolls past it.
   private submitMark: number | null = null
+  /** ms timestamp the current submitMark was set. After
+   *  `submitMarkTtlMs` we clear the mark unconditionally — failsafe so
+   *  a misfired optimistic flip can't strand the pill in 'thinking'
+   *  forever (e.g. if claude consumed our input without ever drawing
+   *  the working footer). */
+  private submitMarkAt = 0
+  private static readonly submitMarkTtlMs = 5000
 
   // UTF-8 decoder for text runs between ANSI escapes. stream:true so
   // a multi-byte sequence split across feed() calls is buffered and
@@ -144,8 +151,10 @@ export class PtyStreamAnalyzer {
     // writes any fresh marker past this point.
     if (state === 'thinking' || state === 'generating') {
       this.submitMark = this.recentText.length
+      this.submitMarkAt = Date.now()
     } else {
       this.submitMark = null
+      this.submitMarkAt = 0
     }
   }
 
@@ -175,6 +184,7 @@ export class PtyStreamAnalyzer {
     this.frameText = ''
     this.recentText = ''
     this.submitMark = null
+    this.submitMarkAt = 0
     if (this.frameTimer !== null) {
       clearTimeout(this.frameTimer)
       this.frameTimer = null
@@ -327,6 +337,20 @@ export class PtyStreamAnalyzer {
         lower.lastIndexOf('/ for commands'),
         lower.lastIndexOf('shift+tab to cycle')
       )
+      // Failsafe: if the optimistic flip has been live for too long
+      // without claude rendering any new marker, the submit was probably
+      // a no-op (e.g. slash command claude consumed silently). Drop the
+      // mark so we fall back to raw position-based detection — better to
+      // resync to "userInput" using the stale prompt than stay stuck in
+      // "thinking" forever.
+      if (
+        this.submitMark !== null &&
+        Date.now() - this.submitMarkAt > PtyStreamAnalyzer.submitMarkTtlMs
+      ) {
+        this.submitMark = null
+        this.submitMarkAt = 0
+      }
+
       // Demote pre-submit markers: anything the user hasn't caused is
       // stale once they press Enter. Prevents the idle hint from the
       // just-closed frame from yanking the card back to 'userInput'

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
   ChangedFile,
+  ClaudeCommandsPayload,
   DirEntry,
   HydraEnsembleApi,
   FileContent,
@@ -64,7 +65,9 @@ const api: HydraEnsembleApi = {
       on<{ sessionId: string }>('session:transcriptChanged', handler)
   },
   claude: {
-    resolvePath: () => ipcRenderer.invoke('claude:resolvePath')
+    resolvePath: () => ipcRenderer.invoke('claude:resolvePath'),
+    listCommands: (cwd: string | null): Promise<ClaudeCommandsPayload> =>
+      ipcRenderer.invoke('claude:listCommands', cwd)
   },
   git: {
     repoRoot: (cwd: string) => ipcRenderer.invoke('git:repoRoot', cwd),
