@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { EditorState, type Extension, Compartment } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { highlightSelectionMatches } from '@codemirror/search'
+import { highlightSelectionMatches, search } from '@codemirror/search'
 import { bracketMatching, indentOnInput } from '@codemirror/language'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { vim, Vim } from '@replit/codemirror-vim'
@@ -91,6 +91,15 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
       history(),
       bracketMatching(),
       indentOnInput(),
+      // Installs the SearchState StateField that setSearchQuery /
+      // findNext / findPrevious / replaceNext / replaceAll from
+      // @codemirror/search dispatch against. Without this extension the
+      // Ctrl+F overlay pushes queries into a black hole and Enter throws,
+      // which in turn lets the top-level ErrorBoundary catch + render its
+      // fallback UI. We hide the built-in panel (`top: false` won't help
+      // — we skip rendering their panel at all by not wiring the keymap;
+      // InlineSearch drives the commands directly).
+      search({ top: false }),
       highlightSelectionMatches(),
       keymap.of([
         ...defaultKeymap,
