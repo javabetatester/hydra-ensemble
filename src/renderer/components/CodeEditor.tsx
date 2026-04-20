@@ -168,8 +168,16 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
               )
             })}
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {sideTab === 'files' ? (
+          {/* Both panes stay mounted — we toggle visibility with `hidden`
+              instead of unmounting so switching tabs doesn't tear down the
+              file tree (collapses all open dirs + reruns listDir on disk)
+              or re-fetch the git status from scratch. That churn was
+              visibly freezing the UI on rapid toggling. */}
+          <div className="relative min-h-0 flex-1 overflow-hidden">
+            <div
+              className={`absolute inset-0 ${sideTab === 'files' ? '' : 'hidden'}`}
+              aria-hidden={sideTab !== 'files'}
+            >
               <div className="df-scroll h-full overflow-y-auto">
                 {root ? (
                   <FileTree root={root} onOpenFile={(p) => void openFile(p)} />
@@ -183,9 +191,13 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                   </div>
                 )}
               </div>
-            ) : (
+            </div>
+            <div
+              className={`absolute inset-0 ${sideTab === 'changes' ? '' : 'hidden'}`}
+              aria-hidden={sideTab !== 'changes'}
+            >
               <GitChangesPanel cwd={root} />
-            )}
+            </div>
           </div>
         </aside>
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-1">

@@ -39,14 +39,20 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
   const vimCompartment = useRef(new Compartment())
   const saveRef = useRef(onSave)
 
-  // keep the `:w` handler current if onSave changes between renders
+  // keep the `:w` handler current if onSave changes between renders.
+  // Store a *stable* bridge in the module-level holder and point it at the
+  // live ref. Previously the cleanup built a NEW arrow to compare against —
+  // always unequal, so the holder was never cleared, leaking closures.
   useEffect(() => {
     saveRef.current = onSave
-    activeSaveHandler = () => saveRef.current()
+  })
+  useEffect(() => {
+    const bridge = (): void => saveRef.current()
+    activeSaveHandler = bridge
     return () => {
-      if (activeSaveHandler === (() => saveRef.current())) activeSaveHandler = null
+      if (activeSaveHandler === bridge) activeSaveHandler = null
     }
-  }, [onSave])
+  }, [])
 
   // One-time editor construction. Document changes after open are pushed via
   // the second effect (path change → reset doc + language).
@@ -103,16 +109,11 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Swap doc + language when the active file changes.
+  // Load + apply the language extension only when the PATH changes. Previously
+  // this was combined with the doc-sync effect below, which made every single
+  // keystroke (new `initial` prop) re-trigger loadLanguageFor + reconfigure.
+  // On a large file that reconfigure is heavy enough to freeze the renderer.
   useEffect(() => {
-    const view = viewRef.current
-    if (!view) return
-    const current = view.state.doc.toString()
-    if (current !== initial) {
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: initial }
-      })
-    }
     let cancelled = false
     void loadLanguageFor(path).then((ext) => {
       if (cancelled || !viewRef.current) return
@@ -123,7 +124,21 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
     return () => {
       cancelled = true
     }
-  }, [path, initial])
+  }, [path])
+
+  // Sync the editor doc when `initial` diverges from the in-editor content.
+  // The `current !== initial` guard keeps our own updateListener round-trip
+  // from replaying — when the user types we push the new string back up as
+  // `initial`, and without the guard we'd dispatch it right back in.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    const current = view.state.doc.toString()
+    if (current === initial) return
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: initial }
+    })
+  }, [initial])
 
   // Toggle vim extension without rebuilding the editor.
   useEffect(() => {
