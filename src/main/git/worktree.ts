@@ -162,6 +162,10 @@ export class WorktreeService {
    * `staged: true` pulls from the index (HEAD..index); `staged: false`
    * pulls worktree changes (index..worktree). Untracked files return a
    * synthetic "added" diff so the UI can show them before staging.
+   *
+   * Diffs are truncated server-side at DIFF_SIZE_LIMIT chars — package-lock
+   * style monsters (5-20MB) used to cross the IPC bridge and lock the
+   * renderer. Callers see a short trailing marker when this trips.
    */
   async getDiff(
     cwd: string,
@@ -185,11 +189,11 @@ export class WorktreeService {
         const show = await this.runGit(['-C', cwd, 'diff', '--no-color', '--no-index', '/dev/null', filePath])
         // --no-index always returns 1 on differences; treat that as success.
         if (show.stdout.length > 0) {
-          return { ok: true, value: show.stdout }
+          return { ok: true, value: cap(show.stdout) }
         }
       }
     }
-    return { ok: true, value: res.stdout }
+    return { ok: true, value: cap(res.stdout) }
   }
 
   /** `git add -- <path>...` — stages the given files (or the whole tree if empty). */
@@ -351,6 +355,22 @@ export class WorktreeService {
       }
     })
   }
+}
+
+/** Anything past this is dropped with a footer so the renderer never has
+ *  to parse / paint a multi-megabyte diff blob (package-lock.json staged
+ *  changes alone can hit 15MB and freeze Electron's IPC serializer). */
+const DIFF_SIZE_LIMIT = 512 * 1024 // 512 KB
+
+function cap(diff: string): string {
+  if (diff.length <= DIFF_SIZE_LIMIT) return diff
+  const kept = diff.slice(0, DIFF_SIZE_LIMIT)
+  const droppedBytes = diff.length - DIFF_SIZE_LIMIT
+  return (
+    kept +
+    `\n\n[diff truncated — ${droppedBytes.toLocaleString()} more bytes hidden ` +
+    `to keep the UI responsive; open the file directly to see the full contents]\n`
+  )
 }
 
 async function isManagedPath(p: string): Promise<boolean> {

@@ -45,6 +45,16 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const [previewMd, setPreviewMd] = useState(false)
   // Which sidebar pane is active — files tree or git changes.
   const [sideTab, setSideTab] = useState<SideTab>('files')
+  // Lazy-mount guard for the git changes pane. Mounting it immediately
+  // fires a `git status` + `git diff` the moment the editor opens, which
+  // in a repo with a huge lockfile staged can ship megabytes across the
+  // IPC bridge and kill the renderer. We only mount it after the user
+  // first asks for it; once mounted, it stays resident so the `hidden`
+  // toggle does its job (no more remount-per-click storms).
+  const [changesEverOpened, setChangesEverOpened] = useState(false)
+  useEffect(() => {
+    if (sideTab === 'changes') setChangesEverOpened(true)
+  }, [sideTab])
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
@@ -208,7 +218,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
               className={`absolute inset-0 ${sideTab === 'changes' ? '' : 'hidden'}`}
               aria-hidden={sideTab !== 'changes'}
             >
-              <GitChangesPanel cwd={root} />
+              {changesEverOpened ? <GitChangesPanel cwd={root} /> : null}
             </div>
           </div>
         </aside>
