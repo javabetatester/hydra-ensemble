@@ -56,6 +56,9 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        // If the CodeMirror search / replace panel is visible, Esc belongs
+        // to it (closes the panel). Don't tear down the whole editor.
+        if (document.querySelector('.cm-panels .cm-search')) return
         onClose()
         return
       }

@@ -27,7 +27,12 @@ import NewSessionDialog from './components/NewSessionDialog'
 import TerminalsPanel from './components/TerminalsPanel'
 import WindowControls from './components/WindowControls'
 import { useSpawnDialog } from './state/spawn'
-import { useSlidePanel } from './state/panels'
+import {
+  useSlidePanel,
+  usePanelSize,
+  PANEL_WIDTH_MIN,
+  PANEL_WIDTH_MAX
+} from './state/panels'
 import { useKeybinds, resolveBind } from './state/keybinds'
 import { comboFromEvent, matchesCombo } from './lib/keybind'
 import { isMac } from './lib/platform'
@@ -63,6 +68,8 @@ export default function App() {
   const setActive = useSessions((s) => s.setActive)
 
   const activePanel = useSlidePanel((s) => s.current)
+  const panelWidthFraction = usePanelSize((s) => s.widthFraction)
+  const setPanelWidthFraction = usePanelSize((s) => s.setWidthFraction)
   const openPanel = useSlidePanel((s) => s.open)
   const closePanel = useSlidePanel((s) => s.close)
   const togglePanelFor = useSlidePanel((s) => s.toggle)
@@ -357,14 +364,52 @@ export default function App() {
             ) : null}
           </div>
 
+          {/* Resize handle — grabbable 4px strip on the slide pane's left
+              edge. Only rendered when the pane is open. Drag to pick a new
+              width fraction; release commits to the persisted store. */}
+          {activePanel ? (
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize side panel"
+              className="relative z-20 w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent-500/30 active:bg-accent-500/60"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const container = e.currentTarget.parentElement
+                if (!container) return
+                const rect = container.getBoundingClientRect()
+                const onMove = (ev: MouseEvent): void => {
+                  // Fraction of the main column the pane should occupy,
+                  // measured from its RIGHT edge back to the cursor.
+                  const distance = rect.right - ev.clientX
+                  const fraction = distance / rect.width
+                  setPanelWidthFraction(fraction)
+                }
+                const onUp = (): void => {
+                  document.removeEventListener('mousemove', onMove)
+                  document.removeEventListener('mouseup', onUp)
+                  document.body.style.userSelect = ''
+                }
+                document.body.style.userSelect = 'none'
+                document.addEventListener('mousemove', onMove)
+                document.addEventListener('mouseup', onUp)
+              }}
+              onDoubleClick={() => setPanelWidthFraction(0.52)}
+              title="Drag to resize · double-click to reset"
+            />
+          ) : null}
+
           {/* Unified slide pane — hosts whichever of editor / dashboard /
-              watchdogs / PR is currently active. Width animates to 52% on
-              open, 0% on close. One slot, mutually exclusive. */}
+              watchdogs / PR is currently active. Width is user-resizable
+              and persisted; the pane collapses to 0 when closed. */}
           <div
-            className="relative flex shrink-0 flex-col overflow-hidden border-l transition-[width,border-color,opacity] duration-300 ease-out"
+            className={`relative flex shrink-0 flex-col overflow-hidden border-l ${
+              activePanel ? 'border-border-mid' : 'border-transparent'
+            } ${activePanel ? '' : 'transition-[width,opacity] duration-300 ease-out'}`}
             style={{
-              width: activePanel ? '52%' : '0%',
-              borderLeftColor: activePanel ? 'var(--color-border-mid)' : 'transparent',
+              width: activePanel ? `${(panelWidthFraction * 100).toFixed(2)}%` : '0%',
+              minWidth: activePanel ? `${(PANEL_WIDTH_MIN * 100).toFixed(0)}%` : '0%',
+              maxWidth: activePanel ? `${(PANEL_WIDTH_MAX * 100).toFixed(0)}%` : '0%',
               opacity: activePanel ? 1 : 0
             }}
             aria-hidden={!activePanel}
