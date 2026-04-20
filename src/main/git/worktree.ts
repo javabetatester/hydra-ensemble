@@ -326,11 +326,12 @@ export class WorktreeService {
         if (k.startsWith('GIT_')) continue
         if (v !== undefined) env[k] = v
       }
-      // Neutralise anything that makes git go interactive: pagers waiting
-      // on stdin that never comes (pager.status = less, pager.diff = delta,
-      // etc.) and credential / auth prompts. Without this a worktree with
-      // `pager.diff = less` freezes the whole renderer because the IPC
-      // promise never resolves.
+      // Neutralise anything that makes git go interactive or spawns
+      // persistent grandchildren we can't easily clean up:
+      //   pagers  → GIT_PAGER/PAGER=cat           (prevents `less` stdin waits)
+      //   prompts → GIT_TERMINAL_PROMPT=0         (no credential dialog)
+      //   locks   → GIT_OPTIONAL_LOCKS=0          (don't fight a concurrent git)
+      //   fsmon   → core.fsmonitor/useBuiltinFSMonitor=false (no daemon fork)
       env['GIT_PAGER'] = 'cat'
       env['PAGER'] = 'cat'
       env['GIT_TERMINAL_PROMPT'] = '0'
@@ -340,33 +341,69 @@ export class WorktreeService {
         env,
         stdio: [hasStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        // Run in its own process group so we can SIGTERM the whole tree
+        // on timeout — otherwise an fsmonitor / credential daemon spawned
+        // by git survives long after git itself exited.
+        detached: process.platform !== 'win32',
       }
       if (opts.cwd) spawnOpts.cwd = opts.cwd
 
-      // --no-pager belongs BEFORE the subcommand; it's a git-level flag,
-      // not a subcommand option. Belt to the GIT_PAGER=cat braces above.
-      const finalArgs = ['--no-pager', ...args]
+      // --no-pager + -c disables for THIS invocation, no global mutation.
+      const finalArgs = [
+        '--no-pager',
+        '-c',
+        'core.fsmonitor=false',
+        '-c',
+        'core.useBuiltinFSMonitor=false',
+        '-c',
+        'credential.helper=',
+        ...args,
+      ]
 
       const child = spawn('git', finalArgs, spawnOpts)
+      if (spawnOpts.detached) child.unref()
+
       let stdout = ''
       let stderr = ''
       let settled = false
+
+      const cleanup = (): void => {
+        // Tear pipes down explicitly — some fds linger otherwise and pile
+        // up across many invocations, eventually hitting the OS fd ceiling.
+        try {
+          child.stdout?.destroy()
+        } catch {
+          /* already closed */
+        }
+        try {
+          child.stderr?.destroy()
+        } catch {
+          /* already closed */
+        }
+      }
+
       const settle = (result: SpawnResult): void => {
         if (settled) return
         settled = true
+        cleanup()
         resolve(result)
       }
 
-      // 20s hard ceiling — a git op that hasn't produced a result by now is
-      // stuck (network prompt, missing credential helper, huge repo on a
-      // cold cache). Better to surface a clear error than leave the UI
-      // spinning forever.
       const timer = setTimeout(() => {
-        child.kill('SIGTERM')
+        // Kill the whole process group — covers the helper daemons.
+        try {
+          if (spawnOpts.detached && typeof child.pid === 'number') {
+            process.kill(-child.pid, 'SIGTERM')
+          } else {
+            child.kill('SIGTERM')
+          }
+        } catch {
+          /* already dead */
+        }
         settle({
           code: -1,
           stdout,
-          stderr: stderr || `git ${finalArgs[1] ?? ''} timed out after 20s`,
+          stderr: stderr || `git ${finalArgs[finalArgs.length - args.length] ?? ''} timed out after 20s`,
         })
       }, 20_000)
 
@@ -384,9 +421,6 @@ export class WorktreeService {
       // pipes to also close, which can hang forever when a grandchild
       // helper (fsmonitor daemon, credential-cache, gpg-agent) inherits
       // our pipes and keeps holding them open after git itself exits.
-      // The IPC promise was never resolving in that case — hence the
-      // spinner that stayed stuck on 'working tree clean' even after the
-      // underlying git op had already printed its output.
       child.on('exit', (code) => {
         clearTimeout(timer)
         settle({ code: code ?? -1, stdout, stderr })
