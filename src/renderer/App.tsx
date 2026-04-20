@@ -40,6 +40,7 @@ import { useGh } from './state/gh'
 import { useToolkit } from './state/toolkit'
 import { useWatchdog } from './state/watchdog'
 import { fmtShortcut, hasMod } from './lib/platform'
+import logoUrl from './assets/logo.png'
 
 export default function App() {
   const [claudePath, setClaudePath] = useState<string | null | undefined>(undefined)
@@ -449,11 +450,15 @@ function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
       <div className="w-full max-w-2xl df-fade-in">
         {/* Hero */}
         <div className="mb-8 text-center">
-          <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
+          <div className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center">
             <div className="absolute inset-0 animate-ping rounded-full bg-accent-500/20" />
-            <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent-500/30 to-accent-700/30 ring-1 ring-accent-500/40">
-              <div className="h-3 w-3 rounded-full bg-accent-400 df-pulse" />
-            </div>
+            <div className="absolute inset-1 rounded-full bg-accent-500/10 df-pulse" />
+            <img
+              src={logoUrl}
+              alt="Hydra Ensemble"
+              className="relative h-16 w-16 rounded-full"
+              draggable={false}
+            />
           </div>
           <h1 className="mb-2 text-2xl font-semibold tracking-tight text-text-1">
             Run Claude agents in parallel.
