@@ -35,6 +35,7 @@ import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
 import { useProjects } from './state/projects'
+import { useTranscripts } from './state/transcripts'
 import { useGh } from './state/gh'
 import { useToolkit } from './state/toolkit'
 import { useWatchdog } from './state/watchdog'
@@ -68,6 +69,7 @@ export default function App() {
   const initToolkit = useToolkit((s) => s.init)
   const initWatchdog = useWatchdog((s) => s.init)
   const initProjects = useProjects((s) => s.init)
+  const initTranscripts = useTranscripts((s) => s.init)
   const currentProject = useProjects((s) => s.projects.find((p) => p.path === s.currentPath))
 
   // Keep useGh's cwd in sync when the PR panel is active so refresh works.
@@ -83,8 +85,9 @@ export default function App() {
     void initToolkit()
     void initWatchdog()
     void initProjects()
+    initTranscripts()
     void window.api.claude.resolvePath().then(setClaudePath)
-  }, [initSessions, initToolkit, initWatchdog, initProjects])
+  }, [initSessions, initToolkit, initWatchdog, initProjects, initTranscripts])
 
   // Action handler registry — keyed by ACTIONS id. Edit a binding in the
   // keybinds editor and the dispatcher below picks it up automatically.

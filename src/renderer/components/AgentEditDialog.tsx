@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { X, Check, Shuffle } from 'lucide-react'
-import type { SessionMeta } from '../../shared/types'
+import { X, Check, Shuffle, MessageSquare, TerminalSquare } from 'lucide-react'
+import type { SessionMeta, SessionViewMode } from '../../shared/types'
+import { useSessions } from '../state/sessions'
 import {
   AGENT_COLORS,
   NFT_AVATAR_URLS,
@@ -20,6 +21,7 @@ export default function AgentEditDialog({ session, onClose }: Props) {
   const [avatar, setAvatar] = useState<string>('')
   const [accentColor, setAccentColor] = useState<string>('')
   const [description, setDescription] = useState('')
+  const [viewMode, setViewMode] = useState<SessionViewMode>('cli')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function AgentEditDialog({ session, onClose }: Props) {
     setAvatar(session.avatar || defaultAgentAvatar(session.id))
     setAccentColor(session.accentColor || defaultAgentColor(session.id))
     setDescription(session.description ?? '')
+    setViewMode(session.viewMode ?? 'cli')
     requestAnimationFrame(() => inputRef.current?.focus())
   }, [session])
 
@@ -46,8 +49,13 @@ export default function AgentEditDialog({ session, onClose }: Props) {
       name: name.trim() || session.name,
       avatar,
       accentColor,
-      description: description.trim()
+      description: description.trim(),
+      viewMode
     })
+    // Reflect the new view mode locally so the session pane re-renders
+    // into the chosen layout without waiting for the persisted change
+    // to round-trip through `session:changed`.
+    useSessions.getState().patchSession(session.id, { viewMode })
     onClose()
   }
 
@@ -163,6 +171,45 @@ export default function AgentEditDialog({ session, onClose }: Props) {
                   aria-label={`accent ${c}`}
                 />
               ))}
+            </div>
+          </div>
+
+          {/* view mode */}
+          <div>
+            <label className="df-label mb-1.5 block">view</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('cli')}
+                className={`flex items-center gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  viewMode === 'cli'
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <TerminalSquare
+                  size={14}
+                  strokeWidth={1.75}
+                  className={viewMode === 'cli' ? 'text-accent-400' : 'text-text-3'}
+                />
+                <span className="text-xs text-text-1">cli</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('visual')}
+                className={`flex items-center gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  viewMode === 'visual'
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <MessageSquare
+                  size={14}
+                  strokeWidth={1.75}
+                  className={viewMode === 'visual' ? 'text-accent-400' : 'text-text-3'}
+                />
+                <span className="text-xs text-text-1">visual</span>
+              </button>
             </div>
           </div>
         </div>

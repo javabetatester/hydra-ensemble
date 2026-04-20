@@ -63,6 +63,10 @@ export class SessionManager {
     return [...this.sessions.values()]
   }
 
+  findById(id: string): SessionMeta | undefined {
+    return this.sessions.get(id)
+  }
+
   /**
    * Respawn PTYs for all persisted sessions. Safe to call more than once;
    * subsequent calls are no-ops. Call after the renderer has mounted and
@@ -117,7 +121,8 @@ export class SessionManager {
       ptyId,
       state: 'idle',
       avatar: opts.avatar,
-      accentColor: opts.accentColor
+      accentColor: opts.accentColor,
+      viewMode: opts.viewMode ?? 'cli'
     }
 
     const spawn = this.spawnFor(meta, {
@@ -207,6 +212,7 @@ export class SessionManager {
     if (patch.avatar !== undefined) meta.avatar = patch.avatar
     if (patch.accentColor !== undefined) meta.accentColor = patch.accentColor
     if (patch.description !== undefined) meta.description = patch.description.trim()
+    if (patch.viewMode !== undefined) meta.viewMode = patch.viewMode
     this.persist()
     this.notifyChange()
   }

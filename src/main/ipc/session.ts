@@ -1,7 +1,13 @@
 import { ipcMain } from 'electron'
 import type { SessionManager } from '../session/manager'
 import type { AnalyzerManager } from '../pty/analyzer-manager'
-import type { SessionCreateOptions, SessionState, SessionUpdate } from '../../shared/types'
+import { readTranscript } from '../claude/transcript-parser'
+import type {
+  SessionCreateOptions,
+  SessionState,
+  SessionUpdate,
+  TranscriptPayload
+} from '../../shared/types'
 
 export function registerSessionIpc(
   manager: SessionManager,
@@ -25,6 +31,20 @@ export function registerSessionIpc(
     'session:syncState',
     (_evt, payload: { id: string; state: SessionState }) => {
       analyzer.syncState(payload.id, payload.state)
+    }
+  )
+  ipcMain.handle(
+    'session:readTranscript',
+    async (_evt, payload: { id: string }): Promise<TranscriptPayload> => {
+      const meta = manager.findById(payload.id)
+      if (!meta) {
+        return { sessionId: payload.id, path: null, messages: [] }
+      }
+      return readTranscript({
+        sessionId: meta.id,
+        claudeConfigDir: meta.claudeConfigDir,
+        cwd: meta.cwd
+      })
     }
   )
 }

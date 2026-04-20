@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { X, FolderOpen, GitBranch, Plus, Sparkles, Info, Folder } from 'lucide-react'
+import {
+  X,
+  FolderOpen,
+  GitBranch,
+  Plus,
+  Sparkles,
+  Info,
+  Folder,
+  MessageSquare,
+  TerminalSquare
+} from 'lucide-react'
 import { useProjects } from '../state/projects'
 import { useSessions } from '../state/sessions'
-import type { Worktree } from '../../shared/types'
+import type { SessionViewMode, Worktree } from '../../shared/types'
 
 interface Props {
   open: boolean
@@ -33,6 +43,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
   const [newWtBranch, setNewWtBranch] = useState('')
   const [creating, setCreating] = useState(false)
   const [showExplainer, setShowExplainer] = useState(false)
+  const [viewMode, setViewMode] = useState<SessionViewMode>('cli')
 
   // Sync picked project with current when dialog opens
   useEffect(() => {
@@ -43,6 +54,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
     setShowNewWt(false)
     setNewWtName('')
     setNewWtBranch('')
+    setViewMode('cli')
   }, [open, currentPath])
 
   // Refresh worktrees when project changes
@@ -80,7 +92,8 @@ export default function NewSessionDialog({ open, onClose }: Props) {
         cwd,
         worktreePath: pickedWorktree && !pickedWorktree.isMain ? pickedWorktree.path : undefined,
         branch,
-        name: name.trim() || undefined
+        name: name.trim() || undefined,
+        viewMode
       })
       onClose()
     } finally {
@@ -320,6 +333,58 @@ export default function NewSessionDialog({ open, onClose }: Props) {
               placeholder="auto: session-N"
               className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
             />
+          </div>
+
+          {/* View mode selector — CLI (raw xterm) vs visual chat. */}
+          <div>
+            <label className="df-label mb-1.5 block">view</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setViewMode('cli')}
+                className={`flex items-start gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  viewMode === 'cli'
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <TerminalSquare
+                  size={14}
+                  strokeWidth={1.75}
+                  className={viewMode === 'cli' ? 'mt-0.5 text-accent-400' : 'mt-0.5 text-text-3'}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-text-1">cli</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-text-3">
+                    raw xterm — every key goes straight to claude, slash commands, shortcuts, all of it.
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('visual')}
+                className={`flex items-start gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  viewMode === 'visual'
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <MessageSquare
+                  size={14}
+                  strokeWidth={1.75}
+                  className={viewMode === 'visual' ? 'mt-0.5 text-accent-400' : 'mt-0.5 text-text-3'}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-text-1">visual</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-text-3">
+                    rendered chat — markdown, tool calls, clickable file refs, usage inline.
+                  </div>
+                </div>
+              </button>
+            </div>
+            <div className="mt-1.5 font-mono text-[10px] text-text-4">
+              you can toggle this per session at any time from the pane header.
+            </div>
           </div>
         </div>
 

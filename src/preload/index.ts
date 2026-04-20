@@ -19,6 +19,7 @@ import type {
   SessionUpdate,
   ToolkitItem,
   ToolkitRunResult,
+  TranscriptPayload,
   WatchdogFireEvent,
   WatchdogRule,
   Worktree
@@ -53,10 +54,14 @@ const api: HydraEnsembleApi = {
     restart: (id: string) => ipcRenderer.invoke('session:restart', { id }),
     syncState: (id: string, state: SessionState) =>
       ipcRenderer.invoke('session:syncState', { id, state }),
+    readTranscript: (id: string): Promise<TranscriptPayload> =>
+      ipcRenderer.invoke('session:readTranscript', { id }),
     onChange: (handler) => on<SessionMeta[]>('session:changed', handler),
     onState: (handler) =>
       on<{ sessionId: string; state: SessionState }>('session:state', handler),
-    onJsonl: (handler) => on<JsonlUpdate>('session:jsonl', handler)
+    onJsonl: (handler) => on<JsonlUpdate>('session:jsonl', handler),
+    onTranscriptChanged: (handler) =>
+      on<{ sessionId: string }>('session:transcriptChanged', handler)
   },
   claude: {
     resolvePath: () => ipcRenderer.invoke('claude:resolvePath')

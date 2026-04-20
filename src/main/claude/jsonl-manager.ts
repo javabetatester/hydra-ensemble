@@ -32,6 +32,13 @@ export class JsonlManager {
       onUpdate: (update: JsonlUpdate) => {
         this.window?.webContents.send('session:jsonl', update)
         this.onAnyUpdate?.(update)
+        // Transcript lines arrived — ping the renderer so any open visual
+        // chat view re-fetches the parsed transcript. Debounced at the
+        // watcher level (one emit per consumed chunk) so this is already
+        // cheap; the renderer additionally debounces its refetch.
+        this.window?.webContents.send('session:transcriptChanged', {
+          sessionId: session.id
+        })
       }
     })
     this.watchers.set(session.id, watcher)
