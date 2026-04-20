@@ -131,28 +131,44 @@ export class WorktreeService {
     return { ok: true, value: undefined }
   }
 
-  /** List changed files via `git status --porcelain=v1 -uall`. */
+  /** List changed files via `git status --porcelain=v1 -uall`.
+   *
+   *  Hard-capped at FILE_LIST_LIMIT entries. A directory without a sensible
+   *  .gitignore (think node_modules / .cache / build output) can produce
+   *  hundreds of thousands of untracked rows — serialising that across the
+   *  IPC bridge AND rendering each as a DOM node freezes Electron. We stop
+   *  at the cap and flag the result so the UI can show a "truncated" hint. */
   async listChangedFiles(cwd: string): Promise<GitOpResult<ChangedFile[]>> {
     const res = await this.runGit(['-C', cwd, 'status', '--porcelain=v1', '-uall'])
     if (res.code !== 0) {
       return { ok: false, error: res.stderr.trim() || 'git status failed' }
     }
     const files: ChangedFile[] = []
+    const FILE_LIST_LIMIT = 2000
+    let truncated = false
     for (const rawLine of res.stdout.split('\n')) {
       if (rawLine.length < 3) continue
       const code = rawLine.slice(0, 2)
       const rest = rawLine.slice(3)
       const status = mapStatusCode(code)
       if (!status) continue
-      // Renames look like "old -> new"; keep just the new path.
       const arrow = rest.indexOf(' -> ')
       const filePath = arrow >= 0 ? rest.slice(arrow + 4) : rest
-      // `staged` reflects column 1 of the porcelain code: any non-space,
-      // non-'?' char means the change is in the index. Untracked files
-      // can never be staged until `git add` runs.
       const idx = code[0] ?? ' '
       const staged = idx !== ' ' && idx !== '?'
       files.push({ path: filePath, status, staged })
+      if (files.length >= FILE_LIST_LIMIT) {
+        truncated = true
+        break
+      }
+    }
+    if (truncated) {
+      // Sentinel row the UI renders as a distinct "truncated" warning.
+      files.push({
+        path: `… truncated — more than ${FILE_LIST_LIMIT} changed files detected. Add a .gitignore so this directory isn't treated as a chaotic worktree.`,
+        status: 'untracked',
+        staged: false,
+      })
     }
     return { ok: true, value: files }
   }
