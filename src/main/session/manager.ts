@@ -298,8 +298,12 @@ export class SessionManager {
       // browser flow, crash) the bash stays alive, prints the prompt,
       // and the user can either type `claude` to re-enter or use the
       // restart overlay.
+      // Pin --model claude-opus-4-7: the CLI's own default still resolves
+      // to opus 4.6 for some accounts, and Hydra is an orchestrator for
+      // deep-reasoning work — if the user wants sonnet/haiku they can
+      // switch inside the session via `/model`.
       const launch = claudePath
-        ? `unset CLAUDE_CONFIG_DIR; clear && "${claudePath}"\r`
+        ? `unset CLAUDE_CONFIG_DIR; clear && "${claudePath}" --model claude-opus-4-7\r`
         : `clear && echo "[hydra] claude binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)
