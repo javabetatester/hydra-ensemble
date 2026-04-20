@@ -135,9 +135,13 @@ jobs:
           text = path.read_text()
           text = re.sub(r'^pkgver=.*$', f'pkgver={version}', text, flags=re.MULTILINE)
           text = re.sub(r'^pkgrel=.*$', 'pkgrel=1', text, flags=re.MULTILINE)
+          # Rename target MUST match package()'s install line, which uses
+          # ${_pkgname}-${pkgver}.AppImage (i.e. hydra-ensemble-X.Y.Z, with
+          # NO -bin suffix). Previously we wrote hydra-ensemble-bin-X.Y.Z
+          # which downloaded fine but broke `install` at package() time.
           text = re.sub(
               r'^source=\(.*?\)$',
-              f'source=("hydra-ensemble-bin-{version}.AppImage::{appimage_url}")',
+              f'source=("hydra-ensemble-{version}.AppImage::{appimage_url}")',
               text,
               flags=re.MULTILINE | re.DOTALL,
           )
