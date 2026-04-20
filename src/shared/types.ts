@@ -406,7 +406,20 @@ export interface HydraEnsembleApi {
      *  array if the JSONL file hasn't appeared yet. */
     readTranscript: (id: string) => Promise<TranscriptPayload>
     onChange: (handler: (sessions: SessionMeta[]) => void) => () => void
-    onState: (handler: (event: { sessionId: string; state: SessionState }) => void) => () => void
+    onState: (
+      handler: (event: {
+        sessionId: string
+        state: SessionState
+        /** Monotonic counter per sessionId — bumped on every analyzer spawn.
+         *  Renderer rejects events with a generation smaller than the last
+         *  one seen for that session, so a dying analyzer can't overwrite
+         *  a fresh one's state. */
+        generation: number
+        /** Main-process Date.now() at emit time. Tie-breaker inside the same
+         *  generation: an older emittedAt is stale and ignored. */
+        emittedAt: number
+      }) => void
+    ) => () => void
     onJsonl: (handler: (update: JsonlUpdate) => void) => () => void
     /** Fires (debounced) when a session's JSONL file has new lines. */
     onTranscriptChanged: (handler: (event: { sessionId: string }) => void) => () => void

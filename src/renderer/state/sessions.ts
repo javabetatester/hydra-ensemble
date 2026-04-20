@@ -18,6 +18,11 @@ interface SessionsState {
   /** Per-session unread flag — true when an inactive session has received
    *  PTY output since the user last saw it. Cleared on setActive. */
   unread: Record<string, boolean>
+  /** Per-session high-watermark for the state-event (generation, emittedAt)
+   *  pair we last accepted. Incoming events with a strictly older tuple
+   *  are discarded — they came from a disposed analyzer generation and
+   *  applying them would cross-contaminate the pill. */
+  stateHighWater: Record<string, { generation: number; emittedAt: number }>
   setSessions: (s: SessionMeta[]) => void
   setActive: (id: string | null) => void
   patchSession: (id: string, patch: Partial<SessionMeta>) => void
@@ -33,6 +38,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   activeId: null,
   isCreating: false,
   unread: {},
+  stateHighWater: {},
 
   setSessions: (sessions) => {
     // Defensive dedupe: if the backend stream or restore ever ships the
@@ -183,11 +189,41 @@ export const useSessions = create<SessionsState>((set, get) => ({
       if (state.unread[evt.sessionId]) return
       set((prev) => ({ unread: { ...prev.unread, [evt.sessionId]: true } }))
     })
-    window.api.session.onState((evt: { sessionId: string; state: SessionState }) => {
-      const prev = get().sessions.find((s) => s.id === evt.sessionId)
-      get().patchSession(evt.sessionId, { state: evt.state })
+    window.api.session.onState(
+      (evt: {
+        sessionId: string
+        state: SessionState
+        generation: number
+        emittedAt: number
+      }) => {
+        // Reject stale events. An analyzer that was disposed between its
+        // last `feed()` and its frameTimer firing can still queue a state
+        // change; same goes for a state-change callback racing with a
+        // restart. Without this filter, the fresh generation's correct
+        // state would be momentarily overwritten by the zombie's last
+        // emission — visually a pill "twitching" or cross-contaminating
+        // between sessions during quick spawn/destroy cycles.
+        const last = get().stateHighWater[evt.sessionId]
+        if (last) {
+          if (evt.generation < last.generation) return
+          if (evt.generation === last.generation && evt.emittedAt < last.emittedAt) {
+            return
+          }
+        }
+        set((prevState) => ({
+          stateHighWater: {
+            ...prevState.stateHighWater,
+            [evt.sessionId]: {
+              generation: evt.generation,
+              emittedAt: evt.emittedAt
+            }
+          }
+        }))
 
-      if (!prev || get().activeId === evt.sessionId) return
+        const prev = get().sessions.find((s) => s.id === evt.sessionId)
+        get().patchSession(evt.sessionId, { state: evt.state })
+
+        if (!prev || get().activeId === evt.sessionId) return
 
       const sendBoth = (
         kind: 'attention' | 'success',

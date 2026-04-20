@@ -59,7 +59,12 @@ const api: HydraEnsembleApi = {
       ipcRenderer.invoke('session:readTranscript', { id }),
     onChange: (handler) => on<SessionMeta[]>('session:changed', handler),
     onState: (handler) =>
-      on<{ sessionId: string; state: SessionState }>('session:state', handler),
+      on<{
+        sessionId: string
+        state: SessionState
+        generation: number
+        emittedAt: number
+      }>('session:state', handler),
     onJsonl: (handler) => on<JsonlUpdate>('session:jsonl', handler),
     onTranscriptChanged: (handler) =>
       on<{ sessionId: string }>('session:transcriptChanged', handler)

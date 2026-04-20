@@ -13,6 +13,12 @@ export class PtyStreamAnalyzer {
 
   private _state: SessionState = 'idle'
 
+  // Dispose flag — once set, every public entry point (feed, analyzeFrame,
+  // syncExternalState, forceReemit) is a no-op. Belt-and-suspenders against
+  // stray callbacks firing after the session was torn down, which could
+  // otherwise push a stale state into the wrong generation of the pill.
+  private disposed = false
+
   // ANSI parser state
   private inEscape = false
   private escapeBuffer: number[] = []
@@ -24,9 +30,16 @@ export class PtyStreamAnalyzer {
   private frameText = ''
   private frameTimer: ReturnType<typeof setTimeout> | null = null
 
-  // Rolling recent text (last ~2000 chars of plaintext)
+  // Timestamp of the last PTY byte fed in — used by the manager's watchdog
+  // to detect "stuck working" sessions (state=thinking/generating with no
+  // fresh bytes for too long, which usually means a missed transition).
+  private lastFedAt = 0
+
+  // Rolling recent text (last ~8000 chars of plaintext). Bumped from 2000 so
+  // long turns don't roll the working/idle markers out of the comparison
+  // window, which used to freeze the pill mid-state on chatty sessions.
   private recentText = ''
-  private readonly recentTextLimit = 2000
+  private readonly recentTextLimit = 8000
 
   // Position in recentText at the moment the user submitted (pressed
   // Enter). Idle markers ("? for shortcuts" etc.) written before this
@@ -40,7 +53,12 @@ export class PtyStreamAnalyzer {
    *  forever (e.g. if claude consumed our input without ever drawing
    *  the working footer). */
   private submitMarkAt = 0
-  private static readonly submitMarkTtlMs = 5000
+  /** Base TTL. Actual deadline extends every time fresh bytes arrive —
+   *  lastFedAt + base gives a rolling "still-thinking" window that survives
+   *  long tool runs without reverting to the stale idle hint. Hard-capped
+   *  by `submitMarkMaxMs` so a truly silent stall eventually self-heals. */
+  private static readonly submitMarkTtlMs = 8000
+  private static readonly submitMarkMaxMs = 45000
 
   // UTF-8 decoder for text runs between ANSI escapes. stream:true so
   // a multi-byte sequence split across feed() calls is buffered and
@@ -66,6 +84,8 @@ export class PtyStreamAnalyzer {
   }
 
   public feed(input: Uint8Array | Buffer | string): void {
+    if (this.disposed) return
+    this.lastFedAt = Date.now()
     const bytes = this.toBytes(input)
     // Accumulate contiguous text bytes (between ANSI escapes) so the
     // UTF-8 decoder sees them as one chunk — required for multi-byte
@@ -143,6 +163,7 @@ export class PtyStreamAnalyzer {
    * IPC fires — leaving the card stuck on the optimistic guess.
    */
   public syncExternalState(state: SessionState): void {
+    if (this.disposed) return
     this._state = state
     // When the renderer optimistically flips us to a working state
     // (Enter pressed), stamp the current buffer position so the next
@@ -165,6 +186,7 @@ export class PtyStreamAnalyzer {
    * back in sync. Safe to call any time.
    */
   public forceReemit(): void {
+    if (this.disposed) return
     const prev = this._state
     // Run analyzeFrame — if it computes a different state it fires
     // onStateChange normally; otherwise we manually re-fire so the
@@ -173,6 +195,15 @@ export class PtyStreamAnalyzer {
     if (this._state === prev) {
       this.onStateChange?.(this._state)
     }
+  }
+
+  /** Time of the most recent `feed()` call, ms since epoch. 0 if never fed. */
+  public get lastFeedAt(): number {
+    return this.lastFedAt
+  }
+
+  public get isDisposed(): boolean {
+    return this.disposed
   }
 
   /** Reset the analyzer (e.g., when restarting a session). */
@@ -185,6 +216,24 @@ export class PtyStreamAnalyzer {
     this.recentText = ''
     this.submitMark = null
     this.submitMarkAt = 0
+    this.lastFedAt = 0
+    if (this.frameTimer !== null) {
+      clearTimeout(this.frameTimer)
+      this.frameTimer = null
+    }
+  }
+
+  /**
+   * Permanently retire this analyzer. All further entry points become
+   * no-ops. The manager creates a fresh instance for the next generation
+   * of the same session, so a torn-down analyzer must never emit again
+   * — even if a callback was already queued on the event loop before
+   * dispose landed.
+   */
+  public dispose(): void {
+    if (this.disposed) return
+    this.disposed = true
+    this.onStateChange = undefined
     if (this.frameTimer !== null) {
       clearTimeout(this.frameTimer)
       this.frameTimer = null
@@ -268,14 +317,25 @@ export class PtyStreamAnalyzer {
     // CSI ? 1049 l = leave alternate buffer
     if (paramStr === '?1049') {
       if (finalByte === 0x68) {
-        // 'h'
+        // 'h' — new TUI starting (claude launching, or re-entering after a
+        // /quit → `claude` retry). Wipe recentText too, otherwise stale
+        // markers from the previous TUI lifetime (or from a bash session
+        // that printed "esc to interrupt" in some other context) bias the
+        // heuristic against the fresh frame.
         this._alternateBufferActive = true
-        this.frameText = '' // fresh frame
+        this.frameText = ''
+        this.recentText = ''
+        this.submitMark = null
+        this.submitMarkAt = 0
       } else if (finalByte === 0x6c) {
-        // 'l'
+        // 'l' — TUI exited. Same rationale: once claude is gone, any
+        // marker text lingering in the buffer is stale and must not leak
+        // into the next session if the user restarts in-place.
         this._alternateBufferActive = false
         this.frameText = ''
-        // Claude exited — immediate state change
+        this.recentText = ''
+        this.submitMark = null
+        this.submitMarkAt = 0
         this.updateState('idle')
       }
     }
@@ -301,21 +361,58 @@ export class PtyStreamAnalyzer {
   // MARK: - Frame Analysis
 
   private analyzeFrame(): void {
+    if (this.disposed) return
     const text = this.recentText
     const lower = text.toLowerCase()
 
     let newState: SessionState
 
     // 1. Permission prompts — highest priority, override everything.
-    if (lower.includes('allow') && lower.includes('deny')) {
-      newState = 'needsAttention'
-    } else if (lower.includes('[y/n]') || lower.includes('(y/n)')) {
-      newState = 'needsAttention'
-    } else if (
-      lower.includes('do you want to proceed') ||
-      lower.includes('press y to accept') ||
-      lower.includes('esc to reject')
-    ) {
+    //    Anchored on claude's actual prompt copy (all four variants are
+    //    verbatim from the TUI across opus/sonnet/haiku releases). The
+    //    previous "allow" && "deny" heuristic fired on any file output
+    //    that happened to mention those words, which pinned the pill on
+    //    'needsAttention' forever. "❯ 1. yes" is the numbered-choice
+    //    menu used for tool execution prompts; "do you trust the files"
+    //    is the first-run workspace prompt. "esc to reject" is unique
+    //    enough on its own. All of these imply a keypress is literally
+    //    required — any other surface-area keyword is too noisy.
+    // Position of the most recent permission marker, if any. Stale prompts
+    // rolled over by a fresh working/idle footer should NOT trigger — the
+    // keypress has already been given.
+    const attentionMarkers = [
+      'do you want to proceed',
+      'do you trust the files',
+      'press y to accept',
+      'esc to reject',
+      '[y/n]',
+      '(y/n)'
+    ]
+    let lastAttention = -1
+    for (const m of attentionMarkers) {
+      const idx = lower.lastIndexOf(m)
+      if (idx > lastAttention) lastAttention = idx
+    }
+    // Numbered-choice menu ("❯ 1. Yes" / "❯ 1. yes, proceed") uses the
+    // original-case buffer because the arrow glyph is above ASCII.
+    const numberedChoice = text.search(/❯\s*1\.\s*[Yy]es/)
+    if (numberedChoice > lastAttention) lastAttention = numberedChoice
+
+    const lastWorkingEarly = Math.max(
+      lower.lastIndexOf('esc to interrupt'),
+      lower.lastIndexOf('esc to cancel')
+    )
+    const lastIdleEarly = Math.max(
+      lower.lastIndexOf('? for shortcuts'),
+      lower.lastIndexOf('/ for commands'),
+      lower.lastIndexOf('shift+tab to cycle')
+    )
+    const attentionIsFresh =
+      lastAttention >= 0 &&
+      lastAttention > lastWorkingEarly &&
+      lastAttention > lastIdleEarly
+
+    if (attentionIsFresh) {
       newState = 'needsAttention'
     }
     // 2. Position-based working-vs-idle. Claude's TUI writes two mutually
@@ -328,27 +425,29 @@ export class PtyStreamAnalyzer {
     //    self-correcting across every transition (idle → work → idle →
     //    work → ...) without needing to clear buffers or track frames.
     else {
-      const rawWorking = Math.max(
-        lower.lastIndexOf('esc to interrupt'),
-        lower.lastIndexOf('esc to cancel')
-      )
-      const rawIdle = Math.max(
-        lower.lastIndexOf('? for shortcuts'),
-        lower.lastIndexOf('/ for commands'),
-        lower.lastIndexOf('shift+tab to cycle')
-      )
-      // Failsafe: if the optimistic flip has been live for too long
-      // without claude rendering any new marker, the submit was probably
-      // a no-op (e.g. slash command claude consumed silently). Drop the
-      // mark so we fall back to raw position-based detection — better to
-      // resync to "userInput" using the stale prompt than stay stuck in
-      // "thinking" forever.
-      if (
-        this.submitMark !== null &&
-        Date.now() - this.submitMarkAt > PtyStreamAnalyzer.submitMarkTtlMs
-      ) {
-        this.submitMark = null
-        this.submitMarkAt = 0
+      const rawWorking = lastWorkingEarly
+      const rawIdle = lastIdleEarly
+      // Failsafe: drop the submit mark when the optimistic flip has gone
+      // stale. "Stale" means either:
+      //  (a) no fresh PTY bytes for `submitMarkTtlMs` (claude is done
+      //      and silently consumed the submit — e.g. a slash command
+      //      with no visible output), OR
+      //  (b) a hard cap of `submitMarkMaxMs` since submit, even if bytes
+      //      keep flowing but no marker ever appears (broken TUI).
+      // This is a compromise: we want to survive long tool runs that
+      // can take 30+ seconds, but we can't wait forever or the pill
+      // gets stuck on 'thinking' forever when a no-op slash command
+      // eats the Enter.
+      const now = Date.now()
+      if (this.submitMark !== null) {
+        const sinceSubmit = now - this.submitMarkAt
+        const sinceFeed = this.lastFedAt > 0 ? now - this.lastFedAt : sinceSubmit
+        const quietTooLong = sinceFeed > PtyStreamAnalyzer.submitMarkTtlMs
+        const totalTooLong = sinceSubmit > PtyStreamAnalyzer.submitMarkMaxMs
+        if (quietTooLong || totalTooLong) {
+          this.submitMark = null
+          this.submitMarkAt = 0
+        }
       }
 
       // Demote pre-submit markers: anything the user hasn't caused is

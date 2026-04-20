@@ -317,12 +317,19 @@ export class SessionManager {
     this.unsubscribers.get(meta.ptyId)?.()
     this.unsubscribers.delete(meta.ptyId)
     this.deps.jsonl?.stop(meta.ptyId)
-    this.deps.analyzer?.dispose(meta.ptyId)
+    // `forgetSession` also clears the analyzer's generation counter for
+    // this id; reserve it for teardowns where the id will never come back.
+    // Restart and shutdown both may spawn a fresh analyzer under the same
+    // id later, and the counter MUST keep monotonically rising across
+    // those spawns or the renderer's high-watermark will drop the new
+    // events as stale.
+    if (opts.removeIsolatedDir) {
+      this.deps.analyzer?.forgetSession(meta.ptyId)
+    } else {
+      this.deps.analyzer?.dispose(meta.ptyId)
+    }
     this.deps.onSessionDestroyed?.(meta.ptyId)
     this.deps.pty.kill(meta.ptyId)
-    // The caller is responsible for removing the isolated dir when appropriate;
-    // shutdown() preserves it for rehydration, destroy() nukes it.
-    void opts
   }
 
   private persist(): void {
