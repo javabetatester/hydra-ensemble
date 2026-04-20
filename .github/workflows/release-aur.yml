@@ -70,7 +70,7 @@ jobs:
           # the arch suffix convention is not stable across builders.
           for i in $(seq 1 30); do
             URL=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
-              --jq '[.assets[] | select(.name | endswith(".AppImage"))][0].browser_download_url' 2>/dev/null || true)
+              --jq '[.assets[] | select(.name | endswith(".AppImage"))][0].url' 2>/dev/null || true)
             if [ -n "$URL" ] && [ "$URL" != "null" ]; then
               echo "url=$URL" >> "$GITHUB_OUTPUT"
               NAME=$(basename "$URL")
