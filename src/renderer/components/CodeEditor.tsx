@@ -14,6 +14,11 @@ import {
 } from 'lucide-react'
 import { useEditor } from '../state/editor'
 import { useSessions } from '../state/sessions'
+import {
+  useEditorSidebarSize,
+  EDITOR_SIDEBAR_MIN,
+  EDITOR_SIDEBAR_MAX
+} from '../state/panels'
 import FileTree from './editor/FileTree'
 import CodeMirrorView, { getActiveView } from './editor/CodeMirrorView'
 import MarkdownPreview from './editor/MarkdownPreview'
@@ -41,6 +46,10 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const setActive = useEditor((s) => s.setActive)
   const updateActiveBuffer = useEditor((s) => s.updateActiveBuffer)
   const saveActive = useEditor((s) => s.saveActive)
+
+  // Sidebar width (Files / Changes / Search pane). Persisted + drag-resizable.
+  const sidebarWidth = useEditorSidebarSize((s) => s.width)
+  const setSidebarWidth = useEditorSidebarSize((s) => s.setWidth)
 
   // Vim modal bindings — persisted for the session only.
   const [vimMode, setVimMode] = useState(false)
@@ -210,7 +219,14 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex w-64 shrink-0 flex-col border-r border-border-soft bg-bg-2">
+        <aside
+          className="relative flex shrink-0 flex-col border-r border-border-soft bg-bg-2"
+          style={{
+            width: `${sidebarWidth}px`,
+            minWidth: `${EDITOR_SIDEBAR_MIN}px`,
+            maxWidth: `${EDITOR_SIDEBAR_MAX}px`
+          }}
+        >
           {/* Sidebar tabs: Files | Changes | Search */}
           <div className="flex shrink-0 items-stretch border-b border-border-soft bg-bg-2">
             {(['files', 'changes', 'search'] as const).map((tab) => {
@@ -278,6 +294,33 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
               ) : null}
             </div>
           </div>
+
+          {/* Resize handle — 4px strip pinned to the aside's right edge.
+              Drag to pick a new width; double-click resets to the default. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent-500/30 active:bg-accent-500/60"
+            onMouseDown={(e) => {
+              e.preventDefault()
+              const startX = e.clientX
+              const startWidth = sidebarWidth
+              const onMove = (ev: MouseEvent): void => {
+                setSidebarWidth(startWidth + (ev.clientX - startX))
+              }
+              const onUp = (): void => {
+                document.removeEventListener('mousemove', onMove)
+                document.removeEventListener('mouseup', onUp)
+                document.body.style.userSelect = ''
+              }
+              document.body.style.userSelect = 'none'
+              document.addEventListener('mousemove', onMove)
+              document.addEventListener('mouseup', onUp)
+            }}
+            onDoubleClick={() => setSidebarWidth(256)}
+            title="Drag to resize · double-click to reset"
+          />
         </aside>
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-1">
           <div className="df-scroll flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border-soft bg-bg-2 px-2 pt-1.5">

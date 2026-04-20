@@ -47,3 +47,29 @@ export const usePanelSize = create<PanelSizeState>()(
     { name: 'hydra.panel-size' }
   )
 )
+
+/** Editor sidebar (Files / Changes / Search) width in px. Stored as a
+ *  pixel value rather than a fraction because it's sized relative to the
+ *  editor's own width, not the viewport, and the editor pane itself is
+ *  already user-resizable. */
+export const EDITOR_SIDEBAR_MIN = 180
+export const EDITOR_SIDEBAR_MAX = 600
+export const EDITOR_SIDEBAR_DEFAULT = 256
+
+interface EditorSidebarSizeState {
+  width: number
+  setWidth: (value: number) => void
+}
+
+export const useEditorSidebarSize = create<EditorSidebarSizeState>()(
+  persist(
+    (set) => ({
+      width: EDITOR_SIDEBAR_DEFAULT,
+      setWidth: (value) => {
+        const clamped = Math.min(EDITOR_SIDEBAR_MAX, Math.max(EDITOR_SIDEBAR_MIN, value))
+        set({ width: clamped })
+      }
+    }),
+    { name: 'hydra.editor-sidebar-size' }
+  )
+)
