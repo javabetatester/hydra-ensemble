@@ -19,7 +19,9 @@ export class WorktreeService {
     const res = await this.runGit(['-C', cwd, 'rev-parse', '--show-toplevel'])
     if (res.code !== 0) return null
     const out = res.stdout.trim()
-    return out.length > 0 ? out : null
+    // git emits forward-slashes on Windows; normalise to the platform separator
+    // so downstream equality checks against fs.realpath / path.resolve agree.
+    return out.length > 0 ? path.resolve(out) : null
   }
 
   /** Get the current branch (HEAD) for a directory. */
