@@ -24,6 +24,8 @@ import { registerNotifyIpc } from './ipc/notify'
 import { registerEditorIpc } from './ipc/editor'
 import { registerGhIpc } from './ipc/gh'
 import { registerQuickTermIpc } from './ipc/quickTerm'
+import { OrchestraCore } from './orchestra'
+import { registerOrchestraIpc, broadcastOrchestraEvent } from './ipc/orchestra'
 import { initStore } from './store'
 import { initUpdater } from './updater'
 import type { JsonlUpdate, SessionState } from '../shared/types'
@@ -47,6 +49,7 @@ let editorFs!: EditorFs
 let ghService!: GhService
 let watchdogService!: WatchdogService
 let quickTermService!: QuickTermService
+let orchestraCore!: OrchestraCore
 
 function setupServices(): void {
   ptyManager = new PtyManager()
@@ -225,6 +228,16 @@ app.whenReady().then(async () => {
   const win = createWindow()
   initUpdater(win)
 
+  // Orchestra: headless agent supervisor. Must be wired after the window
+  // exists so the event emitter can broadcast into the renderer. Start
+  // eagerly so saved teams get their on-disk folders re-scaffolded.
+  orchestraCore = new OrchestraCore((event) => broadcastOrchestraEvent(win, event))
+  registerOrchestraIpc(orchestraCore, win)
+  void orchestraCore.start().catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error('[orchestra] start failed:', (err as Error).message)
+  })
+
   // Rehydrate persisted sessions after the renderer has mounted and
   // subscribed to IPC events. did-finish-load + a short tick is enough
   // for contextBridge listeners to be wired up in practice.
@@ -250,6 +263,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  void orchestraCore?.shutdown().catch(() => {})
   sessionManager?.shutdown()
   jsonlManager?.stopAll()
   analyzerManager?.disposeAll()
