@@ -38,6 +38,43 @@ import type {
   UUID
 } from '../shared/orchestra'
 
+/**
+ * Orchestra read handlers wrap their result in `OrchestraResult<T>` on the
+ * main side to keep a single error branch. Renderer-facing reads prefer the
+ * raw value with a safe fallback, so `teams.map(...)` never sees an envelope.
+ */
+async function unwrapList<T>(
+  channel: string,
+  ...args: unknown[]
+): Promise<T[]> {
+  const raw = (await ipcRenderer.invoke(channel, ...args)) as
+    | { ok: true; value: T[] }
+    | { ok: false; error: string }
+    | T[]
+    | undefined
+  if (Array.isArray(raw)) return raw
+  if (raw && typeof raw === 'object' && 'ok' in raw && raw.ok && Array.isArray(raw.value)) {
+    return raw.value
+  }
+  return []
+}
+
+async function unwrapValue<T>(
+  channel: string,
+  fallback: T,
+  ...args: unknown[]
+): Promise<T> {
+  const raw = (await ipcRenderer.invoke(channel, ...args)) as
+    | { ok: true; value: T }
+    | { ok: false; error: string }
+    | T
+    | undefined
+  if (raw && typeof raw === 'object' && 'ok' in raw) {
+    return raw.ok ? raw.value : fallback
+  }
+  return (raw as T | undefined) ?? fallback
+}
+
 function on<T>(channel: string, handler: (payload: T) => void): () => void {
   const listener = (_evt: unknown, payload: T): void => handler(payload)
   ipcRenderer.on(channel, listener)
@@ -171,12 +208,17 @@ const api: HydraEnsembleApi = {
   },
   orchestra: {
     settings: {
-      get: () => ipcRenderer.invoke('orchestra:settings.get'),
+      get: () =>
+        unwrapValue<OrchestraSettings>('orchestra:settings.get', {
+          enabled: false,
+          apiKeyProvider: 'keychain',
+          onboardingDismissed: false
+        }),
       set: (patch: Partial<OrchestraSettings>) =>
         ipcRenderer.invoke('orchestra:settings.set', patch)
     },
     team: {
-      list: () => ipcRenderer.invoke('orchestra:team.list'),
+      list: () => unwrapList('orchestra:team.list'),
       create: (input: NewTeamInput) => ipcRenderer.invoke('orchestra:team.create', input),
       rename: (id: UUID, name: string) =>
         ipcRenderer.invoke('orchestra:team.rename', { id, name }),
@@ -185,7 +227,7 @@ const api: HydraEnsembleApi = {
       delete: (id: UUID) => ipcRenderer.invoke('orchestra:team.delete', { id })
     },
     agent: {
-      list: (teamId: UUID) => ipcRenderer.invoke('orchestra:agent.list', { teamId }),
+      list: (teamId: UUID) => unwrapList('orchestra:agent.list', { teamId }),
       create: (input: NewAgentInput) => ipcRenderer.invoke('orchestra:agent.create', input),
       update: (input: UpdateAgentInput) => ipcRenderer.invoke('orchestra:agent.update', input),
       delete: (id: UUID) => ipcRenderer.invoke('orchestra:agent.delete', { id }),
@@ -194,22 +236,24 @@ const api: HydraEnsembleApi = {
       stop: (id: UUID) => ipcRenderer.invoke('orchestra:agent.stop', { id })
     },
     edge: {
-      list: (teamId: UUID) => ipcRenderer.invoke('orchestra:edge.list', { teamId }),
+      list: (teamId: UUID) => unwrapList('orchestra:edge.list', { teamId }),
       create: (input: NewEdgeInput) => ipcRenderer.invoke('orchestra:edge.create', input),
       delete: (id: UUID) => ipcRenderer.invoke('orchestra:edge.delete', { id })
     },
     task: {
       submit: (input: SubmitTaskInput) => ipcRenderer.invoke('orchestra:task.submit', input),
       cancel: (id: UUID) => ipcRenderer.invoke('orchestra:task.cancel', { id }),
-      list: (teamId: UUID) => ipcRenderer.invoke('orchestra:task.list', { teamId })
+      list: (teamId: UUID) => unwrapList('orchestra:task.list', { teamId })
     },
     messageLog: {
       forTask: (taskId: UUID) =>
-        ipcRenderer.invoke('orchestra:messageLog.forTask', { taskId })
+        unwrapList('orchestra:messageLog.forTask', { taskId })
     },
     apiKey: {
+      // IPC handler expects `{ value, storage }`; adapt here so the
+      // renderer-facing name stays `prefer` (matches PLAN.md vocab).
       set: (value: string, prefer: SecretStorage) =>
-        ipcRenderer.invoke('orchestra:apiKey.set', { value, prefer }),
+        ipcRenderer.invoke('orchestra:apiKey.set', { value, storage: prefer }),
       test: () => ipcRenderer.invoke('orchestra:apiKey.test'),
       clear: () => ipcRenderer.invoke('orchestra:apiKey.clear')
     },
