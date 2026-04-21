@@ -159,9 +159,17 @@ export default function App() {
 
       // Skip when the user is typing in an input/textarea — avoid hijacking
       // characters like '?' or letters they're typing into a form.
+      // Exception: xterm.js mounts a hidden `.xterm-helper-textarea` that
+      // gets focus while the terminal is active. Treating that as a form
+      // field blocked session-jump (mod+1..9) and the help overlay (?) any
+      // time an agent pane was clicked — exactly the "binds don't work in
+      // the terminal" report. It's not a real input, so opt it out.
       const t = e.target as HTMLElement | null
       const tag = t?.tagName?.toLowerCase()
-      const inField = tag === 'input' || tag === 'textarea' || !!t?.isContentEditable
+      const isXtermTextarea = t?.classList?.contains('xterm-helper-textarea') === true
+      const inField =
+        !isXtermTextarea &&
+        (tag === 'input' || tag === 'textarea' || !!t?.isContentEditable)
 
       // Session jump 1..9 stays hardcoded — too many to expose as actions.
       if (!inField && hasMod(e) && /^[0-9]$/.test(e.key) && !e.shiftKey) {

@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css'
 import { RotateCw, AlertTriangle, Trash2, Loader2 } from 'lucide-react'
 import type { SessionMeta } from '../../shared/types'
 import { useSessions } from '../state/sessions'
+import { isBoundEvent } from '../state/keybinds'
 import ChatView from './chat/ChatView'
 
 interface Props {
@@ -59,6 +60,12 @@ export default function SessionPane({ session, visible }: Props) {
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
     term.open(container)
+    // Let global keybinds win before xterm forwards the keystroke to the
+    // PTY. Without this, pressing e.g. mod+t with the terminal focused
+    // would both toggle the Projects drawer AND write "t" into claude's
+    // prompt. Returning false tells xterm "don't handle this" — the
+    // window-level capture listener in App.tsx still fires first.
+    term.attachCustomKeyEventHandler((e) => !isBoundEvent(e))
     termRef.current = term
     fitRef.current = fit
 

@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css'
 import { Info, Plus, Terminal as TermIcon, X } from 'lucide-react'
 import { useShells, type Shell } from '../state/shells'
 import { useProjects } from '../state/projects'
+import { isBoundEvent } from '../state/keybinds'
 
 interface Props {
   open: boolean
@@ -197,6 +198,10 @@ function ShellPane({ shell, visible }: { shell: Shell; visible: boolean }) {
     term.loadAddon(fit)
     term.loadAddon(new WebLinksAddon())
     term.open(container)
+    // Swallow bound global shortcuts so they don't leak as literal input
+    // into the shell. App.tsx still dispatches the action via a window
+    // capture listener.
+    term.attachCustomKeyEventHandler((e) => !isBoundEvent(e))
     termRef.current = term
     fitRef.current = fit
 

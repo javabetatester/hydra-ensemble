@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { matchesCombo } from '../lib/keybind'
+import { hasMod } from '../lib/platform'
 
 /**
  * Action registry — the canonical set of things the app can do that
@@ -80,4 +82,23 @@ export function resolveBind(actionId: string, overrides: Record<string, string>)
 /** All action ids together with their effective combo. */
 export function allBindings(overrides: Record<string, string>): Array<{ action: Action; combo: string }> {
   return ACTIONS.map((action) => ({ action, combo: resolveBind(action.id, overrides) }))
+}
+
+/**
+ * True when the incoming KeyboardEvent matches any registered keybind —
+ * either a user-bound ACTION combo or the hardcoded session-jump mod+1..9.
+ * Lets the xterm `attachCustomKeyEventHandler` swallow events that the
+ * app already handles, so the shortcut doesn't also leak as literal text
+ * into the PTY.
+ */
+export function isBoundEvent(e: KeyboardEvent): boolean {
+  // Hardcoded session jump (App.tsx keeps this out of ACTIONS because
+  // nine slots would clutter the keybind editor).
+  if (hasMod(e) && !e.shiftKey && /^[0-9]$/.test(e.key)) return true
+  const { overrides } = useKeybinds.getState()
+  for (const action of ACTIONS) {
+    const combo = resolveBind(action.id, overrides)
+    if (combo && matchesCombo(e, combo)) return true
+  }
+  return false
 }
