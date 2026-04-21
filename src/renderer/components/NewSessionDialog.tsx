@@ -8,7 +8,9 @@ import {
   Info,
   Folder,
   MessageSquare,
-  TerminalSquare
+  TerminalSquare,
+  UserPlus,
+  UserCheck
 } from 'lucide-react'
 import { useProjects } from '../state/projects'
 import { useSessions } from '../state/sessions'
@@ -44,6 +46,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
   const [creating, setCreating] = useState(false)
   const [showExplainer, setShowExplainer] = useState(false)
   const [viewMode, setViewMode] = useState<SessionViewMode>('cli')
+  const [freshConfig, setFreshConfig] = useState(false)
 
   // Sync picked project with current when dialog opens
   useEffect(() => {
@@ -55,6 +58,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
     setNewWtName('')
     setNewWtBranch('')
     setViewMode('cli')
+    setFreshConfig(false)
   }, [open, currentPath])
 
   // Refresh worktrees when project changes
@@ -93,7 +97,8 @@ export default function NewSessionDialog({ open, onClose }: Props) {
         worktreePath: pickedWorktree && !pickedWorktree.isMain ? pickedWorktree.path : undefined,
         branch,
         name: name.trim() || undefined,
-        viewMode
+        viewMode,
+        freshConfig
       })
       onClose()
     } finally {
@@ -384,6 +389,57 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             </div>
             <div className="mt-1.5 font-mono text-[10px] text-text-4">
               you can toggle this per session at any time from the pane header.
+            </div>
+          </div>
+
+          {/* Claude account — share the host login (default) or run this
+              session under an isolated CLAUDE_CONFIG_DIR so claude prompts
+              for a brand-new login. */}
+          <div>
+            <label className="df-label mb-1.5 block">account</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setFreshConfig(false)}
+                className={`flex items-start gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  !freshConfig
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <UserCheck
+                  size={14}
+                  strokeWidth={1.75}
+                  className={!freshConfig ? 'mt-0.5 text-accent-400' : 'mt-0.5 text-text-3'}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-text-1">global login</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-text-3">
+                    shares <code className="font-mono text-[10px]">~/.claude</code> — same account, history and MCP state as your other sessions.
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFreshConfig(true)}
+                className={`flex items-start gap-2 rounded-sm border px-2.5 py-2 text-left transition ${
+                  freshConfig
+                    ? 'border-accent-500 bg-accent-500/10'
+                    : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                }`}
+              >
+                <UserPlus
+                  size={14}
+                  strokeWidth={1.75}
+                  className={freshConfig ? 'mt-0.5 text-accent-400' : 'mt-0.5 text-text-3'}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold text-text-1">fresh account</div>
+                  <div className="mt-0.5 text-[11px] leading-snug text-text-3">
+                    dedicated <code className="font-mono text-[10px]">CLAUDE_CONFIG_DIR</code> — claude asks for a new login on first launch.
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
         </div>

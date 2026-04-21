@@ -38,17 +38,18 @@ export class SessionManager {
   private rehydrated = false
 
   constructor(private deps: SessionManagerDeps) {
-    // Load persisted metas into memory without spawning. We no longer require
-    // the legacy shadow claudeConfigDir to exist — Claude reads the host
-    // ~/.claude directly now so credentials + MCP state are shared across
-    // sessions (see config-isolation.ts for the rationale).
+    // Load persisted metas into memory without spawning. Host-shared
+    // sessions always resolve to ~/.claude (we ignore whatever old shadow
+    // path is in storage). Fresh-config sessions keep their dedicated dir
+    // since that's where their private login lives.
     const host = getHostClaudeDir()
     for (const meta of getStore().sessions) {
-      // Upgrade old metas that still point at a shadow dir to the host dir.
-      const claudeConfigDir = existsSync(meta.claudeConfigDir) ? meta.claudeConfigDir : host
+      const isFresh = meta.isFreshConfig === true && existsSync(meta.claudeConfigDir)
+      const claudeConfigDir = isFresh ? meta.claudeConfigDir : host
       this.sessions.set(meta.id, {
         ...meta,
         claudeConfigDir,
+        isFreshConfig: isFresh,
         state: 'idle',
         ptyId: meta.id
       })
@@ -100,12 +101,16 @@ export class SessionManager {
 
     let isolated: IsolatedSession
     try {
-      isolated = await createIsolatedSession(id, {
-        name,
-        cwd,
-        worktreePath: opts.worktreePath,
-        branch: opts.branch
-      })
+      isolated = await createIsolatedSession(
+        id,
+        {
+          name,
+          cwd,
+          worktreePath: opts.worktreePath,
+          branch: opts.branch
+        },
+        { freshConfig: opts.freshConfig === true }
+      )
     } catch (err) {
       return { ok: false, error: `failed to create isolated config: ${(err as Error).message}` }
     }
@@ -122,7 +127,8 @@ export class SessionManager {
       state: 'idle',
       avatar: opts.avatar,
       accentColor: opts.accentColor,
-      viewMode: opts.viewMode ?? 'cli'
+      viewMode: opts.viewMode ?? 'cli',
+      isFreshConfig: isolated.isFreshConfig
     }
 
     const spawn = this.spawnFor(meta, {
@@ -261,7 +267,8 @@ export class SessionManager {
       sessionId: meta.id,
       rootDir: `${homedir()}/.hydra-ensemble/sessions/${meta.id}`,
       configDir: meta.claudeConfigDir,
-      metaPath: `${homedir()}/.hydra-ensemble/sessions/${meta.id}/meta.json`
+      metaPath: `${homedir()}/.hydra-ensemble/sessions/${meta.id}/meta.json`,
+      isFreshConfig: meta.isFreshConfig === true
     })
 
     const result = this.deps.pty.spawn({
@@ -290,10 +297,11 @@ export class SessionManager {
 
     if (!opts.shellOnly) {
       const claudePath = resolveClaudePath()
-      // `unset CLAUDE_CONFIG_DIR` defends against the user's .bashrc /
-      // .zshrc re-exporting it after the shell sources its rc files.
-      // We already strip it from the spawn env, but rc files run after
-      // exec, so this catches it inside the shell session itself.
+      // Host-shared sessions `unset CLAUDE_CONFIG_DIR` to defeat any
+      // re-export done by the user's .bashrc / .zshrc after the shell
+      // sources its rc files. Fresh-config sessions instead `export` the
+      // isolated dir so the shell's rc file can't silently yank them
+      // back to the host login.
       // No `exec` on purpose: when claude exits (intended /quit, OAuth
       // browser flow, crash) the bash stays alive, prints the prompt,
       // and the user can either type `claude` to re-enter or use the
@@ -302,8 +310,12 @@ export class SessionManager {
       // to opus 4.6 for some accounts, and Hydra is an orchestrator for
       // deep-reasoning work — if the user wants sonnet/haiku they can
       // switch inside the session via `/model`.
+      const claudeEnvPrefix =
+        meta.isFreshConfig === true
+          ? `export CLAUDE_CONFIG_DIR="${meta.claudeConfigDir}"`
+          : `unset CLAUDE_CONFIG_DIR`
       const launch = claudePath
-        ? `unset CLAUDE_CONFIG_DIR; clear && "${claudePath}" --model claude-opus-4-7\r`
+        ? `${claudeEnvPrefix}; clear && "${claudePath}" --model claude-opus-4-7\r`
         : `clear && echo "[hydra] claude binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)

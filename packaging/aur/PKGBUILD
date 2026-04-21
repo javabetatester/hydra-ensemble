@@ -1,8 +1,8 @@
 # Maintainer: javabetatester <birisesports@gmail.com>
 pkgname=hydra-ensemble-bin
 _pkgname=hydra-ensemble
-pkgver=0.1.0
-pkgrel=2
+pkgver=0.1.3
+pkgrel=1
 pkgdesc="Cross-platform multi-session terminal for Claude Code"
 arch=('x86_64')
 url="https://hydra-ensemble.xyz"

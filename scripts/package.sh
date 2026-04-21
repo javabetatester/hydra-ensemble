@@ -21,7 +21,7 @@ APP_NAME="Hydra Ensemble"
 BUNDLE_ID="com.intuitivecompute.hydra-ensemble"
 SIGN_IDENTITY="${SIGN_IDENTITY:-Developer ID Application: Intuitive Compute Inc (49V6GRJ827)}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-HYDRA_ENSEMBLE_NOTARY}"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.1.3}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%Y%m%d%H%M)}"
 
 NOTARIZE=0

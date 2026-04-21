@@ -3,8 +3,8 @@
 To publish `Hydra.Ensemble` on the official Windows Package Manager:
 
 1. Fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs).
-2. Drop the three YAML files below into `manifests/h/Hydra/Ensemble/0.1.0/`.
-3. Run `winget validate manifests/h/Hydra/Ensemble/0.1.0`.
+2. Drop the three YAML files below into `manifests/h/Hydra/Ensemble/0.1.3/`.
+3. Run `winget validate manifests/h/Hydra/Ensemble/0.1.3`.
 4. Open a PR. Auto-validation + one human review merges it.
 
 **Important** — winget REQUIRES the `.exe` to be **Authenticode-signed**.
@@ -17,7 +17,7 @@ because SmartScreen blocks every launch.
 ## Hydra.Ensemble.yaml
 ```yaml
 PackageIdentifier: Hydra.Ensemble
-PackageVersion: 0.1.0
+PackageVersion: 0.1.3
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0
@@ -26,7 +26,7 @@ ManifestVersion: 1.6.0
 ## Hydra.Ensemble.installer.yaml
 ```yaml
 PackageIdentifier: Hydra.Ensemble
-PackageVersion: 0.1.0
+PackageVersion: 0.1.3
 Platform:
   - Windows.Desktop
 MinimumOSVersion: 10.0.0.0
@@ -35,7 +35,7 @@ Scope: user
 UpgradeBehavior: install
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/javabetatester/hydra-ensemble/releases/download/v0.1.0/Hydra-Ensemble-Setup-0.1.0.exe
+    InstallerUrl: https://github.com/javabetatester/hydra-ensemble/releases/download/v0.1.3/Hydra-Ensemble-Setup-0.1.3.exe
     InstallerSha256: REPLACE_WITH_SHA256_OF_THE_EXE
 ManifestType: installer
 ManifestVersion: 1.6.0
@@ -44,7 +44,7 @@ ManifestVersion: 1.6.0
 ## Hydra.Ensemble.locale.en-US.yaml
 ```yaml
 PackageIdentifier: Hydra.Ensemble
-PackageVersion: 0.1.0
+PackageVersion: 0.1.3
 PackageLocale: en-US
 Publisher: Intuitive Compute
 PublisherUrl: https://hydra-ensemble.xyz
@@ -67,7 +67,7 @@ ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 ```
 
-Compute the SHA256 locally once v0.1.0 assets land:
+Compute the SHA256 locally once v0.1.3 assets land:
 ```bash
-sha256sum release/Hydra-Ensemble-Setup-0.1.0.exe
+sha256sum release/Hydra-Ensemble-Setup-0.1.3.exe
 ```
