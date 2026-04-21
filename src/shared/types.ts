@@ -58,6 +58,9 @@ export interface SessionMeta {
   latestAssistantText?: string
   /** 'cli' (xterm) or 'visual' (rendered chat transcript). Defaults to 'cli'. */
   viewMode?: SessionViewMode
+  /** True when this session runs under its own isolated CLAUDE_CONFIG_DIR
+   *  (separate login, separate MCP state). Default false = shares host. */
+  isFreshConfig?: boolean
 }
 
 export interface SessionUpdate {
@@ -89,6 +92,10 @@ export interface SessionCreateOptions {
   accentColor?: string
   /** UI mode the session opens in. Default 'cli'. */
   viewMode?: SessionViewMode
+  /** When true, spin up a dedicated CLAUDE_CONFIG_DIR for this session
+   *  (empty, isolated) so Claude prompts for a brand-new login instead of
+   *  inheriting the host account. Default false. */
+  freshConfig?: boolean
 }
 
 export type SessionCreateResult =

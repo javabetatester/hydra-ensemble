@@ -12,18 +12,23 @@ export interface IsolatedSession {
   /**
    * Pointer to the Claude config directory this session reads from.
    *
-   * We used to create a per-session shadow (~/.hydra-ensemble/sessions/<id>/claude)
-   * with symlinks back to the host. That broke authentication across sessions:
-   * Claude writes `.credentials.json` atomically, which clobbered the symlink
-   * with a regular file, so every new session started logged-out.
+   * Default: host `~/.claude` (shared login, shared MCP state). We used to
+   * create a per-session shadow with symlinks back to the host, but Claude
+   * writes `.credentials.json` atomically, clobbering the symlink and
+   * logging every new session out. Natural segregation comes from the
+   * worktree CWD — Claude keys `projects/<encoded-cwd>/*.jsonl` by spawn
+   * CWD, so parallel sessions on different worktrees still get distinct
+   * history files.
    *
-   * New behaviour: every session reads directly from the host `~/.claude`.
-   * Natural segregation comes from the worktree CWD — Claude keys its
-   * `projects/<encoded-cwd>/*.jsonl` by the spawn CWD, so parallel sessions
-   * on different worktrees still get distinct history files.
+   * When the session is created with `freshConfig: true`, this instead
+   * points at a real empty dir under `~/.hydra-ensemble/sessions/<id>/claude`.
+   * Claude treats that as a brand-new install and walks the user through
+   * first-run login — that's the whole point of the fresh-account toggle.
    */
   configDir: string
   metaPath: string
+  /** True when configDir is a dedicated isolated dir (not the host). */
+  isFreshConfig: boolean
 }
 
 export interface SessionMetaJson {
@@ -37,7 +42,8 @@ export interface SessionMetaJson {
 
 export async function createIsolatedSession(
   sessionId: string,
-  meta: Omit<SessionMetaJson, 'sessionId' | 'createdAt'>
+  meta: Omit<SessionMetaJson, 'sessionId' | 'createdAt'>,
+  opts: { freshConfig?: boolean } = {}
 ): Promise<IsolatedSession> {
   const rootDir = join(SESSIONS_ROOT, sessionId)
   await mkdir(rootDir, { recursive: true })
@@ -50,11 +56,20 @@ export async function createIsolatedSession(
   }
   await writeFile(metaPath, JSON.stringify(metaJson, null, 2))
 
+  let configDir = HOST_CLAUDE
+  if (opts.freshConfig) {
+    // Empty dir → Claude sees no credentials, no settings, no MCP state.
+    // First launch triggers the OAuth / login flow from scratch.
+    configDir = join(rootDir, 'claude')
+    await mkdir(configDir, { recursive: true })
+  }
+
   return {
     sessionId,
     rootDir,
-    configDir: HOST_CLAUDE,
-    metaPath
+    configDir,
+    metaPath,
+    isFreshConfig: opts.freshConfig === true
   }
 }
 
@@ -64,14 +79,19 @@ export async function destroyIsolatedSession(sessionId: string): Promise<void> {
 }
 
 /**
- * Env vars handed to the PTY. We used to set CLAUDE_CONFIG_DIR here to
- * point at the shadow dir — that's gone because it broke login sharing.
- * Only the session-id marker is exposed now.
+ * Env vars handed to the PTY. For host-shared sessions we only expose the
+ * session-id marker — CLAUDE_CONFIG_DIR stays unset so Claude reads the
+ * host. For fresh-config sessions we point CLAUDE_CONFIG_DIR at the
+ * dedicated empty dir so that session gets its own login state.
  */
 export function getSessionEnvOverrides(isolated: IsolatedSession): Record<string, string> {
-  return {
+  const env: Record<string, string> = {
     HYDRA_ENSEMBLE_SESSION_ID: isolated.sessionId
   }
+  if (isolated.isFreshConfig) {
+    env['CLAUDE_CONFIG_DIR'] = isolated.configDir
+  }
+  return env
 }
 
 export function getSessionsRoot(): string {

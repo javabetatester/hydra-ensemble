@@ -37,18 +37,20 @@ export class PtyManager {
 
     const shell = opts.shell ?? this.defaultShell()
     const args = opts.args ?? this.defaultArgs()
-    const baseEnv = { ...process.env, ...(opts.env ?? {}) } as Record<string, string>
+    const override = opts.env ?? {}
+    const baseEnv = { ...process.env, ...override } as Record<string, string>
     const env: Record<string, string> = {
       ...baseEnv,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor'
     }
     // Strip any inherited CLAUDE_CONFIG_DIR so claude reads the host
-    // ~/.claude unconditionally. Without this, sessions that inherit a
-    // user-exported CLAUDE_CONFIG_DIR (set in .bashrc, parent shell, or
-    // legacy shadow runs) end up logged-out and asking for theme setup
-    // again because they read an empty config dir.
+    // ~/.claude by default. Session-level overrides (fresh-config mode)
+    // are re-applied afterwards so they survive this wipe.
     delete env['CLAUDE_CONFIG_DIR']
+    if (override['CLAUDE_CONFIG_DIR']) {
+      env['CLAUDE_CONFIG_DIR'] = override['CLAUDE_CONFIG_DIR']
+    }
     const cwd = this.resolveCwd(opts.cwd)
 
     const spawnAt = Date.now()
