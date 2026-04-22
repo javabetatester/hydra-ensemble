@@ -73,3 +73,27 @@ export const useEditorSidebarSize = create<EditorSidebarSizeState>()(
     { name: 'hydra.editor-sidebar-size' }
   )
 )
+
+/** Right column (Sessions + Toolkit) width in px. Pinned to the viewport's
+ *  right edge; user drags its LEFT edge to resize. */
+export const RIGHT_COLUMN_MIN = 240
+export const RIGHT_COLUMN_MAX = 560
+export const RIGHT_COLUMN_DEFAULT = 320
+
+interface RightColumnSizeState {
+  width: number
+  setWidth: (value: number) => void
+}
+
+export const useRightColumnSize = create<RightColumnSizeState>()(
+  persist(
+    (set) => ({
+      width: RIGHT_COLUMN_DEFAULT,
+      setWidth: (value) => {
+        const clamped = Math.min(RIGHT_COLUMN_MAX, Math.max(RIGHT_COLUMN_MIN, value))
+        set({ width: clamped })
+      }
+    }),
+    { name: 'hydra.right-column-size' }
+  )
+)

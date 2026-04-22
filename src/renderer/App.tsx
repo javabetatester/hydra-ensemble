@@ -33,7 +33,9 @@ import {
   useSlidePanel,
   usePanelSize,
   PANEL_WIDTH_MIN,
-  PANEL_WIDTH_MAX
+  PANEL_WIDTH_MAX,
+  useRightColumnSize,
+  RIGHT_COLUMN_DEFAULT
 } from './state/panels'
 import { useKeybinds, resolveBind } from './state/keybinds'
 import { comboFromEvent, matchesCombo } from './lib/keybind'
@@ -75,6 +77,8 @@ export default function App() {
   const activePanel = useSlidePanel((s) => s.current)
   const panelWidthFraction = usePanelSize((s) => s.widthFraction)
   const setPanelWidthFraction = usePanelSize((s) => s.setWidthFraction)
+  const rightColumnWidth = useRightColumnSize((s) => s.width)
+  const setRightColumnWidth = useRightColumnSize((s) => s.setWidth)
   const openPanel = useSlidePanel((s) => s.open)
   const closePanel = useSlidePanel((s) => s.close)
   const togglePanelFor = useSlidePanel((s) => s.toggle)
@@ -475,8 +479,45 @@ export default function App() {
           {/* Right panel: sessions takes remaining space at top, toolkit
               hugs the bottom at a FIXED share (45% of the column) so
               switching between bashes/commands tabs doesn't change its
-              height. Internal scroll handles overflow. */}
-          <div className="flex w-80 shrink-0 flex-col overflow-hidden">
+              height. Internal scroll handles overflow. Column width is
+              user-resizable via the handle on the LEFT edge; persisted. */}
+          <div
+            className="relative flex shrink-0 flex-col overflow-hidden"
+            style={{ width: rightColumnWidth }}
+          >
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize right column"
+              className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent-500/30 active:bg-accent-500/60"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                const startX = e.clientX
+                const startWidth = rightColumnWidth
+                let rafId: number | null = null
+                let latest = startWidth
+                const onMove = (ev: MouseEvent): void => {
+                  latest = startWidth - (ev.clientX - startX)
+                  if (rafId !== null) return
+                  rafId = requestAnimationFrame(() => {
+                    rafId = null
+                    setRightColumnWidth(latest)
+                  })
+                }
+                const onUp = (): void => {
+                  if (rafId !== null) cancelAnimationFrame(rafId)
+                  setRightColumnWidth(latest)
+                  document.removeEventListener('mousemove', onMove)
+                  document.removeEventListener('mouseup', onUp)
+                  document.body.style.userSelect = ''
+                }
+                document.body.style.userSelect = 'none'
+                document.addEventListener('mousemove', onMove)
+                document.addEventListener('mouseup', onUp)
+              }}
+              onDoubleClick={() => setRightColumnWidth(RIGHT_COLUMN_DEFAULT)}
+              title="Drag to resize · double-click to reset"
+            />
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <SessionsPanel />
             </div>
