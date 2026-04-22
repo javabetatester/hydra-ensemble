@@ -408,10 +408,15 @@ export default function App() {
                 const container = e.currentTarget.parentElement
                 if (!container) return
                 const rect = container.getBoundingClientRect()
+                // Right column sits to the right of the slide pane and eats
+                // part of <main>. Its width must be subtracted so the drag
+                // math measures distance to the pane's true right edge,
+                // not to the viewport/main right edge.
+                const rightOffset = rightColumnWidth
                 const onMove = (ev: MouseEvent): void => {
                   // Fraction of the main column the pane should occupy,
-                  // measured from its RIGHT edge back to the cursor.
-                  const distance = rect.right - ev.clientX
+                  // measured from the pane's RIGHT edge back to the cursor.
+                  const distance = rect.right - rightOffset - ev.clientX
                   const fraction = distance / rect.width
                   setPanelWidthFraction(fraction)
                 }
