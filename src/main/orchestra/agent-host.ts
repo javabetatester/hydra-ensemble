@@ -137,13 +137,21 @@ export class AgentHost {
     const runnerPath = this.opts.runnerPath ?? DEFAULT_RUNNER_PATH
     const env: NodeJS.ProcessEnv = {
       ...process.env,
-      ANTHROPIC_API_KEY: this.opts.apiKey,
       HYDRA_AGENT_JSON: JSON.stringify({
         agent: this.opts.agent,
         team: this.opts.team
       })
     }
-    // Strip CLAUDE_CONFIG_DIR for isolation (see PLAN.md §14).
+    // Only expose an API key when the caller actually has one — empty
+    // string means "user never set one", and the runner should then
+    // fall back to spawning `claude -p` with the host's OAuth login.
+    if (this.opts.apiKey && this.opts.apiKey.trim().length > 0) {
+      env.ANTHROPIC_API_KEY = this.opts.apiKey
+    } else {
+      delete env.ANTHROPIC_API_KEY
+    }
+    // Strip CLAUDE_CONFIG_DIR for isolation (see PLAN.md §14) — the CLI
+    // path wants ~/.claude, and the SDK path doesn't read it either.
     delete env.CLAUDE_CONFIG_DIR
 
     const child = forkImpl(runnerPath, [], {

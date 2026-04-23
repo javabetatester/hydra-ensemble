@@ -52,13 +52,34 @@ export const useSessions = create<SessionsState>((set, get) => ({
       seen.add(s.id)
       return true
     })
-    set((prev) => ({
-      sessions: unique,
-      activeId:
-        prev.activeId && unique.some((s) => s.id === prev.activeId)
-          ? prev.activeId
-          : (unique[0]?.id ?? null)
-    }))
+    set((prev) => {
+      // Live `state` is owned EXCLUSIVELY by the `session:state` IPC
+      // channel (the PTY analyzer is the source of truth) and by the
+      // renderer's own optimistic flips on Enter. The broadcast payload
+      // piggy-backs on `session:changed` (which fires for any meta
+      // mutation — rename, branch, cost, etc.) and carries whatever the
+      // main-side meta.state happens to be, which LAGS the renderer
+      // because syncExternalState intentionally doesn't re-emit. Letting
+      // that payload overwrite `state` here made one session's analyzer
+      // flip drag every other session's card back to the stale main-side
+      // value — the classic "session A goes userInput, B and C also
+      // flip" cross-contamination. Merge structurally but keep each
+      // session's current `state` (and other fields the high-water
+      // tracker protects) untouched.
+      const byId = new Map(prev.sessions.map((s) => [s.id, s]))
+      const merged = unique.map((incoming) => {
+        const existing = byId.get(incoming.id)
+        if (!existing) return incoming
+        return { ...incoming, state: existing.state }
+      })
+      return {
+        sessions: merged,
+        activeId:
+          prev.activeId && merged.some((s) => s.id === prev.activeId)
+            ? prev.activeId
+            : (merged[0]?.id ?? null)
+      }
+    })
   },
 
   setActive: (id) => {

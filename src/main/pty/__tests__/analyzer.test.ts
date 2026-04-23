@@ -352,6 +352,32 @@ describe('PtyStreamAnalyzer', () => {
     expect(analyzer.state).toBe('thinking')
   })
 
+  // MARK: - Per-instance isolation (anti-bleed)
+
+  it('two analyzers are fully isolated — feeding one never affects the other', () => {
+    // Repro guard for the "classic Dashboard state bleed" report: three
+    // sessions in 'thinking', one flips to 'userInput', and the other
+    // two flip too. If PtyStreamAnalyzer had any shared/module-level
+    // mutable state (regex, buffer, decoder) driving the heuristic, a
+    // transition on one instance would leak into the others. This test
+    // pins the guarantee at the unit level so regressions land loud.
+    const other = new PtyStreamAnalyzer()
+    expect(other.state).toBe('idle')
+
+    // Drive the main fixture through a full thinking → userInput turn.
+    feedString('⌘ Thinking · 1s · Esc to interrupt')
+    vi.advanceTimersByTime(100)
+    expect(analyzer.state).toBe('thinking')
+
+    feedString('\nresponse text\n? for shortcuts')
+    vi.advanceTimersByTime(100)
+    expect(analyzer.state).toBe('userInput')
+
+    // The second analyzer got zero bytes — it must still be idle.
+    expect(other.state).toBe('idle')
+    expect(other.alternateBufferActive).toBe(false)
+  })
+
   it('submit mark eventually falls back when no bytes arrive (silent slash command)', () => {
     feedString('❯ /help\n? for shortcuts')
     vi.advanceTimersByTime(100)

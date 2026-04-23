@@ -20,7 +20,7 @@
  * for ~180ms before being unmounted. Without this, pills would just pop
  * when work finishes and the column would feel jumpy.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import type { Agent, Task, UUID } from '../../shared/orchestra'
 import { defaultAgentColor } from '../lib/agent'
@@ -66,7 +66,7 @@ function initialOf(name: string): string {
   return first.toUpperCase()
 }
 
-export default function AgentPresence(_props: Props): JSX.Element | null {
+export default function AgentPresence(_props: Props): React.ReactElement | null {
   const agents = useOrchestra((s) => s.agents)
   const tasks = useOrchestra((s) => s.tasks)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)

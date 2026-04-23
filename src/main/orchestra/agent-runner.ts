@@ -23,7 +23,7 @@ import type {
   ToolResultBlockParam,
   ToolUseBlock
 } from '@anthropic-ai/sdk/resources/messages'
-import { exec as execCb } from 'node:child_process'
+import { exec as execCb, spawn } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -131,8 +131,13 @@ function resolveInsideWorktree(worktreePath: string, raw: string): string {
 interface RunnerContext {
   agent: Agent
   team: Team
+  /** Non-null only when ANTHROPIC_API_KEY is set and we're on the SDK path. */
   anthropic: Anthropic
   rootDir: string
+  /** When false, runConversation hands off to the claude-CLI spawner that
+   *  reuses the OAuth login in ~/.claude. Default for users who never
+   *  configured an API key. */
+  hasApiKey: boolean
 }
 
 interface InflightRunState {
@@ -480,7 +485,109 @@ function runBash(
 // Conversation loop
 // ---------------------------------------------------------------------------
 
+/**
+ * Top-level dispatch: pick the execution backend based on whether an
+ * explicit API key was provided. CLI is the default so users who only
+ * ever logged in via `claude /login` get Orchestra working out of the
+ * box without creating a console.anthropic.com key.
+ */
 async function runConversation(
+  ctx: RunnerContext,
+  task: Task,
+  extras: string[]
+): Promise<void> {
+  if (!ctx.hasApiKey) {
+    await runConversationCli(ctx, task, extras)
+    return
+  }
+  await runConversationSdk(ctx, task, extras)
+}
+
+/**
+ * Spawn `claude -p` inside the team's worktree. Inherits OAuth
+ * credentials from ~/.claude so no API key is required. The CLI runs
+ * its full agent loop (tool use, file edits, bash) on its own; we only
+ * stream stdout back to the host as output messages.
+ */
+async function runConversationCli(
+  ctx: RunnerContext,
+  task: Task,
+  extras: string[]
+): Promise<void> {
+  emit({ kind: 'state', state: 'running' })
+
+  const sys = await buildSystemPrompt(ctx, task, extras)
+  const userPrompt = task.body || task.title
+
+  const args = [
+    '-p',
+    '--append-system-prompt',
+    sys,
+    '--model',
+    ctx.agent.model || ctx.team.defaultModel || 'claude-sonnet-4-6'
+  ]
+
+  // Scrub anything that would make the CLI reach for an isolated or
+  // stale config dir. Orchestra runs must share the host's ~/.claude so
+  // the user's OAuth login is reused.
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  delete env.CLAUDE_CONFIG_DIR
+  delete env.ANTHROPIC_API_KEY
+
+  return await new Promise<void>((resolve) => {
+    const child = spawn('claude', args, {
+      cwd: ctx.team.worktreePath,
+      env,
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+    // Pipe the user prompt in via stdin so we don't blow past argv
+    // limits on long task bodies.
+    child.stdin.write(userPrompt)
+    child.stdin.end()
+
+    let stdoutBuf = ''
+    let stderrBuf = ''
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf8')
+      stdoutBuf += text
+      // Emit line-by-line for a live-ish feed; the renderer Console tab
+      // collapses empty lines visually anyway.
+      for (const line of text.split(/\r?\n/)) {
+        if (line.trim()) logMessage(ctx, task, 'output', line)
+      }
+    })
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrBuf += chunk.toString('utf8')
+    })
+
+    child.on('error', (err) => {
+      emit({
+        kind: 'error',
+        message:
+          `claude CLI spawn failed: ${err.message}. ` +
+          `Is the claude binary installed and on PATH?`
+      })
+      resolve()
+    })
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        emit({ kind: 'done' })
+      } else {
+        const tail = (stderrBuf || stdoutBuf).slice(-300).trim()
+        emit({
+          kind: 'error',
+          message: `claude CLI exited ${code}${tail ? ` — ${tail}` : ''}`
+        })
+      }
+      resolve()
+    })
+  })
+}
+
+async function runConversationSdk(
   ctx: RunnerContext,
   task: Task,
   extras: string[]
@@ -578,16 +685,21 @@ function bootstrap(): RunnerContext {
   const raw = process.env.HYDRA_AGENT_JSON
   if (!raw) throw new Error('HYDRA_AGENT_JSON missing')
   const parsed = JSON.parse(raw) as { agent: Agent; team: Team }
+  // API key is now OPTIONAL. When missing, we fall back to spawning
+  // `claude -p` which inherits the OAuth login from ~/.claude — that's
+  // the default experience users expect because they already logged in
+  // via the classic Hydra CLI.
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY missing')
 
   const rootDir = path.join(os.homedir(), '.hydra-ensemble', 'orchestra')
 
   return {
     agent: parsed.agent,
     team: parsed.team,
-    anthropic: new Anthropic({ apiKey }),
-    rootDir
+    // `anthropic` is lazily instantiated only on the SDK path.
+    anthropic: apiKey ? new Anthropic({ apiKey }) : (null as unknown as Anthropic),
+    rootDir,
+    hasApiKey: !!apiKey
   }
 }
 

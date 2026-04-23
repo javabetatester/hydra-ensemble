@@ -8,7 +8,25 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { exec as execCb } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { promisify } from 'node:util'
+
+const execAsync = promisify(execCb)
+
+/** Probe whether `claude` is resolvable on PATH. Cached after first call
+ *  so task dispatch isn't gated on a `which` shell-out every time. */
+let claudeCliCache: boolean | null = null
+async function claudeCliAvailable(): Promise<boolean> {
+  if (claudeCliCache !== null) return claudeCliCache
+  try {
+    await execAsync(process.platform === 'win32' ? 'where claude' : 'command -v claude')
+    claudeCliCache = true
+  } catch {
+    claudeCliCache = false
+  }
+  return claudeCliCache
+}
 import {
   OrchestraRegistry,
   electronOrchestraStore,
@@ -332,7 +350,14 @@ export class OrchestraCore {
     this.emit({ kind: 'task.changed', task: routing })
     this.emit({ kind: 'route.added', route })
 
-    if (!this.apiKey) return this.failTask(routing.id, NO_API_KEY_REASON)
+    // API key is no longer a hard requirement — without one, the agent
+    // runner falls back to spawning `claude -p`, which inherits the
+    // OAuth login from ~/.claude and works for every user that's
+    // already logged in via the classic Hydra CLI. Only block if there's
+    // no key AND no claude binary on PATH.
+    if (!this.apiKey && !(await claudeCliAvailable())) {
+      return this.failTask(routing.id, NO_API_KEY_REASON)
+    }
 
     const host = await this.hostFor(chosenId)
     if (!host) return this.failTask(routing.id, 'agent not found')
@@ -572,12 +597,14 @@ export class OrchestraCore {
     const agent = this.registry.getAgent(agentId)
     if (!agent) return null
     const team = this.registry.getTeam(agent.teamId)
-    if (!team || !this.apiKey) return null
+    if (!team) return null
+    // OK to spawn the host with an empty apiKey — the runner will then
+    // route through the claude CLI path (OAuth). See agent-runner.ts.
 
     const host = new AgentHost({
       agent,
       team,
-      apiKey: this.apiKey,
+      apiKey: this.apiKey ?? '',
       onMessage: (entry) => { this.log.append(entry) },
       onStateChange: (next) => {
         try {
