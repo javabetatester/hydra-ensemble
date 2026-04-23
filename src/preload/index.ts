@@ -142,8 +142,8 @@ const api: HydraEnsembleApi = {
       ipcRenderer.invoke('git:unstageFiles', { cwd, paths }),
     commit: (cwd: string, message: string) =>
       ipcRenderer.invoke('git:commit', { cwd, message }),
-    generateCommitMessage: (cwd: string) =>
-      ipcRenderer.invoke('git:generateCommitMessage', cwd)
+    generateCommitMessage: (cwd: string, rules?: string) =>
+      ipcRenderer.invoke('git:generateCommitMessage', { cwd, rules })
   },
   project: {
     list: (): Promise<ProjectMeta[]> => ipcRenderer.invoke('project:list'),
@@ -186,7 +186,11 @@ const api: HydraEnsembleApi = {
       opts?: { caseSensitive?: boolean; wholeWord?: boolean; regex?: boolean }
     ) =>
       ipcRenderer.invoke('editor:replaceInFiles', { cwd, query, replacement, opts }),
-    claudeDirs: (cwd: string | null) => ipcRenderer.invoke('editor:claudeDirs', cwd)
+    claudeDirs: (cwd: string | null) => ipcRenderer.invoke('editor:claudeDirs', cwd),
+    copyPath: (src: string, destDir: string): Promise<string> =>
+      ipcRenderer.invoke('editor:copyPath', { src, destDir }),
+    deletePath: (path: string): Promise<void> =>
+      ipcRenderer.invoke('editor:deletePath', path)
   },
   gh: {
     listPRs: (cwd: string): Promise<GitOpResult<PRInfo[]>> =>

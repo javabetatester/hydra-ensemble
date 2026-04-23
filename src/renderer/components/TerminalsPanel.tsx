@@ -1,17 +1,36 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
-import { Info, Plus, Terminal as TermIcon, X } from 'lucide-react'
+import {
+  ArrowDownToLine,
+  ArrowRightToLine,
+  Check,
+  Clipboard,
+  ClipboardPaste,
+  Info,
+  MoreHorizontal,
+  Plus,
+  Terminal as TermIcon,
+  X
+} from 'lucide-react'
 import { useShells, type Shell } from '../state/shells'
 import { useProjects } from '../state/projects'
+import { useSessions } from '../state/sessions'
+import { useTerminalsPanel, type TerminalsPosition } from '../state/panels'
 import { isBoundEvent } from '../state/keybinds'
 
 interface Props {
   open: boolean
   onClose: () => void
 }
+
+// Registry keyed by shell.id so the header toolbar can read the
+// selection state and issue copy/paste against the currently active
+// xterm without threading refs through React props.
+const termRegistry = new Map<string, Terminal>()
 
 export default function TerminalsPanel({ open, onClose }: Props) {
   const shells = useShells((s) => s.shells)
@@ -20,7 +39,71 @@ export default function TerminalsPanel({ open, onClose }: Props) {
   const spawn = useShells((s) => s.spawn)
   const destroy = useShells((s) => s.destroy)
   const currentProject = useProjects((s) => s.projects.find((p) => p.path === s.currentPath))
+  const activeSession = useSessions((s) => s.sessions.find((x) => x.id === s.activeId))
   const [showExplainer, setShowExplainer] = useState(false)
+  // Re-render tick bumped on selection change so the Copy button's
+  // disabled state tracks the live xterm selection.
+  const [selTick, setSelTick] = useState(0)
+  const [canPaste, setCanPaste] = useState(false)
+  // Floating context menu position for the terminal area. `null` = closed.
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
+  // View menu (three-dot) anchor rect. `null` = closed.
+  const [viewMenu, setViewMenu] = useState<{
+    left: number
+    top: number
+  } | null>(null)
+  const viewBtnRef = useRef<HTMLButtonElement>(null)
+  const position = useTerminalsPanel((s) => s.position)
+  const setPosition = useTerminalsPanel((s) => s.setPosition)
+
+  const activeTerm = activeId ? termRegistry.get(activeId) ?? null : null
+  const hasSelection = !!activeTerm && activeTerm.hasSelection()
+  void selTick
+
+  // Poll clipboard readability so Paste disables when empty. We can't
+  // subscribe to clipboard events from the renderer reliably, so this
+  // runs while the panel is open and when focus returns.
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    const refresh = async (): Promise<void> => {
+      try {
+        const txt = await navigator.clipboard.readText()
+        if (alive) setCanPaste(!!txt)
+      } catch {
+        if (alive) setCanPaste(false)
+      }
+    }
+    void refresh()
+    const onFocus = (): void => void refresh()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      alive = false
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [open, activeId])
+
+  const doCopy = async (): Promise<void> => {
+    if (!activeTerm || !activeTerm.hasSelection()) return
+    const sel = activeTerm.getSelection()
+    if (!sel) return
+    try {
+      await navigator.clipboard.writeText(sel)
+    } catch {
+      // noop
+    }
+  }
+
+  const doPaste = async (): Promise<void> => {
+    if (!activeId) return
+    try {
+      const txt = await navigator.clipboard.readText()
+      if (!txt) return
+      await window.api.pty.write(activeId, txt)
+    } catch {
+      // noop
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -31,16 +114,74 @@ export default function TerminalsPanel({ open, onClose }: Props) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  // Close context menu on outside click / scroll / resize / Escape.
+  useEffect(() => {
+    if (!ctxMenu) return
+    const onDown = (): void => setCtxMenu(null)
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setCtxMenu(null)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('wheel', onDown, { passive: true })
+    window.addEventListener('resize', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('wheel', onDown)
+      window.removeEventListener('resize', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [ctxMenu])
+
+  // Close view menu on outside click / scroll / resize / Escape.
+  useEffect(() => {
+    if (!viewMenu) return
+    const dismiss = (): void => setViewMenu(null)
+    const onDown = (e: MouseEvent): void => {
+      const t = e.target as Node | null
+      if (t && viewBtnRef.current?.contains(t)) return
+      setViewMenu(null)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setViewMenu(null)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('wheel', dismiss, { passive: true })
+    window.addEventListener('resize', dismiss)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('wheel', dismiss)
+      window.removeEventListener('resize', dismiss)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [viewMenu])
+
+  const openViewMenu = (): void => {
+    const r = viewBtnRef.current?.getBoundingClientRect()
+    if (!r) return
+    // Menu is ~180px wide; anchor its RIGHT edge to the button's right edge
+    // so it opens inward from the header's top-right corner.
+    const left = Math.max(8, r.right - 180)
+    setViewMenu({ left, top: r.bottom + 4 })
+  }
 
   const newShell = async (): Promise<void> => {
-    const cwd = currentProject?.path ?? ''
+    const cwd =
+      activeSession?.worktreePath ??
+      activeSession?.cwd ??
+      currentProject?.path ??
+      ''
     if (!cwd) return
     await spawn(cwd)
   }
 
   return (
-    <div className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-2">
+    <div
+      className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-2"
+      style={{ display: open ? 'flex' : 'none' }}
+      aria-hidden={!open}
+    >
       <header className="flex shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 text-sm">
           <TermIcon size={14} strokeWidth={1.75} className="text-accent-400" />
@@ -62,12 +203,26 @@ export default function TerminalsPanel({ open, onClose }: Props) {
           <button
             type="button"
             onClick={() => void newShell()}
-            disabled={!currentProject}
+            disabled={!activeSession && !currentProject}
             className="flex items-center gap-1 rounded-sm border border-border-soft bg-bg-3 px-2 py-1 text-[11px] text-text-2 hover:bg-bg-4 disabled:cursor-not-allowed disabled:opacity-40"
             title="new shell"
           >
             <Plus size={11} strokeWidth={1.75} />
             new
+          </button>
+          <button
+            ref={viewBtnRef}
+            type="button"
+            onClick={() => (viewMenu ? setViewMenu(null) : openViewMenu())}
+            className={`rounded-sm p-1.5 hover:bg-bg-3 hover:text-text-1 ${
+              viewMenu ? 'bg-bg-3 text-text-1' : 'text-text-3'
+            }`}
+            aria-label="view options"
+            aria-haspopup="menu"
+            aria-expanded={!!viewMenu}
+            title="view options"
+          >
+            <MoreHorizontal size={14} strokeWidth={1.75} />
           </button>
           <button
             type="button"
@@ -137,7 +292,14 @@ export default function TerminalsPanel({ open, onClose }: Props) {
         })}
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden bg-bg-1">
+      <div
+        className="relative min-h-0 flex-1 overflow-hidden bg-bg-1"
+        onContextMenu={(e) => {
+          if (shells.length === 0) return
+          e.preventDefault()
+          setCtxMenu({ x: e.clientX, y: e.clientY })
+        }}
+      >
         {shells.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <TermIcon size={32} strokeWidth={1.25} className="text-text-4" />
@@ -148,7 +310,7 @@ export default function TerminalsPanel({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => void newShell()}
-              disabled={!currentProject}
+              disabled={!activeSession && !currentProject}
               className="mt-2 flex items-center gap-1.5 rounded-sm bg-accent-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-600 disabled:opacity-40"
             >
               <Plus size={13} strokeWidth={2} />
@@ -162,19 +324,186 @@ export default function TerminalsPanel({ open, onClose }: Props) {
               className="absolute inset-0"
               style={{ display: sh.id === activeId ? 'block' : 'none' }}
             >
-              <ShellPane shell={sh} visible={sh.id === activeId} />
+              <ShellPane
+                shell={sh}
+                visible={sh.id === activeId}
+                onSelectionChange={() => setSelTick((n) => n + 1)}
+              />
             </div>
           ))
         )}
       </div>
+
+      {ctxMenu
+        ? createPortal(
+            <TerminalCtxMenu
+              x={ctxMenu.x}
+              y={ctxMenu.y}
+              canCopy={hasSelection}
+              canPaste={!!activeId && canPaste}
+              onCopy={() => {
+                void doCopy()
+                setCtxMenu(null)
+              }}
+              onPaste={() => {
+                void doPaste()
+                setCtxMenu(null)
+              }}
+            />,
+            document.body
+          )
+        : null}
+
+      {viewMenu
+        ? createPortal(
+            <ViewMenu
+              left={viewMenu.left}
+              top={viewMenu.top}
+              position={position}
+              onPick={(p) => {
+                setPosition(p)
+                setViewMenu(null)
+              }}
+            />,
+            document.body
+          )
+        : null}
     </div>
   )
 }
 
-function ShellPane({ shell, visible }: { shell: Shell; visible: boolean }) {
+interface ViewMenuProps {
+  left: number
+  top: number
+  position: TerminalsPosition
+  onPick: (p: TerminalsPosition) => void
+}
+
+function ViewMenu({ left, top, position, onPick }: ViewMenuProps) {
+  return (
+    <div
+      className="fixed z-50 min-w-[180px] overflow-hidden rounded-md border border-border-mid bg-bg-2 py-1 text-xs text-text-2 shadow-xl shadow-black/40"
+      style={{ left, top }}
+      onMouseDown={(e) => e.stopPropagation()}
+      role="menu"
+    >
+      <div className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-4">
+        view
+      </div>
+      <ViewMenuItem
+        label="Dock bottom"
+        hint="below chat"
+        icon={<ArrowDownToLine size={12} strokeWidth={1.75} />}
+        selected={position === 'bottom'}
+        onClick={() => onPick('bottom')}
+      />
+      <ViewMenuItem
+        label="Dock right"
+        hint="side panel"
+        icon={<ArrowRightToLine size={12} strokeWidth={1.75} />}
+        selected={position === 'side'}
+        onClick={() => onPick('side')}
+      />
+    </div>
+  )
+}
+
+function ViewMenuItem({
+  label,
+  hint,
+  icon,
+  selected,
+  onClick
+}: {
+  label: string
+  hint: string
+  icon: ReactNode
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={selected}
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-3"
+    >
+      <span className="text-text-3">{icon}</span>
+      <span className="flex-1">
+        <span className="text-text-1">{label}</span>
+        <span className="ml-2 text-[10px] text-text-4">{hint}</span>
+      </span>
+      {selected ? (
+        <Check size={12} strokeWidth={2} className="text-accent-400" />
+      ) : (
+        <span className="w-3" />
+      )}
+    </button>
+  )
+}
+
+interface TerminalCtxMenuProps {
+  x: number
+  y: number
+  canCopy: boolean
+  canPaste: boolean
+  onCopy: () => void
+  onPaste: () => void
+}
+
+function TerminalCtxMenu({ x, y, canCopy, canPaste, onCopy, onPaste }: TerminalCtxMenuProps) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const left = Math.min(x, vw - 170)
+  const top = Math.min(y, vh - 90)
+  return (
+    <div
+      className="fixed z-50 min-w-[160px] overflow-hidden rounded-md border border-border-mid bg-bg-2 py-1 text-xs text-text-2 shadow-xl shadow-black/40"
+      style={{ left, top }}
+      onMouseDown={(e) => e.stopPropagation()}
+      role="menu"
+    >
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onCopy}
+        disabled={!canCopy}
+        title={canCopy ? undefined : 'select text first'}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-3 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Clipboard size={12} strokeWidth={1.75} />
+        <span>Copy</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onPaste}
+        disabled={!canPaste}
+        title={canPaste ? undefined : 'clipboard is empty'}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-3 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ClipboardPaste size={12} strokeWidth={1.75} />
+        <span>Paste</span>
+      </button>
+    </div>
+  )
+}
+
+function ShellPane({
+  shell,
+  visible,
+  onSelectionChange
+}: {
+  shell: Shell
+  visible: boolean
+  onSelectionChange?: () => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
+  const selCbRef = useRef(onSelectionChange)
+  selCbRef.current = onSelectionChange
 
   useEffect(() => {
     const container = containerRef.current
@@ -204,6 +533,10 @@ function ShellPane({ shell, visible }: { shell: Shell; visible: boolean }) {
     term.attachCustomKeyEventHandler((e) => !isBoundEvent(e))
     termRef.current = term
     fitRef.current = fit
+    termRegistry.set(shell.id, term)
+    const selSub = term.onSelectionChange(() => {
+      selCbRef.current?.()
+    })
 
     const offData = window.api.pty.onData((evt) => {
       if (evt.sessionId === shell.id) term.write(evt.data)
@@ -235,6 +568,8 @@ function ShellPane({ shell, visible }: { shell: Shell; visible: boolean }) {
       ro.disconnect()
       offData()
       onInput.dispose()
+      selSub.dispose()
+      termRegistry.delete(shell.id)
       term.dispose()
       termRef.current = null
       fitRef.current = null

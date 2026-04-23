@@ -51,5 +51,9 @@ export function registerGitIpc(svc: WorktreeService, ai: CommitAiService): void 
       svc.commit(payload.cwd, payload.message)
   )
 
-  ipcMain.handle('git:generateCommitMessage', (_evt, cwd: string) => ai.generate(cwd))
+  ipcMain.handle(
+    'git:generateCommitMessage',
+    (_evt, payload: { cwd: string; rules?: string }) =>
+      ai.generate(payload.cwd, payload.rules)
+  )
 }

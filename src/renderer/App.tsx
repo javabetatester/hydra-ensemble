@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Code2,
   FolderTree,
   GitPullRequest,
   HelpCircle,
   LayoutDashboard,
+  PanelLeftClose,
+  PanelLeftOpen,
   Terminal as TerminalIcon,
   Wand2
 } from 'lucide-react'
@@ -35,7 +38,10 @@ import {
   PANEL_WIDTH_MIN,
   PANEL_WIDTH_MAX,
   useRightColumnSize,
-  RIGHT_COLUMN_DEFAULT
+  RIGHT_COLUMN_DEFAULT,
+  useTerminalsPanel,
+  TERMINALS_HEIGHT_MIN,
+  TERMINALS_HEIGHT_MAX
 } from './state/panels'
 import { useKeybinds, resolveBind } from './state/keybinds'
 import { comboFromEvent, matchesCombo } from './lib/keybind'
@@ -74,14 +80,39 @@ export default function App() {
   const destroySession = useSessions((s) => s.destroySession)
   const setActive = useSessions((s) => s.setActive)
 
+  const chatMinimized = useSessionsUi((s) => s.chatMinimized)
+  const toggleChatMinimized = useSessionsUi((s) => s.toggleChatMinimized)
+
   const activePanel = useSlidePanel((s) => s.current)
-  const panelWidthFraction = usePanelSize((s) => s.widthFraction)
-  const setPanelWidthFraction = usePanelSize((s) => s.setWidthFraction)
+  const panelWidth = usePanelSize((s) => s.width)
+  const setPanelWidth = usePanelSize((s) => s.setWidth)
   const rightColumnWidth = useRightColumnSize((s) => s.width)
   const setRightColumnWidth = useRightColumnSize((s) => s.setWidth)
   const openPanel = useSlidePanel((s) => s.open)
   const closePanel = useSlidePanel((s) => s.close)
   const togglePanelFor = useSlidePanel((s) => s.toggle)
+  const terminalsOpenBottom = useTerminalsPanel((s) => s.open)
+  const toggleTerminals = useTerminalsPanel((s) => s.toggle)
+  const closeTerminals = useTerminalsPanel((s) => s.closePanel)
+  const terminalsHeight = useTerminalsPanel((s) => s.height)
+  const setTerminalsHeight = useTerminalsPanel((s) => s.setHeight)
+  const terminalsPosition = useTerminalsPanel((s) => s.position)
+  // Whether the terminals UI is currently visible at all. In side mode it
+  // rides the slide-pane slot (mutually exclusive w/ editor etc); in
+  // bottom mode it's its own dock. One flag drives the header button
+  // highlight and the portal target below.
+  const terminalsVisible =
+    terminalsPosition === 'side'
+      ? activePanel === 'terminals'
+      : terminalsOpenBottom
+
+  // Portal targets. The TerminalsPanel is mounted exactly once (bottom of
+  // this tree) and createPortal'd into whichever host matches the current
+  // position. Moving the portal target preserves React state and the DOM
+  // subtree, so xterm buffers and PTY subscriptions survive a view swap.
+  const [bottomHost, setBottomHost] = useState<HTMLDivElement | null>(null)
+  const [sideHost, setSideHost] = useState<HTMLDivElement | null>(null)
+  const terminalsHost = terminalsPosition === 'bottom' ? bottomHost : sideHost
 
   const initToolkit = useToolkit((s) => s.init)
   const initWatchdog = useWatchdog((s) => s.init)
@@ -139,7 +170,7 @@ export default function App() {
         const prev = sessions[(i - 1 + sessions.length) % sessions.length]
         if (prev) setActive(prev.id)
       },
-      'panel.terminals': () => togglePanelFor('terminals'),
+      'panel.terminals': () => toggleTerminals(),
       'drawer.projects': () => setDrawerOpen((v) => !v),
       'panel.dashboard': () => togglePanelFor('dashboard'),
       'panel.editor': () => togglePanelFor('editor'),
@@ -230,6 +261,7 @@ export default function App() {
     openPanel,
     closePanel,
     activePanel,
+    toggleTerminals,
     createSession,
     destroySession,
     activeId,
@@ -296,6 +328,19 @@ export default function App() {
           >
             <div className="flex items-center gap-0.5">
             <HeaderButton
+              icon={
+                chatMinimized ? (
+                  <PanelLeftOpen size={13} strokeWidth={1.75} />
+                ) : (
+                  <PanelLeftClose size={13} strokeWidth={1.75} />
+                )
+              }
+              label={chatMinimized ? 'show chat' : 'hide chat'}
+              active={chatMinimized}
+              onClick={toggleChatMinimized}
+              disabled={sessions.length === 0}
+            />
+            <HeaderButton
               icon={<GitPullRequest size={13} strokeWidth={1.75} />}
               label="PRs"
               shortcut={fmtShortcut('P', { shift: true })}
@@ -334,8 +379,8 @@ export default function App() {
               icon={<TerminalIcon size={13} strokeWidth={1.75} />}
               label="terminals"
               shortcut={`${fmtShortcut('').slice(0, -1)}\``}
-              active={activePanel === 'terminals'}
-              onClick={() => togglePanelFor('terminals')}
+              active={terminalsVisible}
+              onClick={toggleTerminals}
             />
             <HeaderButton
               icon={<HelpCircle size={13} strokeWidth={1.75} />}
@@ -373,8 +418,18 @@ export default function App() {
         </header>
 
         <main className="relative flex min-h-0 flex-1">
-          {/* Terminal area — shrinks when editor pane slides in */}
-          <div className="relative flex min-w-0 flex-1 flex-col bg-bg-1">
+          {/* Left stack: chat + editor/dashboard/etc on top, terminals
+              dock on bottom. Keeps the terminals strip from bleeding
+              under the right (sessions + toolkit) column. */}
+          <div className="relative flex min-w-0 flex-1 flex-col">
+          <div className="relative flex min-h-0 min-w-0 flex-1">
+          {/* Terminal area — shrinks when editor pane slides in. Entirely
+              hidden when the user minimizes the chat AND a side panel is
+              open (editor/dashboard/etc take over the space). */}
+          <div
+            className="relative flex min-w-0 flex-1 flex-col bg-bg-1"
+            style={{ display: chatMinimized && activePanel ? 'none' : undefined }}
+          >
             {sessions.length === 0 ? <EmptyMain claudePath={claudePath} /> : null}
             {sessions.length > 0 ? (
               <>
@@ -395,9 +450,10 @@ export default function App() {
           </div>
 
           {/* Resize handle — grabbable 4px strip on the slide pane's left
-              edge. Only rendered when the pane is open. Drag to pick a new
-              width fraction; release commits to the persisted store. */}
-          {activePanel ? (
+              edge. Only rendered when the pane is open. Drag sets pane
+              width in PX; release commits. Px (not fraction) so a right
+              column resize can't implicitly drag the pane with it. */}
+          {activePanel && !chatMinimized ? (
             <div
               role="separator"
               aria-orientation="vertical"
@@ -408,17 +464,12 @@ export default function App() {
                 const container = e.currentTarget.parentElement
                 if (!container) return
                 const rect = container.getBoundingClientRect()
-                // Right column sits to the right of the slide pane and eats
-                // part of <main>. Its width must be subtracted so the drag
-                // math measures distance to the pane's true right edge,
-                // not to the viewport/main right edge.
-                const rightOffset = rightColumnWidth
+                // Pane's true right edge = left-stack-inner right edge
+                // (rect.right). Right column lives OUTSIDE this container,
+                // so no offset is needed here.
                 const onMove = (ev: MouseEvent): void => {
-                  // Fraction of the main column the pane should occupy,
-                  // measured from the pane's RIGHT edge back to the cursor.
-                  const distance = rect.right - rightOffset - ev.clientX
-                  const fraction = distance / rect.width
-                  setPanelWidthFraction(fraction)
+                  const widthPx = rect.right - ev.clientX
+                  setPanelWidth(widthPx)
                 }
                 const onUp = (): void => {
                   document.removeEventListener('mousemove', onMove)
@@ -429,22 +480,36 @@ export default function App() {
                 document.addEventListener('mousemove', onMove)
                 document.addEventListener('mouseup', onUp)
               }}
-              onDoubleClick={() => setPanelWidthFraction(0.52)}
+              onDoubleClick={() => setPanelWidth(720)}
               title="Drag to resize · double-click to reset"
             />
           ) : null}
 
           {/* Unified slide pane — hosts whichever of editor / dashboard /
               watchdogs / PR is currently active. Width is user-resizable
-              and persisted; the pane collapses to 0 when closed. */}
+              and persisted; the pane collapses to 0 when closed. When
+              the chat is minimized, the pane grows to fill the space the
+              hidden chat column used to occupy. */}
           <div
             className={`relative flex shrink-0 flex-col overflow-hidden border-l ${
               activePanel ? 'border-border-mid' : 'border-transparent'
             } ${activePanel ? '' : 'transition-[width,opacity] duration-300 ease-out'}`}
             style={{
-              width: activePanel ? `${(panelWidthFraction * 100).toFixed(2)}%` : '0%',
-              minWidth: activePanel ? `${(PANEL_WIDTH_MIN * 100).toFixed(0)}%` : '0%',
-              maxWidth: activePanel ? `${(PANEL_WIDTH_MAX * 100).toFixed(0)}%` : '0%',
+              flex: activePanel && chatMinimized ? '1 1 0%' : undefined,
+              width:
+                activePanel && chatMinimized
+                  ? 'auto'
+                  : activePanel
+                    ? `${panelWidth}px`
+                    : 0,
+              minWidth:
+                activePanel && !chatMinimized ? `${PANEL_WIDTH_MIN}px` : 0,
+              maxWidth:
+                activePanel && !chatMinimized
+                  ? `${PANEL_WIDTH_MAX}px`
+                  : activePanel
+                    ? '100%'
+                    : 0,
               opacity: activePanel ? 1 : 0
             }}
             aria-hidden={!activePanel}
@@ -477,8 +542,84 @@ export default function App() {
                 }}
                 mode="inline"
               />
-              <TerminalsPanel open={activePanel === 'terminals'} onClose={closePanel} />
+              {/* Side-mode portal slot for the terminals UI. Kept mounted
+                  in the DOM (display:none when inactive) so the portalled
+                  TerminalsPanel keeps its xterm instances alive even when
+                  the user flips to a different side panel. */}
+              <div
+                ref={setSideHost}
+                className="absolute inset-0"
+                style={{
+                  display:
+                    terminalsPosition === 'side' && activePanel === 'terminals'
+                      ? 'block'
+                      : 'none'
+                }}
+              />
             </div>
+          </div>
+          </div>
+
+          {/* Terminals bottom dock — only rendered when the view is set
+              to 'bottom'. Holds a portal host div so the TerminalsPanel
+              (mounted once, below) lands here. In 'side' mode this
+              whole wrapper is skipped and the portal lands in the slide
+              pane instead. */}
+          {terminalsPosition === 'bottom' ? (
+            <div
+              className={`relative flex shrink-0 flex-col overflow-hidden bg-bg-2 ${
+                terminalsOpenBottom ? 'border-t border-border-mid' : ''
+              }`}
+              style={{ height: terminalsOpenBottom ? terminalsHeight : 0 }}
+              aria-hidden={!terminalsOpenBottom}
+            >
+              {terminalsOpenBottom ? (
+                <div
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize terminals panel"
+                  className="absolute left-0 right-0 top-0 z-20 h-1.5 cursor-row-resize bg-transparent transition-colors hover:bg-accent-500/40 active:bg-accent-500/60"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    const startY = e.clientY
+                    const startHeight = terminalsHeight
+                    let rafId: number | null = null
+                    let latest = startHeight
+                    const onMove = (ev: MouseEvent): void => {
+                      latest = startHeight - (ev.clientY - startY)
+                      if (rafId !== null) return
+                      rafId = requestAnimationFrame(() => {
+                        rafId = null
+                        setTerminalsHeight(
+                          Math.min(
+                            TERMINALS_HEIGHT_MAX,
+                            Math.max(TERMINALS_HEIGHT_MIN, latest)
+                          )
+                        )
+                      })
+                    }
+                    const onUp = (): void => {
+                      if (rafId !== null) cancelAnimationFrame(rafId)
+                      setTerminalsHeight(
+                        Math.min(
+                          TERMINALS_HEIGHT_MAX,
+                          Math.max(TERMINALS_HEIGHT_MIN, latest)
+                        )
+                      )
+                      document.removeEventListener('mousemove', onMove)
+                      document.removeEventListener('mouseup', onUp)
+                      document.body.style.userSelect = ''
+                    }
+                    document.body.style.userSelect = 'none'
+                    document.addEventListener('mousemove', onMove)
+                    document.addEventListener('mouseup', onUp)
+                  }}
+                  title="Drag to resize"
+                />
+              ) : null}
+              <div ref={setBottomHost} className="relative min-h-0 flex-1" />
+            </div>
+          ) : null}
           </div>
 
           {/* Right panel: sessions takes remaining space at top, toolkit
@@ -494,7 +635,7 @@ export default function App() {
               role="separator"
               aria-orientation="vertical"
               aria-label="Resize right column"
-              className="absolute left-0 top-0 z-10 h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent-500/30 active:bg-accent-500/60"
+              className="absolute left-0 top-0 z-20 h-full w-2 cursor-col-resize bg-border-soft/0 transition-colors hover:bg-accent-500/40 active:bg-accent-500/70"
               onMouseDown={(e) => {
                 e.preventDefault()
                 const startX = e.clientX
@@ -557,6 +698,16 @@ export default function App() {
           <OrchestraView onBackToClassic={() => setOrchestraOpen(false)} />
         </div>
       ) : null}
+
+      {/* Single TerminalsPanel mount — portalled into whichever slot matches
+          the user's chosen view (bottom dock or side slide-pane slot).
+          Moving the portal target preserves xterm state across a swap. */}
+      {terminalsHost
+        ? createPortal(
+            <TerminalsPanel open={terminalsVisible} onClose={closeTerminals} />,
+            terminalsHost
+          )
+        : null}
     </div>
   )
 }

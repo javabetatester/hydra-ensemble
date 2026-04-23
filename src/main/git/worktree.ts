@@ -169,20 +169,32 @@ export class WorktreeService {
     const files: ChangedFile[] = []
     const FILE_LIST_LIMIT = 2000
     let truncated = false
-    for (const rawLine of res.stdout.split('\n')) {
+    outer: for (const rawLine of res.stdout.split('\n')) {
       if (rawLine.length < 3) continue
       const code = rawLine.slice(0, 2)
       const rest = rawLine.slice(3)
-      const status = mapStatusCode(code)
-      if (!status) continue
       const arrow = rest.indexOf(' -> ')
       const filePath = arrow >= 0 ? rest.slice(arrow + 4) : rest
-      const idx = code[0] ?? ' '
-      const staged = idx !== ' ' && idx !== '?'
-      files.push({ path: filePath, status, staged })
-      if (files.length >= FILE_LIST_LIMIT) {
-        truncated = true
-        break
+      // Untracked files live only on the worktree side.
+      if (code === '??') {
+        files.push({ path: filePath, status: 'untracked', staged: false })
+        if (files.length >= FILE_LIST_LIMIT) { truncated = true; break }
+        continue
+      }
+      const idxChar = code[0] ?? ' '
+      const wtChar = code[1] ?? ' '
+      const idxStatus = mapSlot(idxChar)
+      const wtStatus = mapSlot(wtChar)
+      // Emit one entry per non-blank slot so a file with both index and
+      // worktree changes (e.g. "MM") appears in both sections — VS Code
+      // parity, and lets the user stage/unstage each side independently.
+      if (idxStatus) {
+        files.push({ path: filePath, status: idxStatus, staged: true })
+        if (files.length >= FILE_LIST_LIMIT) { truncated = true; break outer }
+      }
+      if (wtStatus) {
+        files.push({ path: filePath, status: wtStatus, staged: false })
+        if (files.length >= FILE_LIST_LIMIT) { truncated = true; break outer }
       }
     }
     if (truncated) {
@@ -501,15 +513,21 @@ async function isManagedPath(p: string): Promise<boolean> {
   return normalized.includes(MANAGED_SUBPATH)
 }
 
-function mapStatusCode(code: string): ChangedFile['status'] | null {
-  if (code === '??') return 'untracked'
-  // Renames: either index or worktree slot is 'R'.
-  if (code.includes('R')) return 'renamed'
-  // Deleted: 'D' in either slot.
-  if (code.includes('D')) return 'deleted'
-  // Added: 'A' in index.
-  if (code.includes('A')) return 'added'
-  // Modified: anything else with 'M' in either slot.
-  if (code.includes('M')) return 'modified'
-  return null
+/** Map a single porcelain slot char (index or worktree) to a status.
+ *  Returns null for blank/unhandled slots so the caller can skip them. */
+function mapSlot(ch: string): ChangedFile['status'] | null {
+  switch (ch) {
+    case 'M':
+    case 'T':
+      return 'modified'
+    case 'A':
+      return 'added'
+    case 'D':
+      return 'deleted'
+    case 'R':
+    case 'C':
+      return 'renamed'
+    default:
+      return null
+  }
 }

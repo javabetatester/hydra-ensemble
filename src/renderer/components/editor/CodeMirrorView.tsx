@@ -39,6 +39,9 @@ interface Props {
    *  gutter markers + line backgrounds while the user edits. Pass null
    *  or undefined to clear. */
   diffPatch?: string | null
+  /** Fires whenever the user selection changes. Parent uses it to
+   *  enable/disable a Copy toolbar button. */
+  onSelectionChange?: (hasSelection: boolean) => void
 }
 
 // Wire the `:w` Ex command once per module to save the active file via the
@@ -52,12 +55,14 @@ Vim.defineEx('write', 'write', () => {
   activeSaveHandler?.()
 })
 
-export default function CodeMirrorView({ path, initial, onChange, onSave, vimMode, diffPatch }: Props) {
+export default function CodeMirrorView({ path, initial, onChange, onSave, vimMode, diffPatch, onSelectionChange }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const langCompartment = useRef(new Compartment())
   const vimCompartment = useRef(new Compartment())
   const saveRef = useRef(onSave)
+  const selCbRef = useRef(onSelectionChange)
+  selCbRef.current = onSelectionChange
 
   // keep the `:w` handler current if onSave changes between renders.
   // Store a *stable* bridge in the module-level holder and point it at the
@@ -137,6 +142,10 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
       EditorView.updateListener.of((u) => {
         if (u.docChanged) {
           onChange(u.state.doc.toString())
+        }
+        if (u.selectionSet || u.docChanged) {
+          const sel = u.state.selection.main
+          selCbRef.current?.(sel.from !== sel.to)
         }
       })
     ]

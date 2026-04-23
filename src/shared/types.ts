@@ -476,8 +476,10 @@ export interface HydraEnsembleApi {
     unstageFiles: (cwd: string, paths: string[]) => Promise<GitOpResult>
     commit: (cwd: string, message: string) => Promise<GitOpResult<{ sha: string }>>
     /** Spawn `claude -p` in the background to draft a commit message from
-     *  the current staged diff. Returns the trimmed message. */
-    generateCommitMessage: (cwd: string) => Promise<GitOpResult<string>>
+     *  the current staged diff. Returns the trimmed message. `rules` is an
+     *  optional free-form user instruction block (style guide, scopes, etc.)
+     *  that is injected into the prompt. */
+    generateCommitMessage: (cwd: string, rules?: string) => Promise<GitOpResult<string>>
   }
   project: {
     list: () => Promise<ProjectMeta[]>
@@ -517,6 +519,8 @@ export interface HydraEnsembleApi {
       opts?: ReplaceInFilesOptions
     ) => Promise<ReplaceInFilesResult>
     claudeDirs: (cwd: string | null) => Promise<{ project: string | null; global: string | null }>
+    copyPath: (src: string, destDir: string) => Promise<string>
+    deletePath: (path: string) => Promise<void>
   }
   gh: {
     listPRs: (cwd: string) => Promise<GitOpResult<PRInfo[]>>

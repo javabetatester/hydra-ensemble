@@ -34,4 +34,10 @@ export function registerEditorIpc(fs: EditorFs): void {
       )
   )
   ipcMain.handle('editor:claudeDirs', (_evt, cwd: string | null) => fs.claudeDirs(cwd))
+  ipcMain.handle(
+    'editor:copyPath',
+    (_evt, payload: { src: string; destDir: string }) =>
+      fs.copyPath(payload.src, payload.destDir)
+  )
+  ipcMain.handle('editor:deletePath', (_evt, path: string) => fs.deletePath(path))
 }

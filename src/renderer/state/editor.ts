@@ -19,12 +19,19 @@ interface EditorState {
    *  session's worktree. Used to pin the editor to `.claude/` after the
    *  user clicks a file under the .claude toolkit tab. Cleared on close. */
   overrideRoot: string | null
-  /** The diff preview currently shown in the main editor area, or null
-   *  when a regular file is active. Set from GitChangesPanel for cases
-   *  the file cannot be edited (deleted, binary, huge). Most of the time
-   *  we open the file in CodeMirror and paint the diff inline instead
-   *  (see fileDiffs). */
-  diffPreview: DiffPreview | null
+  /** Open diff tabs. Each click in the git changes panel appends (or
+   *  upserts) into this list so the user can flip between several diffs
+   *  the same way they flip between file tabs. Persists across sidebar
+   *  tab changes (Files ↔ Changes). */
+  openDiffs: DiffPreview[]
+  /** Path of the currently-active diff tab, or null if no diff is open /
+   *  the user is focused on a file tab. */
+  activeDiffPath: string | null
+  /** Which tab family the editor's main slot is rendering: the file
+   *  buffer (activeFilePath) or the diff preview (activeDiffPath). Kept
+   *  explicit so we can keep both lists mounted and let the user switch
+   *  between them without losing state. */
+  activeKind: 'file' | 'diff'
   /** Map of file path → unified diff patch. Populated from
    *  GitChangesPanel when the user clicks a changed file. CodeMirrorView
    *  reads the current file's patch and paints gutter + line marks. */
@@ -51,7 +58,17 @@ interface EditorState {
   closeAllFiles: () => void
   setActive: (path: string) => void
   setOverrideRoot: (root: string | null) => void
-  setDiffPreview: (preview: DiffPreview | null) => void
+  /** Upsert a diff into the tab list and focus it. Re-clicking the same
+   *  path refreshes its patch instead of stacking duplicates. */
+  openDiff: (preview: DiffPreview) => void
+  /** Remove a diff tab. If it was active, fall back to the last remaining
+   *  diff tab, or — if none — switch activeKind back to 'file'. */
+  closeDiff: (path: string) => void
+  /** Focus an already-open diff tab. */
+  setActiveDiff: (path: string) => void
+  /** Drop every diff tab at once. Used when the cwd changes, since diffs
+   *  from a different working tree no longer apply. */
+  closeAllDiffs: () => void
   setFileDiff: (path: string, patch: string | null) => void
   clearFileDiffs: () => void
   /** Replace the buffer in memory (e.g. after the user types in CodeMirror). */
@@ -65,7 +82,9 @@ export const useEditor = create<EditorState>((set, get) => ({
   activeFilePath: null,
   editorOpen: false,
   overrideRoot: null,
-  diffPreview: null,
+  openDiffs: [],
+  activeDiffPath: null,
+  activeKind: 'file',
   fileDiffs: {},
   savedBytes: {},
 
@@ -82,10 +101,44 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   openEditor: () => set({ editorOpen: true }),
   closeEditor: () =>
-    set({ editorOpen: false, diffPreview: null, fileDiffs: {}, savedBytes: {} }),
+    set({
+      editorOpen: false,
+      openDiffs: [],
+      activeDiffPath: null,
+      activeKind: 'file',
+      fileDiffs: {},
+      savedBytes: {}
+    }),
   toggleEditor: () => set((s) => ({ editorOpen: !s.editorOpen })),
   setOverrideRoot: (root) => set({ overrideRoot: root }),
-  setDiffPreview: (preview) => set({ diffPreview: preview }),
+  openDiff: (preview) =>
+    set((s) => {
+      const existingIdx = s.openDiffs.findIndex((d) => d.path === preview.path)
+      const openDiffs =
+        existingIdx >= 0
+          ? s.openDiffs.map((d, i) => (i === existingIdx ? preview : d))
+          : [...s.openDiffs, preview]
+      return { openDiffs, activeDiffPath: preview.path, activeKind: 'diff' }
+    }),
+  closeDiff: (path) =>
+    set((s) => {
+      const openDiffs = s.openDiffs.filter((d) => d.path !== path)
+      if (s.activeDiffPath !== path) return { openDiffs }
+      const fallback = openDiffs[openDiffs.length - 1]?.path ?? null
+      return {
+        openDiffs,
+        activeDiffPath: fallback,
+        activeKind: fallback ? 'diff' : 'file'
+      }
+    }),
+  setActiveDiff: (path) =>
+    set((s) =>
+      s.openDiffs.some((d) => d.path === path)
+        ? { activeDiffPath: path, activeKind: 'diff' }
+        : s
+    ),
+  closeAllDiffs: () =>
+    set({ openDiffs: [], activeDiffPath: null, activeKind: 'file' }),
   setFileDiff: (path, patch) =>
     set((s) => {
       const next = { ...s.fileDiffs }
@@ -100,7 +153,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     // hit this — the file tree + tabs both hand us the canonical path.
     const existing = get().openFiles.find((f) => f.path === path)
     if (existing) {
-      set({ activeFilePath: path, diffPreview: null })
+      set({ activeFilePath: path, activeKind: 'file' })
       return existing.path
     }
     try {
@@ -117,14 +170,14 @@ export const useEditor = create<EditorState>((set, get) => ({
         if (s.openFiles.some((f) => f.path === file.path)) {
           return {
             activeFilePath: file.path,
-            diffPreview: null,
+            activeKind: 'file',
             savedBytes: baseline
           }
         }
         return {
           openFiles: [...s.openFiles, file],
           activeFilePath: file.path,
-          diffPreview: null,
+          activeKind: 'file',
           savedBytes: baseline
         }
       })
@@ -151,7 +204,7 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   closeAllFiles: () => set({ openFiles: [], activeFilePath: null, savedBytes: {} }),
 
-  setActive: (path) => set({ activeFilePath: path, diffPreview: null }),
+  setActive: (path) => set({ activeFilePath: path, activeKind: 'file' }),
 
   updateActiveBuffer: (text) => {
     set((s) => {

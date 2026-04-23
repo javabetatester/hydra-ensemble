@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
+  Clipboard,
+  ClipboardPaste,
   Code2,
   Eye,
   File as FileIcon,
@@ -10,6 +12,7 @@ import {
   Save,
   Search as SearchIcon,
   Terminal as TerminalIcon,
+  Trash2,
   X,
 } from 'lucide-react'
 import { useEditor } from '../state/editor'
@@ -48,8 +51,15 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const updateActiveBuffer = useEditor((s) => s.updateActiveBuffer)
   const saveActive = useEditor((s) => s.saveActive)
   const setOverrideRoot = useEditor((s) => s.setOverrideRoot)
-  const diffPreview = useEditor((s) => s.diffPreview)
-  const setDiffPreview = useEditor((s) => s.setDiffPreview)
+  const openDiffs = useEditor((s) => s.openDiffs)
+  const activeDiffPath = useEditor((s) => s.activeDiffPath)
+  const activeKind = useEditor((s) => s.activeKind)
+  const setActiveDiff = useEditor((s) => s.setActiveDiff)
+  const closeDiff = useEditor((s) => s.closeDiff)
+  const activeDiff = useMemo(
+    () => openDiffs.find((d) => d.path === activeDiffPath) ?? null,
+    [openDiffs, activeDiffPath]
+  )
   const fileDiffs = useEditor((s) => s.fileDiffs)
   const closeAllFiles = useEditor((s) => s.closeAllFiles)
   // Subscribe to the savedBytes map so the Save button re-renders the
@@ -83,6 +93,11 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   // so that opening with a selection prefills the query.
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchSeed, setSearchSeed] = useState('')
+
+  // Tracked selection state of the active CodeMirror view so the
+  // header's Copy button can disable when nothing is selected.
+  const [hasEditorSelection, setHasEditorSelection] = useState(false)
+  const [canPasteEditor, setCanPasteEditor] = useState(false)
 
   // Cross-file search (Ctrl+Shift+F). Lazy-mount the sidebar tab and
   // bump the nonce when the shortcut fires so the input refocuses even
@@ -128,6 +143,114 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   useEffect(() => {
     if (overrideRoot) setSideTab('files')
   }, [overrideRoot])
+
+  // Reset selection tracking when the editor closes or the active file
+  // changes — avoids the Copy button staying "enabled" from whatever was
+  // last selected in a different file.
+  useEffect(() => {
+    setHasEditorSelection(false)
+  }, [activeFilePath])
+
+  // Poll clipboard while the editor is open so Paste disables cleanly
+  // when nothing is on the clipboard. Re-checks on window focus.
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    const refresh = async (): Promise<void> => {
+      try {
+        const txt = await navigator.clipboard.readText()
+        if (alive) setCanPasteEditor(!!txt)
+      } catch {
+        if (alive) setCanPasteEditor(false)
+      }
+    }
+    void refresh()
+    const onFocus = (): void => void refresh()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      alive = false
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [open])
+
+  const doEditorCopy = async (): Promise<void> => {
+    const view = getActiveView()
+    if (!view) return
+    const sel = view.state.selection.main
+    if (sel.from === sel.to) return
+    const text = view.state.sliceDoc(sel.from, sel.to)
+    if (!text) return
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // noop
+    }
+  }
+
+  const doEditorPaste = async (): Promise<void> => {
+    const view = getActiveView()
+    if (!view) return
+    try {
+      const txt = await navigator.clipboard.readText()
+      if (!txt) return
+      const sel = view.state.selection.main
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: txt },
+        selection: { anchor: sel.from + txt.length }
+      })
+      view.focus()
+    } catch {
+      // noop
+    }
+  }
+
+  // Delete = drop the current selection. If nothing is selected, delete
+  // the line the cursor is on — same fallback VSCode's "Delete" command
+  // uses, so the menu item is always useful.
+  const doEditorDelete = (): void => {
+    const view = getActiveView()
+    if (!view) return
+    const sel = view.state.selection.main
+    if (sel.from !== sel.to) {
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: '' },
+        selection: { anchor: sel.from }
+      })
+    } else {
+      const line = view.state.doc.lineAt(sel.from)
+      // Include the trailing newline when it exists so the line is fully
+      // removed, not just blanked.
+      const to = line.to < view.state.doc.length ? line.to + 1 : line.to
+      view.dispatch({
+        changes: { from: line.from, to, insert: '' },
+        selection: { anchor: line.from }
+      })
+    }
+    view.focus()
+  }
+
+  // Floating context menu position for the editor content area.
+  const [editorMenu, setEditorMenu] = useState<{ x: number; y: number } | null>(
+    null
+  )
+
+  useEffect(() => {
+    if (!editorMenu) return
+    const onDown = (): void => setEditorMenu(null)
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setEditorMenu(null)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('wheel', onDown, { passive: true })
+    window.addEventListener('resize', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('wheel', onDown)
+      window.removeEventListener('resize', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [editorMenu])
 
   useEffect(() => {
     if (!open) return
@@ -334,7 +457,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
               className={`absolute inset-0 ${sideTab === 'files' ? '' : 'hidden'}`}
               aria-hidden={sideTab !== 'files'}
             >
-              <div className="df-scroll h-full overflow-y-auto">
+              <div className="h-full">
                 {root ? (
                   <FileTree root={root} onOpenFile={(p) => void openFile(p)} />
                 ) : (
@@ -411,15 +534,15 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
         </aside>
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-1">
           <div className="df-scroll flex shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border-soft bg-bg-2 px-2 pt-1.5">
-            {openFiles.length === 0 && (
+            {openFiles.length === 0 && openDiffs.length === 0 && (
               <div className="px-3 py-2 text-[11px] text-text-4">no file open</div>
             )}
             {openFiles.map((f) => {
               const name = f.path.split(/[/\\]/).pop() ?? f.path
-              const active = f.path === activeFilePath
+              const active = activeKind === 'file' && f.path === activeFilePath
               return (
                 <div
-                  key={f.path}
+                  key={`file:${f.path}`}
                   className={`group flex items-center gap-2 rounded-t-sm px-2.5 py-1 text-[11px] ${
                     active
                       ? '-mb-px border-t-2 border-accent-500 bg-bg-1 text-text-1'
@@ -447,19 +570,69 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                 </div>
               )
             })}
+            {openDiffs.map((d) => {
+              const name = d.path.split(/[/\\]/).pop() ?? d.path
+              const active = activeKind === 'diff' && d.path === activeDiffPath
+              return (
+                <div
+                  key={`diff:${d.path}`}
+                  className={`group flex items-center gap-2 rounded-t-sm px-2.5 py-1 text-[11px] ${
+                    active
+                      ? '-mb-px border-t-2 border-accent-500 bg-bg-1 text-text-1'
+                      : 'mt-0.5 border-t-2 border-transparent bg-bg-3 text-text-3 hover:bg-bg-4 hover:text-text-2'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveDiff(d.path)}
+                    className="flex max-w-[12rem] items-center gap-1.5 truncate text-left font-mono"
+                    title={`${d.path} — diff`}
+                  >
+                    <GitCommit
+                      size={10}
+                      strokeWidth={1.75}
+                      className={active ? 'text-accent-400' : 'text-text-4'}
+                    />
+                    <span className="truncate">{name}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeDiff(d.path)}
+                    className={`rounded-sm p-0.5 text-text-4 hover:bg-bg-4 hover:text-text-1 ${
+                      active ? '' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    aria-label="Close diff tab"
+                  >
+                    <X size={11} strokeWidth={2} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
-          <div className="relative min-h-0 flex-1 overflow-hidden bg-bg-1 p-2">
-            {diffPreview ? (
+          <div
+            className="relative min-h-0 flex-1 overflow-hidden bg-bg-1 p-2"
+            onContextMenu={(e) => {
+              // Only surface the menu over an editable text buffer — not in
+              // the diff/preview/binary/empty states where copy/paste/delete
+              // don't have a well-defined target.
+              if (!activeFile || activeFile.encoding !== 'utf-8') return
+              if (activeKind === 'diff') return
+              if (showPreview) return
+              e.preventDefault()
+              setEditorMenu({ x: e.clientX, y: e.clientY })
+            }}
+          >
+            {activeKind === 'diff' && activeDiff ? (
               <div className="flex h-full flex-col gap-2">
                 <div className="flex items-center gap-2 rounded-md border border-border-soft bg-bg-2 px-3 py-1.5">
                   <GitCommit size={12} strokeWidth={1.75} className="text-accent-400" />
-                  <span className="font-mono text-[11px] text-text-1">{diffPreview.path}</span>
+                  <span className="font-mono text-[11px] text-text-1">{activeDiff.path}</span>
                   <span className="rounded-sm border border-border-soft bg-bg-3 px-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-text-3">
-                    {diffPreview.status}
+                    {activeDiff.status}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setDiffPreview(null)}
+                    onClick={() => closeDiff(activeDiff.path)}
                     className="ml-auto rounded-sm p-1 text-text-3 hover:bg-bg-3 hover:text-text-1"
                     aria-label="Close diff"
                     title="Close diff"
@@ -468,7 +641,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                   </button>
                 </div>
                 <div className="min-h-0 flex-1">
-                  <DiffView diff={diffPreview.patch} fill emptyLabel="no textual diff" />
+                  <DiffView diff={activeDiff.patch} fill emptyLabel="no textual diff" />
                 </div>
               </div>
             ) : activeFile && activeFile.encoding === 'utf-8' ? (
@@ -483,6 +656,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                   onSave={() => void saveActive()}
                   vimMode={vimMode}
                   diffPatch={fileDiffs[activeFile.path] ?? null}
+                  onSelectionChange={setHasEditorSelection}
                 />
               )
             ) : activeFile ? (
@@ -522,6 +696,32 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
           </div>
         </section>
       </div>
+      {editorMenu
+        ? createPortal(
+            <EditorCtxMenu
+              x={editorMenu.x}
+              y={editorMenu.y}
+              canCopy={hasEditorSelection}
+              canPaste={
+                !!activeFile && activeFile.encoding === 'utf-8' && canPasteEditor
+              }
+              canDelete={!!activeFile && activeFile.encoding === 'utf-8'}
+              onCopy={() => {
+                void doEditorCopy()
+                setEditorMenu(null)
+              }}
+              onPaste={() => {
+                void doEditorPaste()
+                setEditorMenu(null)
+              }}
+              onDelete={() => {
+                doEditorDelete()
+                setEditorMenu(null)
+              }}
+            />,
+            document.body
+          )
+        : null}
     </div>
   )
 
@@ -539,5 +739,74 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
       </div>
     </div>,
     document.body
+  )
+}
+
+interface EditorCtxMenuProps {
+  x: number
+  y: number
+  canCopy: boolean
+  canPaste: boolean
+  canDelete: boolean
+  onCopy: () => void
+  onPaste: () => void
+  onDelete: () => void
+}
+
+function EditorCtxMenu({
+  x,
+  y,
+  canCopy,
+  canPaste,
+  canDelete,
+  onCopy,
+  onPaste,
+  onDelete
+}: EditorCtxMenuProps) {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const left = Math.min(x, vw - 170)
+  const top = Math.min(y, vh - 130)
+  return (
+    <div
+      className="fixed z-50 min-w-[160px] overflow-hidden rounded-md border border-border-mid bg-bg-2 py-1 text-xs text-text-2 shadow-xl shadow-black/40"
+      style={{ left, top }}
+      onMouseDown={(e) => e.stopPropagation()}
+      role="menu"
+    >
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onCopy}
+        disabled={!canCopy}
+        title={canCopy ? undefined : 'select text first'}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-3 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Clipboard size={12} strokeWidth={1.75} />
+        <span>Copy</span>
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onPaste}
+        disabled={!canPaste}
+        title={canPaste ? undefined : 'clipboard is empty'}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-bg-3 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <ClipboardPaste size={12} strokeWidth={1.75} />
+        <span>Paste</span>
+      </button>
+      <div className="my-1 h-px bg-border-soft" />
+      <button
+        type="button"
+        role="menuitem"
+        onClick={onDelete}
+        disabled={!canDelete}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-status-attention hover:bg-bg-3 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Trash2 size={12} strokeWidth={1.75} />
+        <span>Delete</span>
+      </button>
+    </div>
   )
 }

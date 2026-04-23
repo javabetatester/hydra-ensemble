@@ -1,7 +1,16 @@
-import { readFile, writeFile, readdir, stat, realpath, access } from 'node:fs/promises'
+import {
+  readFile,
+  writeFile,
+  readdir,
+  stat,
+  realpath,
+  access,
+  cp,
+  rm
+} from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, sep } from 'node:path'
+import { basename, extname, isAbsolute, join, sep } from 'node:path'
 import type { DirEntry, FileContent } from '../../shared/types'
 
 /** Maximum file size we will read into memory (5 MB). */
@@ -77,6 +86,62 @@ export class EditorFs {
   async writeFile(path: string, content: string): Promise<void> {
     const safe = await this.assertSafe(path, { allowMissing: true })
     await writeFile(safe, content, { encoding: 'utf-8' })
+  }
+
+  /**
+   * Recursively copy a file or directory into `destDir`. The final path is
+   * `destDir/basename(src)`; if that already exists, we append ` copy`,
+   * ` copy 2`, … before the extension to avoid clobbering. Both arguments
+   * must resolve inside the user home. Returns the final destination path.
+   */
+  async copyPath(src: string, destDir: string): Promise<string> {
+    const safeSrc = await this.assertSafe(src)
+    const safeDestDir = await this.assertSafe(destDir)
+    const destDirStat = await stat(safeDestDir)
+    if (!destDirStat.isDirectory()) {
+      throw new Error('destination must be a directory')
+    }
+    // Disallow copying a directory into itself or a descendant — that would
+    // recurse forever and fill the disk before the OS notices.
+    const srcReal = safeSrc.endsWith(sep) ? safeSrc : safeSrc + sep
+    if (safeDestDir === safeSrc || safeDestDir.startsWith(srcReal)) {
+      throw new Error('cannot copy into itself')
+    }
+    const name = basename(safeSrc)
+    const final = await this.nextFreeName(safeDestDir, name)
+    await cp(safeSrc, final, { recursive: true, errorOnExist: true, force: false })
+    return final
+  }
+
+  async deletePath(path: string): Promise<void> {
+    const safe = await this.assertSafe(path)
+    if (safe === this.homeRoot) {
+      throw new Error('refusing to delete home root')
+    }
+    await rm(safe, { recursive: true, force: true })
+  }
+
+  private async nextFreeName(destDir: string, name: string): Promise<string> {
+    const first = join(destDir, name)
+    if (!(await this.exists(first))) return first
+    const ext = extname(name)
+    const stem = ext ? name.slice(0, -ext.length) : name
+    for (let i = 1; i < 1000; i++) {
+      const candidate =
+        i === 1 ? `${stem} copy${ext}` : `${stem} copy ${i}${ext}`
+      const full = join(destDir, candidate)
+      if (!(await this.exists(full))) return full
+    }
+    throw new Error('too many copies')
+  }
+
+  private async exists(p: string): Promise<boolean> {
+    try {
+      await access(p, fsConstants.F_OK)
+      return true
+    } catch {
+      return false
+    }
   }
 
   /**
