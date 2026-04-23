@@ -91,6 +91,7 @@ export default function Welcome({
             type="button"
             onClick={() => useSpawnDialog.getState().show()}
             disabled={isCreating || claudePath === null}
+            data-tour-id="spawn-session"
             className="group relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition df-lift hover:from-accent-400 hover:to-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />

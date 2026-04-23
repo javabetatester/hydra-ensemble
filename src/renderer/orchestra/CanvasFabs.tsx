@@ -57,22 +57,24 @@ export default function CanvasFabs(_props: Props) {
         </FabButton>
 
         {/* Secondary FAB — New task */}
-        <FabButton
-          label="New task"
-          onClick={openTask}
-          size={36}
-          variant="secondary"
-          aria-label="new task"
-        >
-          <span className="relative inline-flex items-center justify-center">
-            <Users size={14} strokeWidth={2} />
-            <Plus
-              size={10}
-              strokeWidth={2.5}
-              className="absolute -right-1.5 -top-1.5 rounded-full bg-bg-2 p-[1px] text-text-1"
-            />
-          </span>
-        </FabButton>
+        <div data-tour-id="orchestra-new-task">
+          <FabButton
+            label="New task"
+            onClick={openTask}
+            size={36}
+            variant="secondary"
+            aria-label="new task"
+          >
+            <span className="relative inline-flex items-center justify-center">
+              <Users size={14} strokeWidth={2} />
+              <Plus
+                size={10}
+                strokeWidth={2.5}
+                className="absolute -right-1.5 -top-1.5 rounded-full bg-bg-2 p-[1px] text-text-1"
+              />
+            </span>
+          </FabButton>
+        </div>
       </div>
 
       {activeTeamId !== null && (

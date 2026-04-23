@@ -119,6 +119,7 @@ export default function Inspector() {
   return (
     <aside
       data-coach="inspector"
+      data-tour-id="orchestra-inspector"
       style={{ width }}
       className={`fixed right-0 top-0 z-40 flex h-full flex-col border-l border-border-soft bg-bg-2 shadow-pop transition-transform duration-200 ease-out ${
         visible ? 'translate-x-0' : 'translate-x-full pointer-events-none'

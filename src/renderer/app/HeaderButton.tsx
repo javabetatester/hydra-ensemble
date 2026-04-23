@@ -7,6 +7,8 @@ export interface HeaderButtonProps {
   onClick: () => void
   disabled?: boolean
   active?: boolean
+  /** Anchor value for guided tours (src/renderer/app/tour). */
+  dataTourId?: string
 }
 
 /** Icon + label header button used across App.tsx's top chrome. Kept
@@ -19,13 +21,15 @@ export default function HeaderButton({
   shortcut,
   onClick,
   disabled,
-  active
+  active,
+  dataTourId
 }: HeaderButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-tour-id={dataTourId}
       title={shortcut ? `${label} (${shortcut})` : label}
       className={`group flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3 ${
         active

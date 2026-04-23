@@ -103,6 +103,7 @@ export default function SessionsPanel() {
             type="button"
             onClick={() => openSpawn()}
             disabled={isCreating}
+            data-tour-id="spawn-session"
             className="rounded p-1 text-text-2 hover:bg-bg-3 hover:text-text-1 disabled:opacity-40"
             title="new session"
             aria-label="new session"

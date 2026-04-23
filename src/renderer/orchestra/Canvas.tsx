@@ -521,6 +521,7 @@ function CanvasInner() {
     <div
       ref={wrapperRef}
       data-coach="canvas"
+      data-tour-id="orchestra-canvas"
       className="relative h-full w-full outline-none"
       onDoubleClick={onWrapperDoubleClick}
       style={

@@ -71,9 +71,31 @@ import { useGlobalKeybinds } from './hooks/useGlobalKeybinds'
 import { useBootstrap } from './app/boot'
 import HeaderButton from './app/HeaderButton'
 import Welcome from './app/Welcome'
+import TourHost from './app/tour/TourHost'
+import TourLauncher from './app/tour/TourLauncher'
+import { registerBuiltInTours } from './app/tour/tours'
+import { useTour } from './app/tour/store'
 
 export default function App() {
   const claudePath = useBootstrap()
+  // Register the built-in tours once at mount. The store dedupes on
+  // id so calling this twice (Strict Mode) is cheap. Also triggers
+  // the welcome tour on first boot — see the effect below.
+  useMemo(() => registerBuiltInTours(), [])
+  const completedTourIds = useTour((s) => s.completedIds)
+  const startTour = useTour((s) => s.start)
+  useMemo(() => {
+    // Auto-start the welcome tour when the user has no completed tours
+    // AND no sessions yet. Runs during the first render — subsequent
+    // renders short-circuit because completedIds populates once the
+    // tour runs to the end.
+    if (Object.keys(completedTourIds).length === 0) {
+      // Defer so the header + Welcome screen finish their first paint
+      // before the tour overlay takes the screen.
+      setTimeout(() => startTour('welcome'), 600)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -204,6 +226,7 @@ export default function App() {
               shortcut={fmtShortcut('T')}
               active={drawerOpen}
               onClick={() => setDrawerOpen((v) => !v)}
+              dataTourId="projects-toggle"
             />
           </div>
 
@@ -252,6 +275,7 @@ export default function App() {
               shortcut={fmtShortcut('E')}
               active={activePanel === 'editor'}
               onClick={() => togglePanelFor('editor')}
+              dataTourId="header-editor"
             />
             <HeaderButton
               icon={<LayoutDashboard size={13} strokeWidth={1.75} />}
@@ -266,13 +290,16 @@ export default function App() {
               shortcut={`${fmtShortcut('').slice(0, -1)}\``}
               active={terminalsVisible}
               onClick={toggleTerminals}
+              dataTourId="header-terminals"
             />
             <HeaderButton
               icon={<HelpCircle size={13} strokeWidth={1.75} />}
               label="?"
               shortcut="?"
               onClick={() => setHelpOpen(true)}
+              dataTourId="header-help"
             />
+            <TourLauncher />
             <div className="ml-2 flex items-center gap-1.5 border-l border-border-soft pl-3 font-mono text-[10px]">
               <span className="text-text-4">os</span>
               <span className="text-text-2">{window.api.platform.os}</span>
@@ -598,6 +625,10 @@ export default function App() {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
       <NewSessionDialog open={spawnOpen} onClose={hideSpawn} />
+
+      {/* Guided-tour overlay. Always mounted; renders nothing when the
+          store has no active tour id. */}
+      <TourHost />
 
       {/* First-run welcome screen — only the very first time the user
           opens the app. After dismissal writes hydra.welcome.shown. */}
