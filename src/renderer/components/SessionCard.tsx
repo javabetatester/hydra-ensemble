@@ -3,6 +3,7 @@ import { GitBranch, X, RotateCw, Edit3, Copy, Pin, PinOff } from 'lucide-react'
 import type { SessionMeta, SessionState } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
 import AgentAvatar from './AgentAvatar'
+import ContextMeter from './ContextMeter'
 import { defaultAgentColor, hexAlpha } from '../lib/agent'
 import { fmtShortcut } from '../lib/platform'
 import { useSessions } from '../state/sessions'
@@ -308,6 +309,14 @@ export default function SessionCard({
         ) : null}
         <span className="text-text-3">↓ {formatTokens(session.tokensIn)} in</span>
         <span className="text-text-3">↑ {formatTokens(session.tokensOut)} out</span>
+        {/* Context-window meter pinned to the far-right so its spark bar
+             lines up across every card in the column. Hidden when we
+             have no usage yet — no point drawing a 0% bar. */}
+        <ContextMeter
+          used={session.contextTokens}
+          model={session.model}
+          className="ml-auto"
+        />
       </div>
     </div>
   )

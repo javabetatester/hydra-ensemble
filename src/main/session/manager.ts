@@ -233,6 +233,7 @@ export class SessionManager {
         | 'cost'
         | 'tokensIn'
         | 'tokensOut'
+        | 'contextTokens'
         | 'model'
         | 'latestAssistantText'
         | 'subStatus'

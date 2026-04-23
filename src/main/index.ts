@@ -96,6 +96,7 @@ function setupServices(): void {
       cost: update.cost,
       tokensIn: update.tokensIn,
       tokensOut: update.tokensOut,
+      contextTokens: update.contextTokens,
       model: update.model,
       latestAssistantText: update.latestAssistantText,
       subStatus: update.subStatus,

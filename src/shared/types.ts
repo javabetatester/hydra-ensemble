@@ -54,6 +54,11 @@ export interface SessionMeta {
   cost?: number
   tokensIn?: number
   tokensOut?: number
+  /** Input footprint of the MOST-RECENT assistant turn — approximates
+   *  "current context window used". Unlike tokensIn (cumulative across
+   *  the whole session) this is what drives the context meter in the
+   *  session card. */
+  contextTokens?: number
   model?: string
   latestAssistantText?: string
   /** 'cli' (xterm) or 'visual' (rendered chat transcript). Defaults to 'cli'. */
@@ -111,6 +116,8 @@ export interface JsonlUpdate {
   cost: number
   tokensIn: number
   tokensOut: number
+  /** Input footprint of the most-recent assistant turn — see SessionMeta.contextTokens. */
+  contextTokens?: number
   model: string
   latestAssistantText?: string
   latestAssistantAt?: string

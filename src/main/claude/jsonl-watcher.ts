@@ -212,6 +212,11 @@ export class JsonlWatcher {
   private totalCost = 0
   private totalTokensIn = 0
   private totalTokensOut = 0
+  /** Snapshot of the MOST-RECENT assistant turn's input tokens
+   *  (input + cache_creation + cache_read). Unlike totalTokensIn this
+   *  is the model's current-context footprint — what the renderer
+   *  needs to show a "context window % used" meter. */
+  private latestContextTokens = 0
   private latestModel = 'sonnet'
   private latestAssistantText: string | undefined
   private latestAssistantAt: string | undefined
@@ -463,6 +468,9 @@ export class JsonlWatcher {
 
     this.totalTokensIn += inputTokens + cacheCreationTokens + cacheReadTokens
     this.totalTokensOut += outputTokens
+    // Each assistant turn reports the FULL input it saw. Overwriting
+    // here (rather than summing) makes this a current-context gauge.
+    this.latestContextTokens = inputTokens + cacheCreationTokens + cacheReadTokens
 
     const pricing = PRICING[this.latestModel] ?? PRICING['sonnet']!
     const inputCost = inputTokens * pricing.inputPerToken
@@ -481,6 +489,7 @@ export class JsonlWatcher {
       cost: Math.round(this.totalCost * 1_000_000) / 1_000_000,
       tokensIn: this.totalTokensIn,
       tokensOut: this.totalTokensOut,
+      contextTokens: this.latestContextTokens,
       model: this.latestModel
     }
     if (this.latestAssistantText !== undefined) {
