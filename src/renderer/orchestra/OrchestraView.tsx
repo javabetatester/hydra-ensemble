@@ -13,6 +13,7 @@ import {
   Activity,
   ArrowLeft,
   HelpCircle,
+  Key as KeyIcon,
   Network,
   Plus,
   Settings
@@ -40,6 +41,12 @@ import TeamTemplatesDialog from './TeamTemplatesDialog'
 import TeamSwitcher from './TeamSwitcher'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
+import ProvidersDialog from './ProvidersDialog'
+import ShortcutHud from './ShortcutHud'
+import AgentPresence from './AgentPresence'
+import TeamTabsStrip from './TeamTabsStrip'
+import BudgetWarning from './BudgetWarning'
+import OrchestraBreadcrumb from './OrchestraBreadcrumb'
 import {
   useOrchestraKeybinds,
   ORCHESTRA_EVENTS,
@@ -118,6 +125,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [wizardOpen, setWizardOpen] = useState<boolean>(false)
   const [newTaskOpen, setNewTaskOpen] = useState<boolean>(false)
   const [templatesOpen, setTemplatesOpen] = useState<boolean>(false)
+  const [providersOpen, setProvidersOpen] = useState<boolean>(false)
   const [sidePanelsHidden, setSidePanelsHidden] = useState<boolean>(false)
   const [newTeamOpen, setNewTeamOpen] = useState<boolean>(false)
   const [newTeamMode, setNewTeamMode] = useState<'blank' | 'template'>('blank')
@@ -327,6 +335,15 @@ export default function OrchestraView({ onBackToClassic }: Props) {
             </span>
             <button
               type="button"
+              onClick={() => setProvidersOpen(true)}
+              className="group relative flex h-7 w-7 items-center justify-center rounded-sm text-text-3 hover:bg-bg-3 hover:text-text-1"
+              aria-label="Configure providers"
+            >
+              <KeyIcon size={15} strokeWidth={1.75} />
+              <HeaderTooltip label="Providers (API keys + OAuth)" />
+            </button>
+            <button
+              type="button"
               onClick={() => setSettingsOpen(true)}
               className="group relative flex h-7 w-7 items-center justify-center rounded-sm text-text-3 hover:bg-bg-3 hover:text-text-1"
               aria-label="Orchestra settings"
@@ -347,6 +364,12 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           </button>
         </div>
       </header>
+
+      {/* Secondary header strip: breadcrumb path renders below the main header. */}
+      <OrchestraBreadcrumb />
+
+      {/* Team tabs — only shown when there is more than one team to switch between. */}
+      {teams.length >= 2 ? <TeamTabsStrip /> : null}
 
       {/* Main 3-column body */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -380,12 +403,16 @@ export default function OrchestraView({ onBackToClassic }: Props) {
               {activeTeam && activeAgents.length === 0 ? (
                 <CanvasGhostState />
               ) : null}
+              {/* Budget warning banner — sits above the TeamOverview chips. */}
+              <BudgetWarning />
               {/* Live counters + active-task chips pinned to the top. */}
               <TeamOverview />
               {/* Bottom-left toolbar (fit-view, auto-layout, templates). */}
               <CanvasToolbar />
               {/* Bottom-right FABs (new agent, new task). */}
               <CanvasFabs />
+              {/* Live presence indicators for agents in the active team. */}
+              <AgentPresence />
               {/* Multi-select floating actions (pause/stop/delete N). */}
               <BulkActionsBar />
             </>
@@ -452,6 +479,11 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       {/* Team templates dialog (Templates button in the action bar). */}
       <TeamTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
 
+      {/* Providers dialog — one place to configure Claude OAuth,
+          Anthropic API key, OpenAI, OpenRouter, Codex CLI. Opened from
+          the header "Providers" button or a settings shortcut. */}
+      <ProvidersDialog open={providersOpen} onClose={() => setProvidersOpen(false)} />
+
       {/* New team dialog — prompted from the empty state, the Team rail
           footer, or the team switcher. Handles both blank creation and
           full template provisioning. */}
@@ -470,6 +502,10 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           onClose={() => setHasApiKey(true)}
         />
       ) : null}
+
+      {/* Global keyboard shortcut HUD — mounted at the very bottom so it
+          floats above every other surface in the Orchestra tree. */}
+      <ShortcutHud />
     </div>
   )
 }

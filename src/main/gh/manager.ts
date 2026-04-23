@@ -96,6 +96,62 @@ export class GhService {
     return { ok: true, value: detail }
   }
 
+  /**
+   * Submit a review. `approve` and `comment` may omit the body; `request-changes`
+   * requires a non-empty body (gh itself rejects it otherwise, but we also guard
+   * here so the renderer gets a clean error instead of a raw gh message).
+   */
+  async review(
+    cwd: string,
+    number: number,
+    decision: 'approve' | 'request-changes' | 'comment',
+    body?: string
+  ): Promise<GitOpResult> {
+    if (decision === 'request-changes' && (!body || !body.trim())) {
+      return { ok: false, error: 'a comment is required when requesting changes' }
+    }
+    const flag =
+      decision === 'approve'
+        ? '--approve'
+        : decision === 'request-changes'
+          ? '--request-changes'
+          : '--comment'
+    const args = ['pr', 'review', String(number), flag]
+    if (body && body.trim().length > 0) {
+      args.push('-b', body)
+    }
+    const res = await this.runGh(args, cwd)
+    if (res.code !== 0) return { ok: false, error: this.friendlyError(res) }
+    return { ok: true, value: undefined }
+  }
+
+  async comment(cwd: string, number: number, body: string): Promise<GitOpResult> {
+    if (!body.trim()) {
+      return { ok: false, error: 'comment body cannot be empty' }
+    }
+    const res = await this.runGh(['pr', 'comment', String(number), '-b', body], cwd)
+    if (res.code !== 0) return { ok: false, error: this.friendlyError(res) }
+    return { ok: true, value: undefined }
+  }
+
+  /** `--auto` queues the merge once checks pass; `--squash` matches the
+   *  team default. Error is returned verbatim so the caller can show e.g.
+   *  "auto-merge is not allowed for this repository". */
+  async merge(cwd: string, number: number): Promise<GitOpResult> {
+    const res = await this.runGh(
+      ['pr', 'merge', String(number), '--auto', '--squash'],
+      cwd
+    )
+    if (res.code !== 0) return { ok: false, error: this.friendlyError(res) }
+    return { ok: true, value: undefined }
+  }
+
+  async close(cwd: string, number: number): Promise<GitOpResult> {
+    const res = await this.runGh(['pr', 'close', String(number)], cwd)
+    if (res.code !== 0) return { ok: false, error: this.friendlyError(res) }
+    return { ok: true, value: undefined }
+  }
+
   private mapPR(raw: RawPR): PRInfo {
     const authorLogin =
       typeof raw.author === 'string'

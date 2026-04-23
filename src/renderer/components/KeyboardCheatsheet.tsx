@@ -143,7 +143,9 @@ function mergeDynamic(rows: Row[], label: string, combo: string, actionId: strin
   const idx = rows.findIndex((r) => r.label.toLowerCase() === label.toLowerCase())
   if (idx >= 0) {
     const next = rows.slice()
-    next[idx] = { ...next[idx], combo, actionId }
+    const base = next[idx]
+    if (!base) return next
+    next[idx] = { ...base, combo, actionId }
     return next
   }
   return [...rows, { label, combo, actionId }]

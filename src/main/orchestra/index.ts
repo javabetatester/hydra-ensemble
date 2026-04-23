@@ -350,11 +350,18 @@ export class OrchestraCore {
 
     // API key is no longer a hard requirement — without one, the agent
     // runner falls back to spawning `claude -p`, which inherits the
-    // OAuth login from ~/.claude and works for every user that's
-    // already logged in via the classic Hydra CLI. Only block if there's
-    // no key AND no claude binary on PATH.
+    // OAuth login from ~/.claude. Only block if there's no key AND no
+    // claude binary on PATH.
     if (!this.apiKey && !(await claudeCliAvailable())) {
-      return this.failTask(routing.id, NO_API_KEY_REASON)
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[orchestra] no ANTHROPIC_API_KEY set and no `claude` binary resolvable. ' +
+          'Install the Claude Code CLI or open Providers → Anthropic API.'
+      )
+      return this.failTask(
+        routing.id,
+        'no API key and claude CLI not found — open Providers to set one up'
+      )
     }
 
     const host = await this.hostFor(chosenId)

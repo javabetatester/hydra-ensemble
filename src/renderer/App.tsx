@@ -466,7 +466,10 @@ export default function App() {
               open (editor/dashboard/etc take over the space). */}
           <div
             className="relative flex min-w-0 flex-1 flex-col bg-bg-1"
-            style={{ display: chatMinimized && activePanel ? 'none' : undefined }}
+            // Hide the chat in every case the user asks: whether or not a
+            // side panel is open. Previously only hid when a panel had the
+            // spotlight, leaving the "hide chat" button visually inert.
+            style={{ display: chatMinimized ? 'none' : undefined }}
           >
             {sessions.length === 0 ? <EmptyMain claudePath={claudePath} /> : null}
             {sessions.length > 0 ? (
@@ -486,6 +489,22 @@ export default function App() {
               </>
             ) : null}
           </div>
+
+          {/* Placeholder shown when the user minimises the chat and no
+              side panel is taking the space — gives them a clear "the
+              chat is hidden" affordance with a restore button. */}
+          {chatMinimized && !activePanel ? (
+            <div className="flex min-w-0 flex-1 items-center justify-center bg-bg-1">
+              <button
+                type="button"
+                onClick={toggleChatMinimized}
+                className="flex flex-col items-center gap-2 rounded-md border border-border-soft bg-bg-2 px-8 py-6 text-[12px] text-text-3 hover:border-border-mid hover:text-text-1"
+              >
+                <PanelLeftOpen size={20} strokeWidth={1.5} />
+                <span>Chat hidden — click to show again</span>
+              </button>
+            </div>
+          ) : null}
 
           {/* Resize handle — grabbable 4px strip on the slide pane's left
               edge. Only rendered when the pane is open. Drag sets pane

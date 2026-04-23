@@ -196,7 +196,20 @@ const api: HydraEnsembleApi = {
     listPRs: (cwd: string): Promise<GitOpResult<PRInfo[]>> =>
       ipcRenderer.invoke('gh:listPRs', cwd),
     getPR: (cwd: string, number: number): Promise<GitOpResult<PRDetail>> =>
-      ipcRenderer.invoke('gh:getPR', { cwd, number })
+      ipcRenderer.invoke('gh:getPR', { cwd, number }),
+    review: (
+      cwd: string,
+      number: number,
+      decision: 'approve' | 'request-changes' | 'comment',
+      body?: string
+    ): Promise<GitOpResult> =>
+      ipcRenderer.invoke('gh:review', { cwd, number, decision, body }),
+    comment: (cwd: string, number: number, body: string): Promise<GitOpResult> =>
+      ipcRenderer.invoke('gh:comment', { cwd, number, body }),
+    merge: (cwd: string, number: number): Promise<GitOpResult> =>
+      ipcRenderer.invoke('gh:merge', { cwd, number }),
+    close: (cwd: string, number: number): Promise<GitOpResult> =>
+      ipcRenderer.invoke('gh:close', { cwd, number })
   },
   quickTerm: {
     toggle: () => ipcRenderer.invoke('quickTerm:toggle')

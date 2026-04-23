@@ -527,6 +527,20 @@ export interface HydraEnsembleApi {
   gh: {
     listPRs: (cwd: string) => Promise<GitOpResult<PRInfo[]>>
     getPR: (cwd: string, number: number) => Promise<GitOpResult<PRDetail>>
+    /** Submit a PR review via `gh pr review`. Body is required when
+     *  `decision` is `request-changes`; optional for `approve` and `comment`. */
+    review: (
+      cwd: string,
+      number: number,
+      decision: 'approve' | 'request-changes' | 'comment',
+      body?: string
+    ) => Promise<GitOpResult>
+    /** Post a top-level comment on the PR via `gh pr comment`. */
+    comment: (cwd: string, number: number, body: string) => Promise<GitOpResult>
+    /** Merge the PR via `gh pr merge`. Defaults to --auto --squash. */
+    merge: (cwd: string, number: number) => Promise<GitOpResult>
+    /** Close the PR via `gh pr close` (without merging). */
+    close: (cwd: string, number: number) => Promise<GitOpResult>
   }
   quickTerm: {
     toggle: () => Promise<void>
