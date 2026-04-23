@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { GitBranch, X, RotateCw, Edit3, Copy } from 'lucide-react'
-import type { SessionMeta } from '../../shared/types'
+import type { SessionMeta, SessionState } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
 import AgentAvatar from './AgentAvatar'
 import { defaultAgentColor, hexAlpha } from '../lib/agent'
@@ -17,6 +17,21 @@ interface Props {
   onEdit?: () => void
   onClone?: () => void
 }
+
+/**
+ * Left-edge accent bar color per session state. Matches the semantic tokens
+ * already used by `SessionStatePill` so idle rows fade into the sidebar while
+ * active states (thinking/generating/userInput/needsAttention) "shout" at a
+ * glance without forcing the user to parse the pill label.
+ */
+const STATE_BAR_CLASS: Record<SessionState, string> = {
+  idle: 'bg-border-soft',
+  thinking: 'bg-accent-400 df-pulse',
+  generating: 'bg-status-generating',
+  userInput: 'bg-status-input',
+  needsAttention: 'bg-status-attention'
+}
+const STATE_BAR_UNKNOWN = 'bg-border-soft'
 
 function relativeAge(iso: string): string {
   const now = Date.now()
@@ -37,6 +52,16 @@ function formatTokens(n: number | undefined): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return `${n}`
+}
+
+/**
+ * `lastStateAt` isn't declared on `SessionMeta` yet but may be populated by the
+ * runtime (state tracker writes it when `state` flips). Read it defensively so
+ * we can surface "time since last change" without a type break.
+ */
+function lastStateAt(session: SessionMeta): string | undefined {
+  const raw = (session as unknown as { lastStateAt?: unknown }).lastStateAt
+  return typeof raw === 'string' && raw.length > 0 ? raw : undefined
 }
 
 export default function SessionCard({
@@ -76,15 +101,23 @@ export default function SessionCard({
     setEditingName(false)
   }
 
-  // Active card uses the agent's accent for a left rule + soft tinted ring.
-  // No global df-glow-accent so the colour respects the per-agent identity
-  // (previous coral hardcoded glow looked broken on a violet/purple agent).
+  // Active card uses the agent's accent for a soft tinted ring. The left-edge
+  // state bar (below) already provides the per-state cue, so when active we
+  // drop the inset agent-colour rule and let the state bar sit flush. Inactive
+  // cards still get the thin agent accent via the bar's `activeRing` tint.
   const cardStyle: React.CSSProperties = {
     borderRadius: 'var(--radius-md)',
-    boxShadow: active
-      ? `inset 3px 0 0 0 ${accent}, 0 0 0 1px ${hexAlpha(accent, 0.28)}`
-      : undefined
+    boxShadow: active ? `0 0 0 1px ${hexAlpha(accent, 0.28)}` : undefined
   }
+
+  const barClass = session.state ? STATE_BAR_CLASS[session.state] : STATE_BAR_UNKNOWN
+  // Live sub-status only makes sense while the agent is working — idle rows
+  // stay quiet, and `userInput`/`needsAttention` already convey intent via the
+  // bar + pill. Showing a stale "editing foo.ts" while idle would be misleading.
+  const showSubStatus =
+    (session.state === 'thinking' || session.state === 'generating') &&
+    (!!session.subStatus || !!session.subTarget)
+  const changedAt = lastStateAt(session)
 
   return (
     <div
@@ -94,12 +127,20 @@ export default function SessionCard({
         onEdit?.()
       }}
       style={cardStyle}
-      className={`group relative cursor-pointer overflow-hidden border bg-bg-3 px-2.5 py-2 font-mono transition-[background,border,transform] duration-150 ease-out active:translate-y-px active:bg-bg-5 ${
+      className={`group relative cursor-pointer overflow-hidden border bg-bg-3 pl-3 pr-2.5 py-2 font-mono transition-[background,border,transform] duration-150 ease-out active:translate-y-px active:bg-bg-5 ${
         active
           ? 'border-transparent bg-bg-4'
           : 'border-border-soft hover:-translate-y-px hover:border-border-mid hover:bg-bg-4'
       }`}
     >
+      {/* left edge state bar — the primary at-a-glance cue. Colour tracks the
+          session's current state; idle is dim, thinking/generating pulse or
+          glow, needsAttention burns red. */}
+      <span
+        aria-hidden
+        className={`pointer-events-none absolute inset-y-0 left-0 w-[3px] ${barClass}`}
+      />
+
       {/* row 1: avatar + name + (hover actions | kbd badge) */}
       <div className="flex items-start gap-2.5">
         <div className="relative">
@@ -176,48 +217,69 @@ export default function SessionCard({
         </div>
       </div>
 
-      {/* row 2: state + sub-status */}
-      <div className="mt-1.5 flex min-h-[16px] items-center gap-1.5 text-[10px]">
-        <SessionStatePill state={session.state} />
-        {session.subStatus ? (
-          <span className="flex min-w-0 items-center gap-1 truncate text-text-3">
-            <span className="text-text-4">›</span>
-            <span>{session.subStatus}</span>
-            {session.subTarget ? (
-              <span className="truncate text-text-2">{session.subTarget}</span>
-            ) : null}
-          </span>
-        ) : null}
-      </div>
-
-      {/* row 3: branch · model + age */}
-      <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-text-4">
+      {/* row 2: state pill + branch · model + time-since-last-change */}
+      <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px]">
         <div className="flex min-w-0 items-center gap-1.5">
+          <SessionStatePill state={session.state} />
           {session.branch ? (
             <span className="flex min-w-0 items-center gap-1 text-text-3">
+              <span className="text-text-4">·</span>
               <GitBranch size={9} strokeWidth={1.75} className="shrink-0 text-text-4" />
               <span className="truncate">{session.branch}</span>
             </span>
           ) : null}
           {session.model ? (
             <>
-              {session.branch ? <span>·</span> : null}
-              <span className="text-text-3">{session.model}</span>
+              <span className="text-text-4">·</span>
+              <span className="truncate text-text-3">{session.model}</span>
             </>
           ) : null}
         </div>
-        <span className="shrink-0 tabular-nums">{relativeAge(session.createdAt)}</span>
+        {changedAt ? (
+          <span
+            className="shrink-0 tabular-nums text-text-4"
+            title={`last state change ${changedAt}`}
+          >
+            {relativeAge(changedAt)}
+          </span>
+        ) : null}
       </div>
 
-      {/* row 4: tokens only — cost is intentionally hidden */}
+      {/* row 3: live sub-status — only rendered while the agent is actively
+          working so it functions as a signal ("editing foo.ts", "running go
+          test"), never as stale debris on an idle card. */}
+      {showSubStatus ? (
+        <div className="mt-1 flex min-w-0 items-center gap-1 truncate text-[10px] text-text-3">
+          {session.subStatus ? (
+            <span className="shrink-0 lowercase text-text-2">{session.subStatus}</span>
+          ) : null}
+          {session.subTarget ? (
+            <>
+              {session.subStatus ? <span className="text-text-4">·</span> : null}
+              <span className="truncate font-mono text-text-3" title={session.subTarget}>
+                {session.subTarget}
+              </span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* row 4: cost + tokens — tabular nums so columns line up across cards */}
       <div
-        className="mt-0.5 flex items-center gap-2 font-mono text-[10px] tabular-nums text-text-4"
-        title={`input ${session.tokensIn ?? 0} tokens · output ${session.tokensOut ?? 0} tokens`}
+        className="mt-1 flex items-center gap-2 font-mono text-[10px] tabular-nums text-text-4"
+        title={`input ${session.tokensIn ?? 0} tokens · output ${session.tokensOut ?? 0} tokens${
+          session.cost != null ? ` · cost $${session.cost.toFixed(4)}` : ''
+        }`}
       >
-        <span className="text-text-3">↓ {formatTokens(session.tokensIn)}</span>
-        <span className="text-text-3">↑ {formatTokens(session.tokensOut)}</span>
+        {session.cost != null && session.cost > 0 ? (
+          <>
+            <span className="text-text-2">${session.cost.toFixed(2)}</span>
+            <span className="text-text-4">·</span>
+          </>
+        ) : null}
+        <span className="text-text-3">↓ {formatTokens(session.tokensIn)} in</span>
+        <span className="text-text-3">↑ {formatTokens(session.tokensOut)} out</span>
       </div>
-
     </div>
   )
 }

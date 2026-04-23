@@ -194,16 +194,15 @@ export default function TaskDrawer({ open, onClose }: Props) {
     console.log('[TaskDrawer] deny (stub)')
   }, [])
 
-  if (!open) return null
+  // Silently close when the drawer is told to open but the task id
+  // points nowhere. Using an effect so we never call setState during
+  // render — that was tripping React's "Cannot update state during
+  // render" warning and leaving a stale overlay on screen.
+  useEffect(() => {
+    if (open && !task) onClose()
+  }, [open, task, onClose])
 
-  // When the drawer is told to open but the task id points nowhere (stale
-  // click, cancelled submit, task drained from the cache), silently close
-  // instead of showing a "task not found" dead-end. The user sees the
-  // previous surface again, no dead modal in their way.
-  if (!task) {
-    onClose()
-    return null
-  }
+  if (!open || !task) return null
 
   const assignedAgent = agents.find((a) => a.id === task.assignedAgentId)
 

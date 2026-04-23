@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { DragEvent, KeyboardEvent } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import {
   Crown,
@@ -159,6 +159,77 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
 
   const ringColor = agent.color ?? 'var(--color-accent-500)'
 
+  // Drag-and-drop target: accepts a DraggableTaskCard (MIME
+  // `application/x-hydra-task`) so the user can reassign a task by dropping
+  // it on an agent. We only react to drag events here — normal clicks fall
+  // through to the existing handlers untouched.
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  const hasTaskPayload = useCallback((e: DragEvent<HTMLDivElement>): boolean => {
+    // `types` is the only reliable read during dragover (getData is blocked
+    // outside of `drop` for security). A match on our MIME is the signal
+    // that this drag is ours to handle.
+    return Array.from(e.dataTransfer.types).includes('application/x-hydra-task')
+  }, [])
+
+  const onDragEnter = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      if (!hasTaskPayload(e)) return
+      e.preventDefault()
+      setIsDragOver(true)
+    },
+    [hasTaskPayload]
+  )
+
+  const onDragOver = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      if (!hasTaskPayload(e)) return
+      // Without preventDefault the browser rejects the drop and `onDrop`
+      // never fires, even though `onDragEnter` already allowed it.
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      if (!isDragOver) setIsDragOver(true)
+    },
+    [hasTaskPayload, isDragOver]
+  )
+
+  const onDragLeave = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      // Ignore leaves that are just transitions between child elements of
+      // this same card — the relatedTarget still lives inside us.
+      // Note: the DOM `Node` type is shadowed at module level by the
+      // @xyflow/react `Node` import, so we reach for it through `globalThis`.
+      if (e.currentTarget.contains(e.relatedTarget as globalThis.Node | null)) return
+      setIsDragOver(false)
+    },
+    []
+  )
+
+  const onDragEnd = useCallback((): void => {
+    setIsDragOver(false)
+  }, [])
+
+  const onDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      if (!hasTaskPayload(e)) return
+      e.preventDefault()
+      setIsDragOver(false)
+      const taskId = e.dataTransfer.getData('application/x-hydra-task').trim()
+      if (!taskId) return
+      // TODO: the store should expose `updateTask(taskId, { assignedAgentId })`
+      // so reassignment goes through the same validated mutation path as any
+      // other task edit. Until that action lands, we broadcast a DOM event
+      // and let a top-level listener (TaskBoard / orchestra root) bridge to
+      // the store / IPC layer.
+      window.dispatchEvent(
+        new CustomEvent('orchestra:reassign-task', {
+          detail: { taskId, agentId: agent.id }
+        })
+      )
+    },
+    [hasTaskPayload, agent.id]
+  )
+
   return (
     <div
       className={[
@@ -166,13 +237,19 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
         'bg-[var(--color-bg-2)] text-[var(--color-text-1)]',
         'border border-[var(--color-border-mid)]',
         'transition-[box-shadow,border-color] duration-150',
-        'font-mono text-[12px]'
+        'font-mono text-[12px]',
+        isDragOver ? 'ring-2 ring-accent-500 ring-offset-0' : ''
       ].join(' ')}
       style={{
         boxShadow: selected
           ? `0 0 0 2px ${ringColor} inset`
           : 'var(--shadow-card)'
       }}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
       aria-label={`agent ${agent.name} — ${STATE_LABEL[agent.state]}`}
     >
       {/* Single-purpose anchors: top = inbound from my manager; bottom =
