@@ -35,6 +35,14 @@ export default function HeaderButton({
     >
       {icon}
       <span className="font-mono">{label}</span>
+      {shortcut ? (
+        <span
+          aria-hidden
+          className="hidden rounded-sm bg-bg-3 px-1 py-px font-mono text-[9px] text-text-4 group-hover:text-text-2 lg:inline"
+        >
+          {shortcut}
+        </span>
+      ) : null}
     </button>
   )
 }

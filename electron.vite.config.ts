@@ -1,6 +1,14 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+
+// Single source of truth for the app version surfaced in the header /
+// about dialog. Read at build time so a release bump in package.json
+// ripples into the UI without us hand-editing a string each time.
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, 'package.json'), 'utf8')
+) as { version: string }
 
 export default defineConfig({
   main: {
@@ -42,6 +50,10 @@ export default defineConfig({
         '@renderer': resolve(__dirname, 'src/renderer'),
         '@shared': resolve(__dirname, 'src/shared')
       }
+    },
+    define: {
+      // Typed via src/renderer/env.d.ts so TS accepts the bare identifier.
+      __APP_VERSION__: JSON.stringify(pkg.version)
     },
     build: {
       rollupOptions: {

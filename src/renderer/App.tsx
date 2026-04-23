@@ -194,25 +194,17 @@ export default function App() {
               <span className="flex items-baseline gap-1.5 font-mono text-sm font-semibold tracking-tight">
                 <span className="text-text-1">Hydra</span>
                 <span className="text-accent-400">Ensemble</span>
-                <span className="text-text-4">v0.1</span>
+                <span className="text-text-4">v{__APP_VERSION__}</span>
               </span>
             </div>
             <span className="h-5 w-px bg-border-soft" aria-hidden />
-            <button
-              type="button"
+            <HeaderButton
+              icon={<FolderTree size={13} strokeWidth={1.75} />}
+              label={currentProject?.name ?? 'projects'}
+              shortcut={fmtShortcut('T')}
+              active={drawerOpen}
               onClick={() => setDrawerOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition ${
-                drawerOpen
-                  ? 'border-border-mid bg-bg-4 text-text-1'
-                  : 'border-transparent text-text-3 hover:bg-bg-3 hover:text-text-1'
-              }`}
-              title="toggle projects (Cmd/Ctrl+T)"
-            >
-              <FolderTree size={12} strokeWidth={1.75} />
-              <span className="font-mono">
-                {currentProject?.name ?? 'projects'}
-              </span>
-            </button>
+            />
           </div>
 
           <div
