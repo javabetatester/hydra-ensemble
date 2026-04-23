@@ -371,6 +371,26 @@ export default function Sidebar() {
             />
             {orchestraOpen && (
               <div className="mb-3 flex flex-col gap-0.5 px-1">
+                {/* Loud DEVELOPING strip — mirrors the banner on the
+                     Orchestra view itself. Sidebar is often the first
+                     place a user discovers the feature, so setting
+                     expectations here prevents 'why doesn't this
+                     work' reports. */}
+                <div
+                  role="note"
+                  aria-label="Orchestra is in active development"
+                  className="mb-1 flex items-center justify-between gap-2 rounded-sm border border-status-thinking/60 bg-status-thinking/15 px-2 py-1.5"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-1.5 w-1.5 animate-ping rounded-full bg-status-thinking" />
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-status-thinking">
+                      developing
+                    </span>
+                  </div>
+                  <span className="font-mono text-[9px] text-status-thinking/80">
+                    do not use
+                  </span>
+                </div>
                 {!orchestraEnabled ? (
                   <div className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs text-text-4 transition-colors hover:bg-bg-3 hover:text-text-2">
                     <button
