@@ -23,28 +23,30 @@ export const useSlidePanel = create<SlidePanelState>((set) => ({
   toggle: (k) => set((s) => ({ current: s.current === k ? null : k }))
 }))
 
-/** Clamped fraction [MIN..MAX] describing the slide panel's share of the
- *  window width. Persisted so a resize survives reloads. */
-export const PANEL_WIDTH_MIN = 0.3
-export const PANEL_WIDTH_MAX = 0.85
-export const PANEL_WIDTH_DEFAULT = 0.52
+/** Slide panel width in px. Stored as pixels rather than a fraction so
+ *  that resizing the right column (sessions+toolkit) doesn't implicitly
+ *  grow/shrink the slide pane — a fraction of a shifting parent means
+ *  one resize drags the other along. Chat column (flex-1) absorbs deltas. */
+export const PANEL_WIDTH_MIN = 360
+export const PANEL_WIDTH_MAX = 2000
+export const PANEL_WIDTH_DEFAULT = 720
 
 interface PanelSizeState {
-  /** Fraction of the viewport width the slide panel occupies when open. */
-  widthFraction: number
-  setWidthFraction: (value: number) => void
+  /** Slide panel width in px when open. */
+  width: number
+  setWidth: (value: number) => void
 }
 
 export const usePanelSize = create<PanelSizeState>()(
   persist(
     (set) => ({
-      widthFraction: PANEL_WIDTH_DEFAULT,
-      setWidthFraction: (value) => {
+      width: PANEL_WIDTH_DEFAULT,
+      setWidth: (value) => {
         const clamped = Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, value))
-        set({ widthFraction: clamped })
+        set({ width: clamped })
       }
     }),
-    { name: 'hydra.panel-size' }
+    { name: 'hydra.panel-size-px' }
   )
 )
 
@@ -95,5 +97,90 @@ export const useRightColumnSize = create<RightColumnSizeState>()(
       }
     }),
     { name: 'hydra.right-column-size' }
+  )
+)
+
+/** Terminals panel has two layouts the user picks from the in-panel view
+ *  menu: a bottom strip inside the main column ('bottom' — default, stacked
+ *  below the slide pane) or the classic right-side slide pane slot ('side',
+ *  mutually exclusive with editor/dashboard/etc as before the redesign). */
+export const TERMINALS_HEIGHT_MIN = 140
+export const TERMINALS_HEIGHT_MAX = 900
+export const TERMINALS_HEIGHT_DEFAULT = 260
+
+export type TerminalsPosition = 'bottom' | 'side'
+
+interface TerminalsPanelState {
+  /** Bottom-dock visibility. In 'side' mode visibility is derived from
+   *  useSlidePanel.current === 'terminals', so this field is ignored. */
+  open: boolean
+  position: TerminalsPosition
+  height: number
+  openPanel: () => void
+  closePanel: () => void
+  toggle: () => void
+  setHeight: (value: number) => void
+  setPosition: (value: TerminalsPosition) => void
+}
+
+export const useTerminalsPanel = create<TerminalsPanelState>()(
+  persist(
+    (set, get) => ({
+      open: false,
+      position: 'bottom',
+      height: TERMINALS_HEIGHT_DEFAULT,
+      openPanel: () => {
+        if (get().position === 'side') {
+          useSlidePanel.getState().open('terminals')
+          return
+        }
+        set({ open: true })
+      },
+      closePanel: () => {
+        if (get().position === 'side') {
+          if (useSlidePanel.getState().current === 'terminals') {
+            useSlidePanel.getState().close()
+          }
+          return
+        }
+        set({ open: false })
+      },
+      toggle: () => {
+        if (get().position === 'side') {
+          useSlidePanel.getState().toggle('terminals')
+          return
+        }
+        set((s) => ({ open: !s.open }))
+      },
+      setHeight: (value) => {
+        const clamped = Math.min(
+          TERMINALS_HEIGHT_MAX,
+          Math.max(TERMINALS_HEIGHT_MIN, value)
+        )
+        set({ height: clamped })
+      },
+      setPosition: (value) => {
+        const cur = get().position
+        if (cur === value) return
+        // Migrate visibility so switching position keeps terminals visible
+        // if they were already showing (and hidden if they weren't).
+        const slide = useSlidePanel.getState()
+        const showingInSide = slide.current === 'terminals'
+        const showingInBottom = get().open
+        if (value === 'side') {
+          if (showingInBottom) slide.open('terminals')
+          set({ position: value, open: false })
+          return
+        }
+        // -> 'bottom'
+        if (showingInSide) slide.close()
+        set({ position: value, open: showingInSide })
+      }
+    }),
+    {
+      name: 'hydra.terminals-panel',
+      // Don't persist `open` — default closed on startup. Position persists.
+      partialize: (s) => ({ height: s.height, position: s.position })
+    }
   )
 )

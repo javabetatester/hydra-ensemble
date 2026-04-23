@@ -18,7 +18,7 @@ import { useGh } from '../state/gh'
 import { useWatchdog } from '../state/watchdog'
 import { useToolkit } from '../state/toolkit'
 import { useProjects } from '../state/projects'
-import { useSlidePanel } from '../state/panels'
+import { useSlidePanel, useTerminalsPanel } from '../state/panels'
 import AgentAvatar from './AgentAvatar'
 import { ToolkitIcon, guessIconForLabel } from '../lib/toolkit-icons'
 import { fmtShortcut } from '../lib/platform'
@@ -51,6 +51,7 @@ export default function CommandPalette({ open, onClose }: Props) {
   const activeId = useSessions((s) => s.activeId)
   const togglePanelFor = useSlidePanel((s) => s.toggle)
   const openPanel = useSlidePanel((s) => s.open)
+  const toggleTerminals = useTerminalsPanel((s) => s.toggle)
   const openGh = useGh((s) => s.openPanel)
   const projects = useProjects((s) => s.projects)
   const currentPath = useProjects((s) => s.currentPath)
