@@ -163,6 +163,35 @@ function createWindow(): BrowserWindow {
   watchdogService.attachWindow(win)
   notificationService.attachWindow(win)
 
+  // Graceful shutdown on window close. Fires BEFORE the BrowserWindow
+  // destroys its webContents, so we can kill PTYs / stop watchers /
+  // dispose analyzers while their emitters still have a live target.
+  // Without this, node-pty's ReadStream was pushing a buffered chunk
+  // into `webContents.send` just after destruction and the user got
+  // an "Object has been destroyed" popup on quit.
+  win.once('close', () => {
+    try {
+      sessionManager?.shutdown()
+    } catch {
+      /* swallow — best-effort on quit */
+    }
+    try {
+      jsonlManager?.stopAll()
+    } catch {
+      /* swallow */
+    }
+    try {
+      analyzerManager?.disposeAll()
+    } catch {
+      /* swallow */
+    }
+    try {
+      ptyManager?.killAll()
+    } catch {
+      /* swallow */
+    }
+  })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import { JsonlWatcher } from './jsonl-watcher'
 import type { JsonlUpdate } from '../../shared/types'
+import { safeSend } from '../lib/safeSend'
 
 export interface JsonlSessionDescriptor {
   id: string
@@ -34,13 +35,13 @@ export class JsonlManager {
       cwd: session.cwd,
       sessionCreatedAt: session.createdAt,
       onUpdate: (update: JsonlUpdate) => {
-        this.window?.webContents.send('session:jsonl', update)
+        safeSend(this.window, 'session:jsonl', update)
         this.onAnyUpdate?.(update)
         // Transcript lines arrived — ping the renderer so any open visual
         // chat view re-fetches the parsed transcript. Debounced at the
         // watcher level (one emit per consumed chunk) so this is already
         // cheap; the renderer additionally debounces its refetch.
-        this.window?.webContents.send('session:transcriptChanged', {
+        safeSend(this.window, 'session:transcriptChanged', {
           sessionId: session.id
         })
       }

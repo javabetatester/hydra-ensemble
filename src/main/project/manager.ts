@@ -3,6 +3,7 @@ import { basename } from 'node:path'
 import { dialog, type BrowserWindow } from 'electron'
 import { getStore, patchStore } from '../store'
 import type { ProjectMeta } from '../../shared/types'
+import { safeSend } from '../lib/safeSend'
 
 /**
  * Minimal storage surface the ProjectService needs. Lets tests swap the
@@ -143,6 +144,6 @@ export class ProjectService {
   }
 
   private notifyChange(): void {
-    this.window?.webContents.send('project:changed', this.list())
+    safeSend(this.window, 'project:changed', this.list())
   }
 }

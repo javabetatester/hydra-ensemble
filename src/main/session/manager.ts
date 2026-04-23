@@ -6,6 +6,7 @@ import type { PtyManager } from '../pty/manager'
 import type { AnalyzerManager } from '../pty/analyzer-manager'
 import type { JsonlManager } from '../claude/jsonl-manager'
 import { resolveClaudePath } from '../claude/resolve'
+import { safeSend } from '../lib/safeSend'
 import {
   createIsolatedSession,
   destroyIsolatedSession,
@@ -350,6 +351,6 @@ export class SessionManager {
   }
 
   private notifyChange(): void {
-    this.window?.webContents.send('session:changed', this.list())
+    safeSend(this.window, 'session:changed', this.list())
   }
 }

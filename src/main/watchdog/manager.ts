@@ -5,6 +5,7 @@ import type {
   WatchdogRule,
   NotifyOptions
 } from '../../shared/types'
+import { safeSend } from '../lib/safeSend'
 
 /** Recent text window kept per session, in bytes. */
 const WINDOW_BYTES = 4 * 1024
@@ -132,7 +133,7 @@ export class WatchdogService {
       case 'sendInput': {
         const data = rule.payload ?? ''
         this.opts.onAction?.({ kind: 'sendInput', sessionId, data })
-        this.window?.webContents.send('watchdog:sendInput', { sessionId, data })
+        safeSend(this.window, 'watchdog:sendInput', { sessionId, data })
         break
       }
       case 'notify': {
@@ -142,16 +143,16 @@ export class WatchdogService {
           kind: 'attention',
           sessionId
         }
-        this.window?.webContents.send('notify:show', notif)
+        safeSend(this.window, 'notify:show', notif)
         break
       }
       case 'kill': {
         this.opts.onAction?.({ kind: 'kill', sessionId })
-        this.window?.webContents.send('session:killRequest', { sessionId })
+        safeSend(this.window, 'session:killRequest', { sessionId })
         break
       }
     }
-    this.window?.webContents.send('watchdog:fired', event)
+    safeSend(this.window, 'watchdog:fired', event)
   }
 
   private recompileAll(rules: WatchdogRule[]): void {

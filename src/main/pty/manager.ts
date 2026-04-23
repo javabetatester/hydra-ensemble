@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute } from 'node:path'
 import type { PtySpawnOptions, PtySpawnResult } from '../../shared/types'
+import { safeSend } from '../lib/safeSend'
 
 export type PtyDataListener = (data: string) => void
 
@@ -92,7 +93,7 @@ export class PtyManager {
         })
       }
       totalBytes += data.length
-      this.window?.webContents.send('pty:data', { sessionId: opts.sessionId, data })
+      safeSend(this.window, 'pty:data', { sessionId: opts.sessionId, data })
       const listeners = this.dataListeners.get(opts.sessionId)
       if (listeners) {
         for (const l of listeners) {
@@ -115,7 +116,7 @@ export class PtyManager {
         livedMs: Date.now() - spawnAt,
         firstByteMs: firstByteAt ? firstByteAt - spawnAt : null
       })
-      this.window?.webContents.send('pty:exit', {
+      safeSend(this.window, 'pty:exit', {
         sessionId: opts.sessionId,
         exitCode,
         signal

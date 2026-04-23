@@ -1,6 +1,7 @@
 import type { BrowserWindow } from 'electron'
 import type { SessionState } from '../../shared/types'
 import { PtyStreamAnalyzer } from './analyzer'
+import { safeSend } from '../lib/safeSend'
 
 interface ActiveAnalyzer {
   analyzer: PtyStreamAnalyzer
@@ -159,7 +160,7 @@ export class AnalyzerManager {
 
     entry.lastState = state
     entry.lastEmittedAt = Date.now()
-    this.window?.webContents.send(AnalyzerManager.stateChannel, {
+    safeSend(this.window, AnalyzerManager.stateChannel, {
       sessionId,
       state,
       generation: entry.generation,

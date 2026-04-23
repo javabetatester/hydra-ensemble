@@ -32,10 +32,7 @@ export const ACTIONS: Action[] = [
   { id: 'panel.watchdogs', label: 'Watchdogs', group: 'Panels', default: 'mod+shift+w' },
   { id: 'panel.pr', label: 'PR inspector', group: 'Panels', default: 'mod+shift+p' },
   { id: 'palette.open', label: 'Command palette', group: 'Panels', default: 'mod+k' },
-  { id: 'help.open', label: 'Help overlay', group: 'Panels', default: '?' },
-
-  // Orchestra — only active when settings.orchestra.enabled is true.
-  { id: 'orchestra.open', label: 'Open Orchestra', group: 'Panels', default: 'mod+shift+a' }
+  { id: 'help.open', label: 'Help overlay', group: 'Panels', default: '?' }
 ]
 
 interface KeybindsState {

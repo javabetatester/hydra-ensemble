@@ -97,18 +97,7 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
         }
       },
       'palette.open': () => setPaletteOpen((v) => !v),
-      'help.open': () => setHelpOpen((v) => !v),
-      'orchestra.open': () => {
-        // First press flips the persisted flag on; subsequent presses
-        // just toggle the overlay. Avoids asking the user to hand-edit
-        // store.json to discover the feature.
-        if (!orchestraEnabled) {
-          void setOrchestraSettings({ enabled: true })
-          setOrchestraOpen(true)
-          return
-        }
-        toggleOrchestra()
-      }
+      'help.open': () => setHelpOpen((v) => !v)
     }
 
     const onKey = (e: KeyboardEvent): void => {

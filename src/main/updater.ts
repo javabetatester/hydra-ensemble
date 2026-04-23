@@ -1,4 +1,5 @@
 import { app, type BrowserWindow } from 'electron'
+import { safeSend } from './lib/safeSend'
 
 interface AutoUpdater {
   autoDownload: boolean
@@ -35,10 +36,10 @@ export function initUpdater(window: BrowserWindow | null): void {
   autoUpdater.autoInstallOnAppQuit = true
 
   autoUpdater.on('update-available', (info) => {
-    window?.webContents.send('updater:update-available', info)
+    safeSend(window, 'updater:update-available', info)
   })
   autoUpdater.on('update-downloaded', (info) => {
-    window?.webContents.send('updater:update-downloaded', info)
+    safeSend(window, 'updater:update-downloaded', info)
   })
   autoUpdater.on('error', () => {
     // Silent in v1 — surface through the renderer only when we have UI for it.

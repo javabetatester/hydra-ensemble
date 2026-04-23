@@ -10,6 +10,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import type { OrchestraCore } from '../orchestra'
 import { getStore, patchStore } from '../store'
+import { safeSend } from '../lib/safeSend'
 import type {
   NewAgentInput,
   NewEdgeInput,
@@ -70,8 +71,7 @@ export function broadcastOrchestraEvent(
   window: BrowserWindow,
   event: OrchestraEvent
 ): void {
-  if (window.isDestroyed()) return
-  window.webContents.send('orchestra:event', event)
+  safeSend(window, 'orchestra:event', event)
 }
 
 // ---------------------------------------------------------------------------

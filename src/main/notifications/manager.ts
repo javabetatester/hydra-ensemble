@@ -1,5 +1,6 @@
 import { Notification, type BrowserWindow } from 'electron'
 import type { NotificationKind, NotifyOptions } from '../../shared/types'
+import { safeSend } from '../lib/safeSend'
 
 /**
  * Thin wrapper over Electron's Notification API. Adds a small
@@ -36,7 +37,7 @@ export class NotificationService {
         win.show()
         win.focus()
         if (opts.sessionId) {
-          win.webContents.send('notify:focusSession', { sessionId: opts.sessionId })
+          safeSend(win, 'notify:focusSession', { sessionId: opts.sessionId })
         }
       })
       notif.show()
