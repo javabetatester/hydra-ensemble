@@ -30,6 +30,7 @@ import type {
 import { useOrchestra } from './state/orchestra'
 import ApprovalCard from './ApprovalCard'
 import RouteExplain from './RouteExplain'
+import { relativeTime } from '../lib/time'
 
 interface Props {
   open: boolean
@@ -65,20 +66,10 @@ const KIND_STYLE: Record<MessageKind, string> = {
   output: 'bg-bg-3 text-text-2'
 }
 
-/** Relative "3s ago" style formatter. No date-fns dependency needed. */
-function relTime(iso: string, now: number): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return iso
-  const diff = Math.max(0, Math.floor((now - then) / 1000))
-  if (diff < 5) return 'just now'
-  if (diff < 60) return `${diff}s ago`
-  const m = Math.floor(diff / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  const d = Math.floor(h / 24)
-  return `${d}d ago`
-}
+/** Passes the tick-driven `now` to the shared formatter so the drawer
+ *  header and timeline re-render together. */
+const relTime = (iso: string, now: number): string =>
+  relativeTime(iso, new Date(now))
 
 /** Short hh:mm:ss pill for timeline rows. */
 function clockTime(iso: string): string {

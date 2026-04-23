@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 import type { MessageLog, Task, UUID } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
+import { relativeTime } from '../lib/time'
 
 /** Hard cap on how many events the panel keeps mounted at once. Older
  *  entries fall off the bottom — the event log on disk is the source of
@@ -61,26 +62,6 @@ interface Event {
   title: string
   detail?: string
   onClick?: () => void
-}
-
-/** Relative time in tiny units. Duplicated from TaskRow intentionally —
- *  these two panels want the same string format and pulling a shared util
- *  for 15 lines would bloat the import surface. */
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const now = Date.now()
-  const diffSec = Math.max(0, Math.floor((now - then) / 1000))
-  if (diffSec < 5) return 'just now'
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.floor(diffHr / 24)
-  if (diffDay === 1) return 'yesterday'
-  if (diffDay < 7) return `${diffDay}d ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 /** Icon palette — keeps all colour/size in one place so the feed rows

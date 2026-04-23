@@ -50,6 +50,7 @@ import type {
 import { useOrchestra } from './state/orchestra'
 import { useToasts } from '../state/toasts'
 import NewTaskDialog from './modals/NewTaskDialog'
+import { relativeTime as relativeTimeShared } from '../lib/time'
 
 /** Tabs double as filters. "all" is the default; `blocked` + `done` are
  *  status-targeted buckets; `mine` and `unassigned` slice by assignee. */
@@ -138,23 +139,10 @@ function avatarInitials(name: string): string {
   return ((first[0] ?? '') + (second[0] ?? '')).toUpperCase() || '??'
 }
 
-/** Relative time in tiny units. Matches the shape used by TaskRow so both
- *  panels agree on what "just now" looks like. */
-function relativeTime(iso: string | undefined): string {
-  if (!iso) return ''
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSec < 60) return `${diffSec}s`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h`
-  const diffDay = Math.floor(diffHr / 24)
-  if (diffDay === 1) return 'yesterday'
-  if (diffDay < 7) return `${diffDay}d`
-  return new Date(iso).toLocaleDateString()
-}
+/** Thin guard around the shared helper — this panel receives optional ISO
+ *  strings and wants an empty string (not "just now") when input is falsy. */
+const relativeTime = (iso: string | undefined): string =>
+  iso ? relativeTimeShared(iso) : ''
 
 /** First six chars of the UUID give plenty of uniqueness for display and
  *  matches the density of a Linear issue key (ORC-123 etc.). */

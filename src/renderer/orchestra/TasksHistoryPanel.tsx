@@ -16,6 +16,7 @@ import type { Route, Task, TaskStatus, UUID } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
 import { useToasts } from '../state/toasts'
 import { humanReason } from './routeReason'
+import { relativeTime } from '../lib/time'
 
 type FilterKey = 'all' | 'done' | 'failed'
 
@@ -41,25 +42,6 @@ function matchesFilter(status: TaskStatus, filter: FilterKey): boolean {
     case 'failed':
       return status === 'failed'
   }
-}
-
-/** Relative time for "finished X ago". Inline + zero-dep — mirrors the
- *  TaskRow formatter but drops the date fallback so it always reads as a
- *  duration, which is what a history list wants. */
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return ''
-  const now = Date.now()
-  const diffSec = Math.max(0, Math.floor((now - then) / 1000))
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHr = Math.floor(diffMin / 60)
-  if (diffHr < 24) return `${diffHr}h ago`
-  const diffDay = Math.floor(diffHr / 24)
-  if (diffDay === 1) return 'yesterday'
-  if (diffDay < 7) return `${diffDay}d ago`
-  return new Date(iso).toLocaleDateString()
 }
 
 /** Format a millisecond duration as "2.3s", "47s", "4m", or "1h". Tuned for

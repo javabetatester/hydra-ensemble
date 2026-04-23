@@ -17,6 +17,7 @@ import type {
 } from '../../../shared/orchestra'
 import { useOrchestra } from '../state/orchestra'
 import { defaultAgentColor } from '../../lib/agent'
+import { relativeTime } from '../../lib/time'
 import type { InspectorTabKey } from './index'
 
 interface Props {
@@ -125,21 +126,10 @@ function SectionCard({
   )
 }
 
-/** Format "Xs / Xm / Xh ago" for activity timestamps. */
-function relTime(iso: string, now: number): string {
-  const t = Date.parse(iso)
-  if (!Number.isFinite(t)) return ''
-  const diff = Math.max(0, now - t)
-  if (diff < 1000) return 'now'
-  const s = Math.floor(diff / 1000)
-  if (s < 60) return `${s}s ago`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  const d = Math.floor(h / 24)
-  return `${d}d ago`
-}
+/** Tick-driven shim over the shared helper so re-render cadence stays
+ *  under the Overview component's control. */
+const relTime = (iso: string, now: number): string =>
+  relativeTime(iso, new Date(now))
 
 /**
  * Read the skills/triggers files off the main-process bridge. Both are
