@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import {
-  ChevronDown,
-  ChevronRight,
   Folder,
   FolderOpen,
   ArrowRightLeft,
@@ -14,9 +12,7 @@ import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
 interface ProjectItemProps {
   project: ProjectMeta
   active: boolean
-  expanded: boolean
   onSelect: () => void
-  onToggleExpand: () => void
   onRemove: () => void
   onCopyPath: () => void
 }
@@ -24,9 +20,7 @@ interface ProjectItemProps {
 export default function ProjectItem({
   project,
   active,
-  expanded,
   onSelect,
-  onToggleExpand,
   onRemove,
   onCopyPath
 }: ProjectItemProps) {
@@ -51,8 +45,7 @@ export default function ProjectItem({
     }
   ]
 
-  const Chevron = expanded ? ChevronDown : ChevronRight
-  const FolderIcon = expanded || active ? FolderOpen : Folder
+  const FolderIcon = active ? FolderOpen : Folder
 
   const rowTone = active
     ? 'bg-bg-4 text-text-1'
@@ -60,35 +53,25 @@ export default function ProjectItem({
 
   return (
     <>
-      <div
-        className={`group flex items-center gap-1.5 rounded-sm px-2 py-1.5 text-sm transition-colors ${rowTone}`}
+      <button
+        type="button"
+        onClick={onSelect}
         onContextMenu={(e) => {
           e.preventDefault()
           setMenu({ x: e.clientX, y: e.clientY })
         }}
+        title={project.path}
+        className={`group flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-sm transition-colors ${rowTone}`}
       >
-        <button
-          type="button"
-          onClick={onToggleExpand}
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-text-4 hover:bg-bg-4 hover:text-text-2"
-          aria-label={expanded ? 'collapse project' : 'expand project'}
-        >
-          <Chevron size={14} strokeWidth={1.75} />
-        </button>
         <FolderIcon
           size={14}
           strokeWidth={1.75}
           className={active ? 'text-accent-400' : 'text-text-3'}
           aria-hidden
         />
-        <button
-          type="button"
-          onClick={onSelect}
-          className="flex-1 truncate text-left"
-          title={project.path}
-        >
-          <span className={active ? 'font-medium' : ''}>{project.name}</span>
-        </button>
+        <span className={`flex-1 truncate ${active ? 'font-medium' : ''}`}>
+          {project.name}
+        </span>
         {active && (
           <span
             className="ml-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-400"
@@ -96,7 +79,7 @@ export default function ProjectItem({
             title="active"
           />
         )}
-      </div>
+      </button>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onDismiss={() => setMenu(null)} />}
     </>
   )

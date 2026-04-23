@@ -101,11 +101,9 @@ export default function Sidebar() {
   const setOrchestraOverlayOpen = useOrchestra((s) => s.setOverlayOpen)
   const setOrchestraActiveTeam = useOrchestra((s) => s.setActiveTeam)
 
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [showCreate, setShowCreate] = useState(false)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [worktreesOpen, setWorktreesOpen] = useState(true)
-  const [sessionsOpen, setSessionsOpen] = useState(true)
   const [orchestraOpen, setOrchestraOpen] = useState(true)
   const [agentsOpen, setAgentsOpen] = useState(true)
   const [agentFilter, setAgentFilter] = useState('')
@@ -156,25 +154,6 @@ export default function Sidebar() {
     }
     return byTeam
   }, [orchestraTeams, orchestraAgents])
-
-  // Auto-expand the active project so its worktrees are visible by default.
-  useEffect(() => {
-    if (currentPath) {
-      setExpandedProjects((prev) => {
-        if (prev.has(currentPath)) return prev
-        const next = new Set(prev)
-        next.add(currentPath)
-        return next
-      })
-    }
-  }, [currentPath])
-
-  const projectSessions = useMemo(() => {
-    if (!currentPath) return []
-    return sessions.filter(
-      (s) => s.cwd === currentPath || s.worktreePath?.startsWith(currentPath)
-    )
-  }, [sessions, currentPath])
 
   const copyToClipboard = (value: string): void => {
     void navigator.clipboard?.writeText(value).catch(() => undefined)
@@ -311,23 +290,13 @@ export default function Sidebar() {
             {projectsOpen && (
               <div className="mb-3 flex flex-col gap-0.5 px-1">
                 {projects.map((p) => {
-                  const expanded = expandedProjects.has(p.path)
                   const active = p.path === currentPath
                   return (
                     <ProjectItem
                       key={p.path}
                       project={p}
                       active={active}
-                      expanded={expanded}
                       onSelect={() => void setCurrent(p.path)}
-                      onToggleExpand={() =>
-                        setExpandedProjects((prev) => {
-                          const next = new Set(prev)
-                          if (next.has(p.path)) next.delete(p.path)
-                          else next.add(p.path)
-                          return next
-                        })
-                      }
                       onRemove={() => void removeProject(p.path)}
                       onCopyPath={() => copyToClipboard(p.path)}
                     />
@@ -390,38 +359,6 @@ export default function Sidebar() {
                   </div>
                 )}
 
-                {/* SESSIONS */}
-                <SectionHeader
-                  open={sessionsOpen}
-                  onToggle={() => setSessionsOpen((v) => !v)}
-                  icon={<Terminal size={11} strokeWidth={1.75} className="text-text-4" />}
-                  label="Sessions"
-                />
-                {sessionsOpen && (
-                  <div className="flex flex-col gap-0.5 px-1">
-                    {projectSessions.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-text-4">no sessions</div>
-                    ) : (
-                      projectSessions.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => setActiveSession(s.id)}
-                          className="group flex items-center gap-2 rounded-sm py-1 pl-6 pr-2 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
-                          title={s.worktreePath ?? s.cwd}
-                        >
-                          <SessionStatePill state={s.state} label={false} />
-                          <span className="flex-1 truncate">{s.name}</span>
-                          {s.branch && (
-                            <span className="shrink-0 truncate font-mono text-[10px] text-text-4">
-                              {s.branch}
-                            </span>
-                          )}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
               </>
             )}
 

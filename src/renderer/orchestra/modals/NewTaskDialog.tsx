@@ -375,6 +375,23 @@ export default function NewTaskDialog({ open, onClose }: Props) {
               />
             </div>
           </div>
+
+          {/* Honest note about the delegation gap. The claude-CLI/OAuth
+              runtime can't call the delegate_task tool — only the SDK
+              path (ANTHROPIC_API_KEY present) wires orchestration tools.
+              Users running without a key see the assigned agent finish
+              the whole task solo, which is why a PM task can look like
+              it "broadcasts and stops." Surface here so expectations
+              match reality until MCP handoff lands. */}
+          <div className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-2 text-[10px] leading-relaxed text-text-4">
+            <span className="font-semibold text-text-3">heads up:</span>{' '}
+            multi-agent delegation (PM → architect → dev…) currently
+            requires an <span className="text-text-2">Anthropic API key</span>.
+            Without one we fall back to <span className="text-text-2">claude CLI</span>{' '}
+            + OAuth, and the assigned agent handles the task solo. Open{' '}
+            <span className="font-semibold text-text-3">Providers</span>{' '}
+            to add a key and unlock handoffs.
+          </div>
         </div>
 
         {/* Footer */}
