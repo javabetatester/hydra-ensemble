@@ -23,6 +23,8 @@ import AgentAvatar from './AgentAvatar'
 import { ToolkitIcon, guessIconForLabel } from '../lib/toolkit-icons'
 import { fmtShortcut } from '../lib/platform'
 import { useSpawnDialog } from '../state/spawn'
+import { useOrchestra } from '../orchestra/state/orchestra'
+import { Network } from 'lucide-react'
 
 interface PaletteItem {
   id: string
@@ -88,7 +90,7 @@ export default function CommandPalette({ open, onClose }: Props) {
         id: `session:${s.id}`,
         label: s.name,
         hint: `${s.branch ?? '—'} · ${s.model ?? 'sonnet'}`,
-        shortcut: idx <= 9 ? `⌘${idx === 9 ? 0 : idx}` : undefined,
+        shortcut: idx <= 9 ? fmtShortcut(String(idx === 9 ? 0 : idx)) : undefined,
         icon: <AgentAvatar session={s} size={18} />,
         group: 'Sessions',
         run: () => {
@@ -207,6 +209,40 @@ export default function CommandPalette({ open, onClose }: Props) {
         run: () => {
           openGh(cwdContext)
           openPanel('pr')
+          onClose()
+        }
+      })
+    }
+
+    // Orchestra — experimental headless agent team mode.
+    const orchestraEnabledInPalette = useOrchestra.getState().settings.enabled
+    out.push({
+      id: 'cmd:orchestra.open',
+      label: orchestraEnabledInPalette
+        ? 'Open Orchestra'
+        : 'Enable Orchestra (experimental)',
+      hint: 'manage teams of headless claude agents on a whiteboard',
+      shortcut: `${mod}${shiftSym}A`,
+      icon: <Network size={14} strokeWidth={1.75} />,
+      group: 'Panels',
+      run: () => {
+        const st = useOrchestra.getState()
+        if (!st.settings.enabled) void st.setSettings({ enabled: true })
+        st.setOverlayOpen(true)
+        onClose()
+      }
+    })
+    if (orchestraEnabledInPalette) {
+      out.push({
+        id: 'cmd:orchestra.disable',
+        label: 'Disable Orchestra',
+        hint: 'hides the Orchestra view until re-enabled',
+        icon: <Network size={14} strokeWidth={1.75} />,
+        group: 'Panels',
+        run: () => {
+          const st = useOrchestra.getState()
+          st.setOverlayOpen(false)
+          void st.setSettings({ enabled: false })
           onClose()
         }
       })

@@ -6,10 +6,13 @@ import {
   GitBranch,
   Terminal,
   FolderPlus,
-  AlertTriangle
+  AlertTriangle,
+  Network
 } from 'lucide-react'
 import { useProjects } from '../../state/projects'
 import { useSessions } from '../../state/sessions'
+import { useOrchestra } from '../../orchestra/state/orchestra'
+import { fmtShortcut } from '../../lib/platform'
 import ProjectItem from './ProjectItem'
 import WorktreeItem from './WorktreeItem'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
@@ -58,11 +61,33 @@ export default function Sidebar() {
   const setActiveSession = useSessions((s) => s.setActive)
   const createSession = useSessions((s) => s.createSession)
 
+  const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
+  const orchestraTeams = useOrchestra((s) => s.teams)
+  const orchestraAgents = useOrchestra((s) => s.agents)
+  const setOrchestraSettings = useOrchestra((s) => s.setSettings)
+  const setOrchestraOverlayOpen = useOrchestra((s) => s.setOverlayOpen)
+  const setOrchestraActiveTeam = useOrchestra((s) => s.setActiveTeam)
+
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set())
   const [showCreate, setShowCreate] = useState(false)
   const [projectsOpen, setProjectsOpen] = useState(true)
   const [worktreesOpen, setWorktreesOpen] = useState(true)
   const [sessionsOpen, setSessionsOpen] = useState(true)
+  const [orchestraOpen, setOrchestraOpen] = useState(true)
+
+  const orchestraShortcut = fmtShortcut('A', { shift: true })
+  const orchestraRunningAgents = useMemo(
+    () => orchestraAgents.filter((a) => a.state === 'running').length,
+    [orchestraAgents]
+  )
+  const teamActivity = useMemo(() => {
+    const byTeam = new Map<string, boolean>()
+    for (const t of orchestraTeams) byTeam.set(t.id, false)
+    for (const a of orchestraAgents) {
+      if (a.state === 'running' && byTeam.has(a.teamId)) byTeam.set(a.teamId, true)
+    }
+    return byTeam
+  }, [orchestraTeams, orchestraAgents])
 
   useEffect(() => {
     void init()
@@ -260,6 +285,101 @@ export default function Sidebar() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* ORCHESTRA */}
+            <SectionHeader
+              open={orchestraOpen}
+              onToggle={() => setOrchestraOpen((v) => !v)}
+              icon={<Network size={11} strokeWidth={1.75} className="text-text-4" />}
+              label="Orchestra"
+            />
+            {orchestraOpen && (
+              <div className="mb-3 flex flex-col gap-0.5 px-1">
+                {!orchestraEnabled ? (
+                  <div className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs text-text-4 transition-colors hover:bg-bg-3 hover:text-text-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void setOrchestraSettings({ enabled: true })
+                        setOrchestraOverlayOpen(true)
+                      }}
+                      className="flex flex-1 items-center gap-2 text-left"
+                      title="Enable Orchestra"
+                    >
+                      <Network size={14} strokeWidth={1.75} />
+                      <span className="flex-1 truncate">Orchestra</span>
+                      <span className="shrink-0 font-mono text-[10px] text-text-4">
+                        {orchestraShortcut}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void setOrchestraSettings({ enabled: true })
+                        setOrchestraOverlayOpen(true)
+                      }}
+                      className="hidden rounded-sm bg-bg-3 px-1.5 py-0.5 text-[10px] font-medium text-text-2 transition-colors hover:bg-accent-500/15 hover:text-accent-500 group-hover:inline-flex"
+                    >
+                      Enable
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setOrchestraOverlayOpen(true)}
+                      className="group flex items-center gap-2 rounded-sm px-2 py-1 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
+                      title="Open Orchestra overlay"
+                    >
+                      <Network size={14} strokeWidth={1.75} />
+                      <span className="flex-1 truncate">Orchestra</span>
+                      <span className="shrink-0 rounded-sm bg-bg-3 px-1.5 py-0.5 font-mono text-[10px] text-text-4 group-hover:bg-accent-500/15 group-hover:text-accent-500">
+                        {orchestraShortcut}
+                      </span>
+                    </button>
+                    {orchestraTeams.length > 0 && (
+                      <>
+                        {orchestraTeams.slice(0, 4).map((t) => {
+                          const active = teamActivity.get(t.id) === true
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setOrchestraActiveTeam(t.id)
+                                setOrchestraOverlayOpen(true)
+                              }}
+                              className="group flex items-center gap-2 rounded-sm py-1 pl-6 pr-2 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
+                              title={t.name}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                  active
+                                    ? 'animate-pulse bg-accent-500'
+                                    : 'bg-text-4'
+                                }`}
+                                aria-hidden
+                              />
+                              <span className="flex-1 truncate">{t.name}</span>
+                            </button>
+                          )
+                        })}
+                        {orchestraTeams.length > 4 && (
+                          <div className="py-0.5 pl-6 pr-2 text-[10px] text-text-4">
+                            +{orchestraTeams.length - 4} more
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {orchestraAgents.length > 0 && (
+                      <div className="py-0.5 pl-6 pr-2 font-mono text-[10px] text-text-4">
+                        {orchestraAgents.length} agents · {orchestraRunningAgents} running
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </>
         )}

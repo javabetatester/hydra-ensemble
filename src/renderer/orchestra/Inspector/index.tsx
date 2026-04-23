@@ -63,6 +63,7 @@ export default function Inspector() {
 
   return (
     <aside
+      data-coach="inspector"
       className={`fixed right-0 top-0 z-40 flex h-full w-[360px] flex-col border-l border-border-soft bg-bg-2 shadow-pop transition-transform duration-200 ease-out ${
         visible ? 'translate-x-0' : 'translate-x-full pointer-events-none'
       }`}

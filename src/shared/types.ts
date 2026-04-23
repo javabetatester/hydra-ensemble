@@ -399,9 +399,11 @@ import type {
   ReportingEdge,
   SafeMode,
   SecretStorage,
+  Skill,
   SubmitTaskInput,
   Task,
   Team,
+  Trigger,
   UpdateAgentInput,
   UUID
 } from './orchestra'
@@ -549,6 +551,8 @@ export interface HydraEnsembleApi {
       rename: (id: UUID, name: string) => Promise<OrchestraResult<Team>>
       setSafeMode: (id: UUID, safeMode: SafeMode) => Promise<OrchestraResult<Team>>
       delete: (id: UUID) => Promise<OrchestraResult<void>>
+      readClaudeMd: (id: UUID) => Promise<OrchestraResult<string>>
+      writeClaudeMd: (id: UUID, text: string) => Promise<OrchestraResult<void>>
     }
     agent: {
       list: (teamId: UUID) => Promise<Agent[]>
@@ -558,6 +562,12 @@ export interface HydraEnsembleApi {
       promoteMain: (id: UUID) => Promise<OrchestraResult<Team>>
       pause: (id: UUID) => Promise<OrchestraResult<Agent>>
       stop: (id: UUID) => Promise<OrchestraResult<Agent>>
+      readSoul: (id: UUID) => Promise<OrchestraResult<string>>
+      writeSoul: (id: UUID, text: string) => Promise<OrchestraResult<void>>
+      readSkills: (id: UUID) => Promise<OrchestraResult<Skill[]>>
+      writeSkills: (id: UUID, skills: Skill[]) => Promise<OrchestraResult<void>>
+      readTriggers: (id: UUID) => Promise<OrchestraResult<Trigger[]>>
+      writeTriggers: (id: UUID, triggers: Trigger[]) => Promise<OrchestraResult<void>>
     }
     edge: {
       list: (teamId: UUID) => Promise<ReportingEdge[]>

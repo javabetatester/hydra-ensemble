@@ -15,29 +15,26 @@ const AUTOSAVE_DEBOUNCE_MS = 800
 /** How long the "saved" pip stays visible after a successful write. */
 const SAVED_PIP_MS = 1200
 
-async function readSoul(agentId: string): Promise<string> {
-  // @ts-expect-error — to be wired in phase 6 (see PLAN.md): window.api.orchestra.agent.readSoul
-  const fn = window.api?.orchestra?.agent?.readSoul as
-    | ((id: string) => Promise<string>)
-    | undefined
-  if (!fn) throw new UnwiredError()
-  return (await fn(agentId)) ?? ''
-}
-
-async function writeSoul(agentId: string, text: string): Promise<void> {
-  // @ts-expect-error — to be wired in phase 6 (see PLAN.md): window.api.orchestra.agent.writeSoul
-  const fn = window.api?.orchestra?.agent?.writeSoul as
-    | ((id: string, text: string) => Promise<void>)
-    | undefined
-  if (!fn) throw new UnwiredError()
-  await fn(agentId, text)
-}
-
 class UnwiredError extends Error {
   constructor() {
     super('file I/O not wired')
     this.name = 'UnwiredError'
   }
+}
+
+async function readSoul(agentId: string): Promise<string> {
+  const fn = window.api?.orchestra?.agent?.readSoul
+  if (!fn) throw new UnwiredError()
+  const res = await fn(agentId)
+  if (!res.ok) throw new Error(res.error)
+  return res.value ?? ''
+}
+
+async function writeSoul(agentId: string, text: string): Promise<void> {
+  const fn = window.api?.orchestra?.agent?.writeSoul
+  if (!fn) throw new UnwiredError()
+  const res = await fn(agentId, text)
+  if (!res.ok) throw new Error(res.error)
 }
 
 export default function SoulTab({ agentId }: Props) {

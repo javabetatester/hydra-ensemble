@@ -426,6 +426,7 @@ function CanvasInner() {
   return (
     <div
       ref={wrapperRef}
+      data-coach="canvas"
       className="relative h-full w-full outline-none"
       tabIndex={0}
       onKeyDown={onKeyDownCanvas}

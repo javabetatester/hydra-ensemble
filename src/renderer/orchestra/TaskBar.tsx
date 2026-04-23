@@ -155,6 +155,7 @@ export default function TaskBar() {
 
   return (
     <div
+      data-coach="task-bar"
       className="flex w-full items-center gap-2"
       title={disabled ? disabledReason : undefined}
       aria-disabled={disabled}

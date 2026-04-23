@@ -179,6 +179,69 @@ export function registerOrchestraIpc(
     return err ? fail(err) : wrap(() => core.stopAgent(p.id))
   })
 
+  // agent file I/O — soul.md / skills.yaml / triggers.yaml live on disk and
+  // are the source of truth. Tabs read/write through these handlers.
+  ipcMain.handle('orchestra:agent.readSoul', (_e, p: { id: UUID }) => {
+    const err = needStr(p?.id, 'id')
+    return err ? fail(err) : wrap(() => core.readAgentSoul(p.id))
+  })
+  ipcMain.handle(
+    'orchestra:agent.writeSoul',
+    (_e, p: { id: UUID; text: string }) => {
+      const err = check(
+        needStr(p?.id, 'id'),
+        typeof p?.text === 'string' ? null : 'invalid input: text'
+      )
+      return err ? fail(err) : wrap(() => core.writeAgentSoul(p.id, p.text))
+    }
+  )
+  ipcMain.handle('orchestra:agent.readSkills', (_e, p: { id: UUID }) => {
+    const err = needStr(p?.id, 'id')
+    return err ? fail(err) : wrap(() => core.readAgentSkills(p.id))
+  })
+  ipcMain.handle(
+    'orchestra:agent.writeSkills',
+    (_e, p: { id: UUID; skills: unknown[] }) => {
+      const err = check(
+        needStr(p?.id, 'id'),
+        Array.isArray(p?.skills) ? null : 'invalid input: skills'
+      )
+      return err
+        ? fail(err)
+        : wrap(() => core.writeAgentSkills(p.id, p.skills as never))
+    }
+  )
+  ipcMain.handle('orchestra:agent.readTriggers', (_e, p: { id: UUID }) => {
+    const err = needStr(p?.id, 'id')
+    return err ? fail(err) : wrap(() => core.readAgentTriggers(p.id))
+  })
+  ipcMain.handle(
+    'orchestra:agent.writeTriggers',
+    (_e, p: { id: UUID; triggers: unknown[] }) => {
+      const err = check(
+        needStr(p?.id, 'id'),
+        Array.isArray(p?.triggers) ? null : 'invalid input: triggers'
+      )
+      return err
+        ? fail(err)
+        : wrap(() => core.writeAgentTriggers(p.id, p.triggers as never))
+    }
+  )
+  ipcMain.handle('orchestra:team.readClaudeMd', (_e, p: { id: UUID }) => {
+    const err = needStr(p?.id, 'id')
+    return err ? fail(err) : wrap(() => core.readTeamClaudeMd(p.id))
+  })
+  ipcMain.handle(
+    'orchestra:team.writeClaudeMd',
+    (_e, p: { id: UUID; text: string }) => {
+      const err = check(
+        needStr(p?.id, 'id'),
+        typeof p?.text === 'string' ? null : 'invalid input: text'
+      )
+      return err ? fail(err) : wrap(() => core.writeTeamClaudeMd(p.id, p.text))
+    }
+  )
+
   // edges
   ipcMain.handle('orchestra:edge.list', (_e, p?: { teamId?: UUID }) => {
     const teamId = p?.teamId

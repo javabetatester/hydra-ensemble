@@ -10,10 +10,17 @@ export default defineConfig({
       // native CJS deps (node-pty) without Node's ESM/CJS bridge tripping
       // on `module.exports` introspection. Without "type": "module" in the
       // root package.json, .js files are interpreted as CJS by Node.
-      lib: {
-        entry: resolve(__dirname, 'src/main/index.ts'),
-        formats: ['cjs'],
-        fileName: () => 'index.js'
+      rollupOptions: {
+        // `agent-runner` is forked by AgentHost via `child_process.fork`,
+        // so it needs its own compiled file alongside `index.js`.
+        input: {
+          index: resolve(__dirname, 'src/main/index.ts'),
+          'agent-runner': resolve(__dirname, 'src/main/orchestra/agent-runner.ts')
+        },
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].js'
+        }
       }
     }
   },

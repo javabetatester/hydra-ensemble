@@ -794,8 +794,8 @@ each phase boundary.
 - [ ] `.claude/docs/orchestra-smoke.md` checklist.
 - [ ] Release notes entry for the first version shipping Orchestra.
 - [ ] AUR / winget / package-lock all bumped, same pattern as v0.1.3.
-- [ ] Settings screen has an "Enable Orchestra (experimental)" toggle.
-- [ ] README mentions Orchestra with a 3-line blurb + link to PRD.
+- [x] Settings screen has an "Enable Orchestra (experimental)" toggle.
+- [x] README mentions Orchestra with a 3-line blurb + link to PRD.
 - [ ] Orchestra works with 10 agents, 1 team, 20 tasks queued, no UI
       jank on M1 / Ryzen-5-class machines.
 
@@ -821,3 +821,108 @@ Rough single-developer, focused hours:
 
 ~12 working days of focus. Could land in two calendar weeks with
 parallel PRs but probably lands cleaner in three.
+
+## 18. UX Layer Phases (post-MVP increments)
+
+These phases extend the MVP delivery (§12) with the discoverability and
+transparency surfaces described in `PRD.md` §23–§26. They are cut to
+merge in any order after Phase 10, each one landing a self-contained
+shippable slice.
+
+### Phase 12 — Discovery
+
+Scope: always-visible sidebar entry (dimmed when off / lively when on,
+listing first 4 teams + agent counts), StatusBar pill that surfaces
+running/error agents, FirstRunToast with the `bootCount >= 5`
+heuristic, auto-enable-on-first-keybind behaviour for `Ctrl+Shift+A`,
+and the three command-palette entries ("Open Orchestra",
+"Enable Orchestra (experimental)", "Disable Orchestra"). No new backend
+work — everything here hangs off `settings.orchestra.enabled` and the
+existing event stream.
+
+**Exit**: a user who has never touched Orchestra can, from a cold
+classic Hydra, get into the workspace in one action via any of: the
+sidebar row, the palette, the keybind, or the first-run toast — with
+the flag flipping itself on as a side-effect.
+
+### Phase 13 — Settings panel
+
+Scope: the dedicated `SettingsPanel.tsx` with four sections (master
+toggle, API key add/rotate/remove with validate-on-save + keychain
+preference radio, per-team safeMode cycler with typed confirmation to
+enter `yolo`, danger-zone wipe requiring the `DELETE ORCHESTRA`
+phrase). Interaction rules: non-master sections are disabled when the
+flag is off.
+
+**Exit**: a user can configure everything Orchestra-related without
+editing `store.json` or shell-diving into
+`~/.hydra-ensemble/secrets/`. Wiping is reversible only by recreating
+teams from scratch (as designed).
+
+### Phase 14 — Task drawer + route transparency + approval cards
+
+Scope: right-side `TaskDrawer` (`w-[420px]`) opened by clicking a task
+card. Contains the RouteExplain block ("why this agent?" with
+candidate scores and tiebreaker label), the merged timeline of Route +
+MessageLog entries with sub-task indentation, and inline ApprovalCard
+rendering for every `approval_request` entry (Allow/Deny + 5-minute
+auto-deny countdown). Footer exposes Cancel task with cascading
+sub-task cancellation.
+
+**Exit**: a user can diagnose why a task landed where it did, approve
+or deny safeMode prompts without leaving the drawer, and kill a
+misbehaving task plus its descendants in one click.
+
+### Phase 15 — Coach marks
+
+Scope: 4-step skippable tour triggered on first entry to the Orchestra
+workspace. Steps anchor to `data-coach="team-rail"`,
+`data-coach="canvas"`, `data-coach="inspector"`,
+`data-coach="task-bar"`. Progress persisted under
+`settings.orchestra.coachMarksCompleted`; skipping counts as
+completed.
+
+**Exit**: a user opening Orchestra for the first time sees the tour
+once, never again, and can exit with `Esc` or the Skip button at any
+step.
+
+### Phase 16 — File-IO wiring for inspector tabs
+
+Scope: cabear o IPC real de `soul.md`, `skills.yaml`, `triggers.yaml`
+entre o inspector e o disco. The "unwired stub" banner that used to
+sit on top of the Soul / Skills / Triggers tabs is removed. Writes
+round-trip through `main/orchestra/disk.ts`, reads are re-issued on
+chokidar events with the "reloaded from disk" pip. No new schema —
+this phase is purely wiring + removing the placeholder UI.
+
+**Exit**: editing a soul in Monaco, hitting blur, and `cat`-ing the
+file on disk shows the new content; editing the file from `$EDITOR`
+and returning to the inspector shows the external change with the
+reload pip.
+
+## 19. Revised Deliverables Checklist
+
+Mirrors §16 but reflects what the UX layer phases (§18) have actually
+shipped. Unticked items remain in the v2 backlog.
+
+### Done
+
+- [x] Sidebar entry (always visible; dimmed off, lively on).
+- [x] StatusBar pill for running/error agents.
+- [x] Dedicated Orchestra settings panel (`SettingsPanel.tsx`) with
+      feature flag, API key, per-team safeMode, danger zone.
+- [x] TaskDrawer with RouteExplain + merged timeline + Cancel task.
+- [x] ApprovalCard inline in the timeline (auto-deny countdown).
+- [x] CoachMarks (4-step tour, skippable, `data-coach` anchors).
+- [x] Auto-enable on first `Ctrl+Shift+A` press.
+- [x] Command palette entries (Open / Enable / Disable Orchestra).
+- [x] File I/O IPC cabeado — soul/skills/triggers round-trip to disk.
+- [x] README mentions Orchestra with a blurb + link to PRD.
+- [x] Settings screen has an "Enable Orchestra (experimental)" toggle.
+
+### Still open
+
+- [ ] Real event triggers (GitHub PR webhooks, CI pipelines).
+- [ ] Cron / scheduled trigger engine.
+- [ ] Observability timeline (swim lanes / flamegraph).
+- [ ] Cross-team messaging.

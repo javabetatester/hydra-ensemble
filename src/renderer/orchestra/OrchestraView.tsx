@@ -9,13 +9,16 @@
  * See PRD.md §11 (UI layout), §13 (empty states) and PLAN.md §5.1.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Crown, Network, Plus } from 'lucide-react'
+import { ArrowLeft, Crown, Network, Plus, Settings } from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
 import TeamRail from './TeamRail'
 import Canvas from './Canvas'
 import Inspector from './Inspector'
 import TaskBar from './TaskBar'
 import ApiKeyModal from './modals/ApiKeyModal'
+import SettingsPanel from './SettingsPanel'
+import CoachMarks from './CoachMarks'
+import TaskDrawer from './TaskDrawer'
 
 interface Props {
   onBackToClassic: () => void
@@ -82,6 +85,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [creatingInline, setCreatingInline] = useState<StarterTemplate['id'] | 'blank' | null>(
     null
   )
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false)
 
   // One-shot init + API-key probe. Guarded by `enabled` so disabled mounts
   // never kick off side effects.
@@ -164,12 +168,21 @@ export default function OrchestraView({ onBackToClassic }: Props) {
             </>
           ) : null}
         </div>
-        <div className="flex items-center gap-1 font-mono text-[10px] text-text-4">
+        <div className="flex items-center gap-2 font-mono text-[10px] text-text-4">
           {activeAgents.length > 0 ? (
             <span>
               {activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'}
             </span>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex items-center gap-1 rounded-sm px-1.5 py-1 text-text-3 hover:bg-bg-3 hover:text-text-1"
+            title="Orchestra settings"
+            aria-label="Orchestra settings"
+          >
+            <Settings size={14} strokeWidth={1.75} />
+          </button>
         </div>
       </header>
 
@@ -204,6 +217,20 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       <footer className="flex h-[52px] shrink-0 items-center border-t border-border-soft bg-bg-2 px-3">
         <TaskBar />
       </footer>
+
+      {/* Coach marks overlay — always mounted while Orchestra is visible;
+          the component decides its own visibility via the store. */}
+      <CoachMarks open={true} />
+
+      {/* Task drawer — internal logic reads `taskDrawerTaskId` to decide
+          visibility, so passing a constant `open` is fine. */}
+      <TaskDrawer
+        open={true}
+        onClose={() => useOrchestra.getState().setTaskDrawer(null)}
+      />
+
+      {/* Orchestra settings panel (gear icon in header). */}
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Blocking API-key modal. Rendered last so it layers above everything. */}
       {apiKeyResolved && apiKeyMissing ? (

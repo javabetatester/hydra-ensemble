@@ -27,22 +27,18 @@ class UnwiredError extends Error {
 }
 
 async function readSkills(agentId: string): Promise<Skill[]> {
-  // @ts-expect-error — to be wired in phase 6 (see PLAN.md): window.api.orchestra.agent.readSkills
-  const fn = window.api?.orchestra?.agent?.readSkills as
-    | ((id: string) => Promise<Skill[]>)
-    | undefined
+  const fn = window.api?.orchestra?.agent?.readSkills
   if (!fn) throw new UnwiredError()
-  const result = await fn(agentId)
-  return Array.isArray(result) ? result : []
+  const res = await fn(agentId)
+  if (!res.ok) throw new Error(res.error)
+  return Array.isArray(res.value) ? res.value : []
 }
 
 async function writeSkills(agentId: string, skills: Skill[]): Promise<void> {
-  // @ts-expect-error — to be wired in phase 6 (see PLAN.md): window.api.orchestra.agent.writeSkills
-  const fn = window.api?.orchestra?.agent?.writeSkills as
-    | ((id: string, skills: Skill[]) => Promise<void>)
-    | undefined
+  const fn = window.api?.orchestra?.agent?.writeSkills
   if (!fn) throw new UnwiredError()
-  await fn(agentId, skills)
+  const res = await fn(agentId, skills)
+  if (!res.ok) throw new Error(res.error)
 }
 
 const emptySkill = (): Skill => ({

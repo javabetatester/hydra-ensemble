@@ -565,3 +565,276 @@ user's own analysis.
 - Observability timeline (swim lanes, flamegraph).
 - Strict and yolo safeModes (MVP ships only `prompt`).
 - Approval workflows (paperclip's "hire_agent" gate).
+
+## 23. Discovery & Onboarding
+
+Orchestra is opt-in, so discovery has to work without nagging the user.
+The following surfaces were shipped to make the feature findable without
+adding a modal to the cold-start of classic Hydra.
+
+### 23.1 Sidebar entry (always visible)
+
+The Orchestra row sits below the existing Sessions / Worktrees / Projects
+entries and is **always rendered**, regardless of
+`settings.orchestra.enabled`.
+
+- **Flag off (dimmed state)**: row shows at ~40% opacity, icon only,
+  subtitle "click to enable". Clicking the row flips
+  `settings.orchestra.enabled = true` and opens the Orchestra view in
+  a single motion — no JSON editing, no secondary settings round-trip.
+- **Flag on (lively state)**: row shows at full opacity, expands to
+  list the first 4 teams with their agent counts (`PR Reviewers · 3`,
+  `Feature Factory · 5`, …). Clicking a team deep-links into that team
+  in the Orchestra workspace.
+
+Rationale: the dimmed-but-visible state teaches the user Orchestra
+exists without forcing a decision. The auto-enable on click removes the
+"where is the switch?" friction.
+
+### 23.2 StatusBar pill
+
+A compact pill appears in Hydra's bottom status bar **only when at
+least one Orchestra agent is `running` or `error`** in any team.
+
+- Content: `Orchestra: 2 running` or `Orchestra: 1 error` (error wins
+  the label when both exist).
+- Click target: opens the Orchestra view, focusing the first
+  erroring/running agent.
+- Disappears automatically when all agents return to `idle`/`paused`.
+
+This gives a passive "something is happening" signal from inside
+classic Hydra so the user doesn't need to keep Orchestra open.
+
+### 23.3 FirstRunToast (classic surface)
+
+A dismissible corner toast, **never a modal**. Rendered in the classic
+Dashboard only.
+
+Heuristic:
+
+```
+show toast iff:
+  settings.orchestra.enabled === false
+  AND app.bootCount >= 5
+  AND settings.orchestra.firstRunToastDismissed !== true
+```
+
+- Copy: *"Hydra can now orchestrate teams of Claude agents. Want to
+  try?"*
+- Actions: `[Open Orchestra]`, `[Later]`, `[Don't show again]`.
+  - Open Orchestra → flips the flag and navigates to the view.
+  - Later → sets a 48h cooldown before re-showing.
+  - Don't show again → sets
+    `settings.orchestra.firstRunToastDismissed = true` permanently.
+- Auto-dismiss: 12 seconds of no interaction counts as "Later".
+
+This keeps existing users unbothered for the first four boots, then
+offers a single low-friction nudge.
+
+### 23.4 CoachMarks (4-step tour)
+
+The first time the user actually lands in the Orchestra workspace (flag
+just flipped or view just opened for the first time), a 4-step tour
+fires. It is skippable at any step.
+
+| Step | Anchor (`data-coach`) | Copy |
+|---|---|---|
+| 1 | `team-rail` | "Teams live here. Each team is a worktree + a set of agents." |
+| 2 | `canvas` | "Drop agents here and wire reporting lines between them." |
+| 3 | `inspector` | "Click an agent to edit its soul, skills, and triggers." |
+| 4 | `task-bar` | "Submit tasks here. Orchestra routes them to the right agent." |
+
+Anchors are plain `data-coach` attributes on TeamRail, Canvas,
+Inspector, and TaskBar so the overlay can locate each target without a
+ref dance. The tour stores progress in
+`settings.orchestra.coachMarksCompleted` (`boolean`); skipping counts
+as completed.
+
+### 23.5 Auto-enable on first keybind
+
+`Ctrl+Shift+A` (`⌘⇧A` on mac) is globally registered even when the
+flag is off. First press with the flag off:
+
+1. Flips `settings.orchestra.enabled = true`.
+2. Opens Orchestra.
+3. Emits a one-shot toast *"Orchestra enabled"* (2.5s).
+
+Subsequent presses just toggle the Orchestra view open/closed like a
+normal keybind. This mirrors the sidebar behaviour (§23.1) so both
+surfaces do the same thing.
+
+### 23.6 Command palette entries
+
+`⌘K` exposes three entries in the command palette:
+
+- **Open Orchestra** — visible only when the flag is on.
+- **Enable Orchestra (experimental)** — visible only when the flag is
+  off; flips the flag and opens the view.
+- **Disable Orchestra** — visible only when the flag is on; flips the
+  flag back to off. Does not delete any data.
+
+## 24. Settings Surface
+
+A dedicated `SettingsPanel.tsx` renders Orchestra-specific settings.
+Reachable from:
+
+- The command palette entry "Orchestra settings".
+- A gear icon next to the Orchestra row in the sidebar (TBD — pending
+  visual review; the panel is reachable via the palette regardless).
+
+The panel has four sections, in order:
+
+### 24.1 Feature flag
+
+Single toggle **"Enable Orchestra (experimental)"**. This is the master
+switch. Toggling it off unmounts the workspace and hides the sidebar's
+lively/expanded state but preserves all team data.
+
+### 24.2 Anthropic API key
+
+- Masked input with add / rotate / remove actions.
+- Radio: **"Store in OS keychain (recommended)"** vs.
+  **"Encrypted file (safeStorage)"**. Keychain is default and preferred.
+- **Validate on save**: the Save button fires a 1-token ping to
+  `api.anthropic.com/v1/messages`; only on 2xx does the key persist.
+  401 or 429 leave the previous key intact and surface an inline error.
+- Remove clears the key from whatever storage it lives in and
+  invalidates any in-flight agent sessions.
+
+### 24.3 Per-team safeMode cycler
+
+For each team the user has, a row: `<team name> · [ strict | prompt |
+yolo ]` as a segmented control.
+
+- Switching `strict` → `prompt` or `prompt` → `strict` applies
+  immediately.
+- Switching **to** `yolo` fires a confirmation dialog:
+  *"yolo mode disables every approval prompt. The agent can run shell
+  commands and write files without asking. Proceed?"* with typed
+  confirmation **"I understand"**. Switching **away** from `yolo` is
+  free.
+
+### 24.4 Danger zone
+
+- **Wipe all Orchestra data**: deletes the `orchestra` key from
+  `store.json`, removes every team folder under
+  `~/.hydra-ensemble/orchestra/teams/`, and clears the API key from
+  every storage backend.
+- Requires typing **`DELETE ORCHESTRA`** verbatim (case-sensitive).
+- Does not touch classic Hydra data (sessions, projects, toolkit,
+  watchdogs).
+
+### 24.5 Interaction rules
+
+- When `settings.orchestra.enabled === false`, **only the master
+  toggle (§24.1) is interactive**. Sections 24.2–24.4 render in a
+  disabled/ghosted state with a hint *"Enable Orchestra to edit these
+  settings."* This prevents the user from editing state that won't
+  apply.
+- The danger zone button is always styled as destructive
+  (red border, red label) and always requires the typed phrase, even
+  when the flag is off — the wipe works regardless of enabled state.
+
+## 25. Task Drawer & Routing Transparency
+
+Clicking a task card (on the canvas, in the task-bar recent list, or in
+the status-bar pill's context menu) opens a right-side drawer
+(`w-[420px]`, `TaskDrawer.tsx`).
+
+### 25.1 Drawer anatomy
+
+Top to bottom:
+
+1. **Header** — task title, priority pill, tags, close button.
+2. **RouteExplain block** (§25.2) — "Why this agent?"
+3. **Timeline** (§25.3) — chronological merge of Route + MessageLog
+   entries for the task and its sub-tasks.
+4. **Footer** — **Cancel task** button (destructive styling).
+
+### 25.2 RouteExplain block
+
+Renders the `Route` record tied to the task:
+
+- Chosen agent (bold, with crown if main).
+- Reason label (`scored`, `fallback:no-match`, `delegation:<id>`).
+- Candidate list: each candidate agent + their score, sorted desc.
+  The chosen candidate is highlighted.
+- Tiebreaker note when two candidates had equal scores
+  (e.g. *"tied at 6.0, chose least-recently-active"*).
+
+This is the user-facing surface of the routing algorithm in §7 of
+`PLAN.md`; it exists so misroutes are debuggable without digging
+through log files.
+
+### 25.3 Timeline
+
+A single chronological stream merging:
+
+- The Route entry at the top (task creation + initial assignment).
+- Every `MessageLog` entry with `taskId === task.id` OR with
+  `taskId === <any descendant task via parentTaskId>`.
+- Sub-task rows are **indented one level** per depth in the
+  parent→child chain, with a faint connector line on the left.
+- Entry kinds render with distinct affordances:
+  - `status`, `output` — plain text blocks.
+  - `delegation` — arrow row `A → B  "reason"`.
+  - `error` — red bordered block.
+  - `approval_request` — see §25.4.
+
+### 25.4 ApprovalCard (inline)
+
+When a timeline entry is a `MessageLog` with
+`kind === 'approval_request'`, it renders as an interactive card
+in-line (rather than a plain log line):
+
+- Header: the command / write the agent wants to perform.
+- Body: the agent's justification (from the tool call arguments).
+- Actions: **[Allow]** / **[Deny]**.
+- **Auto-deny countdown** — a 5:00 timer visible on the card. At 0:00
+  the card auto-denies and becomes a plain log entry labeled
+  *"auto-denied (timeout)"*.
+- While the card is active, the agent is in `running` state but
+  paused between turns — the countdown gives the user a hard deadline
+  so stale approvals don't block agents indefinitely.
+
+### 25.5 Cancel task semantics
+
+**Cancel task** in the footer:
+
+- Soft: sends a cancel signal to the AgentHost. The agent finishes its
+  current SDK turn (so tool calls already in flight complete), then
+  marks the task `failed` with reason `cancelled_by_user`.
+- Cascades to sub-tasks: every task with `parentTaskId` matching the
+  cancelled task (recursively) is also marked `failed` with reason
+  `parent_cancelled`.
+- The drawer stays open and the Cancel button becomes
+  *"Cancelled"* (disabled).
+
+## 26. Keyboard Discoverability Matrix
+
+Complete list of Orchestra-related shortcuts. Overlaps with §12 (canvas
+table) are intentional — this section is the single-source-of-truth
+reference.
+
+| Shortcut | Context | Action |
+|---|---|---|
+| `Ctrl+Shift+A` / `⌘⇧A` | Anywhere in Hydra | Toggle Orchestra view. With flag off, first press flips the flag and opens the view (see §23.5). |
+| `⌘K` | Anywhere | Open command palette. Orchestra entries depend on flag state (§23.6). |
+| `⌘D` | Anywhere | Return to classic Dashboard. Orchestra state preserved. |
+| `Esc` | In Inspector | Close inspector, return focus to canvas. |
+| `Esc` | In TaskDrawer | Close drawer, return focus to the task card on canvas. |
+| `Esc` | In CoachMarks | Skip the tour (marks as completed). |
+| `Esc` | In any modal (ApiKey, DeleteTeam, NewAgent) | Cancel / close. |
+| `/` | In Orchestra workspace | Focus the task-bar input. |
+| `A` | Canvas focused | Open New Agent popover at cursor. |
+| `E` | One card selected | Start drag-to-connect edge creation. |
+| `Tab` | Canvas | Cycle through agent cards in reading order. |
+| `Enter` | Card focused | Open inspector for focused card. |
+| `Space` | Card focused | Select / deselect. |
+| `Space+drag` / middle-click-drag | Canvas | Pan viewport. |
+| `Ctrl/Cmd + wheel` | Canvas | Zoom (clamped 25%–200%). |
+| `Arrow` | Card focused & selected | Nudge 8px. |
+| `Shift+Arrow` | Card focused & selected | Nudge 1px. |
+| `Delete` / `Backspace` | Selection present | Delete selected nodes/edges (confirm if >1). |
+| `⌘Z` / `⌘⇧Z` | Canvas | Undo / redo (50 steps). |
+| `⌘0` | Canvas | Fit graph to viewport (200ms anim). |

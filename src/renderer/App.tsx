@@ -62,9 +62,12 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [orchestraOpen, setOrchestraOpen] = useState(false)
+  const orchestraOpen = useOrchestra((s) => s.overlayOpen)
+  const setOrchestraOpen = useOrchestra((s) => s.setOverlayOpen)
+  const toggleOrchestra = useOrchestra((s) => s.toggleOverlay)
   const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
   const initOrchestra = useOrchestra((s) => s.init)
+  const setOrchestraSettings = useOrchestra((s) => s.setSettings)
   const spawnOpen = useSpawnDialog((s) => s.open)
   const showSpawn = useSpawnDialog((s) => s.show)
   const hideSpawn = useSpawnDialog((s) => s.hide)
@@ -186,8 +189,15 @@ export default function App() {
       'palette.open': () => setPaletteOpen((v) => !v),
       'help.open': () => setHelpOpen((v) => !v),
       'orchestra.open': () => {
-        if (!orchestraEnabled) return
-        setOrchestraOpen((v) => !v)
+        // First press flips the persisted flag on; subsequent presses
+        // just toggle the overlay. Avoids asking the user to hand-edit
+        // store.json to discover the feature.
+        if (!orchestraEnabled) {
+          void setOrchestraSettings({ enabled: true })
+          setOrchestraOpen(true)
+          return
+        }
+        toggleOrchestra()
       }
     }
 
@@ -270,7 +280,10 @@ export default function App() {
     openGh,
     showSpawn,
     contextCwd,
-    orchestraEnabled
+    orchestraEnabled,
+    setOrchestraOpen,
+    setOrchestraSettings,
+    toggleOrchestra
   ])
 
   return (

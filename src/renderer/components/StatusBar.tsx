@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { GitBranch, Hash, Activity } from 'lucide-react'
 import { useSessions } from '../state/sessions'
+import { useOrchestra } from '../orchestra/state/orchestra'
 import type { SessionMeta } from '../../shared/types'
 import SessionStatePill from './SessionStatePill'
 
@@ -25,6 +26,10 @@ export default function StatusBar() {
   const sessions = useSessions((s) => s.sessions)
   const activeId = useSessions((s) => s.activeId)
 
+  const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
+  const orchestraAgents = useOrchestra((s) => s.agents)
+  const setOrchestraOverlayOpen = useOrchestra((s) => s.setOverlayOpen)
+
   const active = useMemo(
     () => sessions.find((s) => s.id === activeId),
     [sessions, activeId]
@@ -39,6 +44,19 @@ export default function StatusBar() {
     }
     return { tokensIn, tokensOut }
   }, [sessions])
+
+  const orchestraStatus = useMemo(() => {
+    let running = 0
+    let errors = 0
+    for (const a of orchestraAgents) {
+      if (a.state === 'running') running += 1
+      else if (a.state === 'error') errors += 1
+    }
+    return { running, errors }
+  }, [orchestraAgents])
+
+  const showOrchestraPill =
+    orchestraEnabled && (orchestraStatus.running > 0 || orchestraStatus.errors > 0)
 
   const branch = activeBranch(active)
   const model = active?.model ?? 'sonnet'
@@ -69,6 +87,57 @@ export default function StatusBar() {
       )}
 
       <span className="ml-auto flex items-center gap-3 tabular-nums">
+        {showOrchestraPill ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setOrchestraOverlayOpen(true)}
+              className="flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[10px] transition-colors hover:bg-bg-3"
+              title="Open Orchestra"
+              aria-label="Open Orchestra"
+            >
+              {orchestraStatus.running > 0 && orchestraStatus.errors === 0 && (
+                <span className="flex items-center gap-1">
+                  <span
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-500"
+                    aria-hidden
+                  />
+                  <span className="text-text-2">{orchestraStatus.running}</span>
+                  <span className="text-text-4">
+                    {orchestraStatus.running === 1 ? 'agent running' : 'agents running'}
+                  </span>
+                </span>
+              )}
+              {orchestraStatus.running > 0 && orchestraStatus.errors > 0 && (
+                <>
+                  <span className="flex items-center gap-1">
+                    <span
+                      className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-500"
+                      aria-hidden
+                    />
+                    <span className="text-text-2">{orchestraStatus.running}</span>
+                    <span className="text-text-4">running</span>
+                  </span>
+                  <span className="text-text-4">·</span>
+                  <span className="flex items-center gap-1 text-status-attention">
+                    <span aria-hidden>⚠</span>
+                    <span>{orchestraStatus.errors}</span>
+                    <span>{orchestraStatus.errors === 1 ? 'error' : 'errors'}</span>
+                  </span>
+                </>
+              )}
+              {orchestraStatus.running === 0 && orchestraStatus.errors > 0 && (
+                <span className="flex items-center gap-1 text-status-attention">
+                  <span aria-hidden>⚠</span>
+                  <span>{orchestraStatus.errors}</span>
+                  <span>{orchestraStatus.errors === 1 ? 'error' : 'errors'}</span>
+                </span>
+              )}
+            </button>
+            <Sep />
+          </>
+        ) : null}
+
         {sessionCount > 0 ? (
           <>
             <Cell label="tokens" icon={<Hash size={10} strokeWidth={1.75} />}>

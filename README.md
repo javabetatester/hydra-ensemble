@@ -83,6 +83,15 @@ Modifier is **Cmd** on macOS and **Ctrl** on Linux/Windows.
 
 Hydra Ensemble is an Electron application with a Node.js + TypeScript main process and a React + Vite + Tailwind renderer. The terminal is `xterm.js`, the editor is `CodeMirror 6`, and the PTY layer is `node-pty` (Microsoft, also used by VS Code).
 
+## Orchestra (experimental)
+
+Run teams of headless claude agents on tasks you submit. Each agent
+has a role, a `soul.md` persona, skills, and triggers. Tasks route
+automatically along a reporting DAG you paint on a canvas.
+
+Enable via `Ctrl+Shift+A` (first press flips the flag) or the command
+palette entry "Enable Orchestra". Full spec: [PRD](PRD.md) · plan: [PLAN](PLAN.md).
+
 ## License
 
 [MIT](LICENSE)

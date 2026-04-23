@@ -32,6 +32,7 @@ interface PersistedView {
   activeTeamId: UUID | null
   selectedAgentIds: UUID[]
   inspectorOpen: boolean
+  overlayOpen: boolean
 }
 
 interface OrchestraState extends PersistedView {
@@ -51,6 +52,7 @@ interface OrchestraState extends PersistedView {
 
   // boot
   init: () => Promise<void>
+  setSettings: (patch: Partial<OrchestraSettings>) => Promise<void>
 
   // view actions
   setActiveTeam: (id: UUID | null) => void
@@ -58,6 +60,8 @@ interface OrchestraState extends PersistedView {
   clearSelection: () => void
   setInspectorOpen: (open: boolean) => void
   setTaskDrawer: (taskId: UUID | null) => void
+  setOverlayOpen: (open: boolean) => void
+  toggleOverlay: () => void
 
   // team
   createTeam: (input: NewTeamInput) => Promise<Team | null>
@@ -126,6 +130,7 @@ export const useOrchestra = create<OrchestraState>()(
       activeTeamId: null,
       selectedAgentIds: [],
       inspectorOpen: false,
+      overlayOpen: false,
       taskDrawerTaskId: null,
       initialized: false,
       disposeSubscription: undefined,
@@ -189,6 +194,8 @@ export const useOrchestra = create<OrchestraState>()(
       clearSelection: () => set({ selectedAgentIds: [] }),
       setInspectorOpen: (open) => set({ inspectorOpen: open }),
       setTaskDrawer: (taskId) => set({ taskDrawerTaskId: taskId }),
+      setOverlayOpen: (open) => set({ overlayOpen: open }),
+      toggleOverlay: () => set((s) => ({ overlayOpen: !s.overlayOpen })),
 
       createTeam: async (input) => {
         const o = api()
@@ -296,6 +303,18 @@ export const useOrchestra = create<OrchestraState>()(
         if (!o) return
         const res = await o.task.cancel(id)
         if (!res.ok) toastError('Cancel task failed', res.error)
+      },
+
+      setSettings: async (patch) => {
+        const o = api()
+        set((s) => ({ settings: { ...s.settings, ...patch } }))
+        if (o) {
+          await o.settings.set(patch).catch(() => {
+            // If the IPC fails we keep the optimistic value rather than
+            // thrashing the UI; the mirrored state will re-sync on next
+            // boot via init().
+          })
+        }
       }
     }),
     {
@@ -308,7 +327,8 @@ export const useOrchestra = create<OrchestraState>()(
         ({
           activeTeamId: s.activeTeamId,
           selectedAgentIds: s.selectedAgentIds,
-          inspectorOpen: s.inspectorOpen
+          inspectorOpen: s.inspectorOpen,
+          overlayOpen: s.overlayOpen
         }) satisfies PersistedView
     }
   )

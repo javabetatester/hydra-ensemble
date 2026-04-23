@@ -228,7 +228,10 @@ const api: HydraEnsembleApi = {
         ipcRenderer.invoke('orchestra:team.rename', { id, name }),
       setSafeMode: (id: UUID, safeMode: SafeMode) =>
         ipcRenderer.invoke('orchestra:team.setSafeMode', { id, safeMode }),
-      delete: (id: UUID) => ipcRenderer.invoke('orchestra:team.delete', { id })
+      delete: (id: UUID) => ipcRenderer.invoke('orchestra:team.delete', { id }),
+      readClaudeMd: (id: UUID) => ipcRenderer.invoke('orchestra:team.readClaudeMd', { id }),
+      writeClaudeMd: (id: UUID, text: string) =>
+        ipcRenderer.invoke('orchestra:team.writeClaudeMd', { id, text })
     },
     agent: {
       list: (teamId: UUID) => unwrapList('orchestra:agent.list', { teamId }),
@@ -237,7 +240,16 @@ const api: HydraEnsembleApi = {
       delete: (id: UUID) => ipcRenderer.invoke('orchestra:agent.delete', { id }),
       promoteMain: (id: UUID) => ipcRenderer.invoke('orchestra:agent.promoteMain', { id }),
       pause: (id: UUID) => ipcRenderer.invoke('orchestra:agent.pause', { id }),
-      stop: (id: UUID) => ipcRenderer.invoke('orchestra:agent.stop', { id })
+      stop: (id: UUID) => ipcRenderer.invoke('orchestra:agent.stop', { id }),
+      readSoul: (id: UUID) => ipcRenderer.invoke('orchestra:agent.readSoul', { id }),
+      writeSoul: (id: UUID, text: string) =>
+        ipcRenderer.invoke('orchestra:agent.writeSoul', { id, text }),
+      readSkills: (id: UUID) => ipcRenderer.invoke('orchestra:agent.readSkills', { id }),
+      writeSkills: (id: UUID, skills: unknown[]) =>
+        ipcRenderer.invoke('orchestra:agent.writeSkills', { id, skills }),
+      readTriggers: (id: UUID) => ipcRenderer.invoke('orchestra:agent.readTriggers', { id }),
+      writeTriggers: (id: UUID, triggers: unknown[]) =>
+        ipcRenderer.invoke('orchestra:agent.writeTriggers', { id, triggers })
     },
     edge: {
       list: (teamId: UUID) => unwrapList('orchestra:edge.list', { teamId }),

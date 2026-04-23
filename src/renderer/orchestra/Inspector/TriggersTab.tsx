@@ -3,22 +3,18 @@ import { Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-r
 import yaml from 'js-yaml'
 import type { Trigger, TriggerKind } from '../../../shared/orchestra'
 
-// Stub helpers — mirror SoulTab/SkillsTab. Wired later to window.api.orchestra.*.
 async function readTriggers(agentId: string): Promise<Trigger[]> {
-  // @ts-expect-error — to be wired: window.api.orchestra.agent.readTriggers
-  const fn = window.api?.orchestra?.agent?.readTriggers as
-    | ((id: string) => Promise<Trigger[]>)
-    | undefined
+  const fn = window.api?.orchestra?.agent?.readTriggers
   if (!fn) throw new Error('triggers IO not wired')
-  return (await fn(agentId)) ?? []
+  const res = await fn(agentId)
+  if (!res.ok) throw new Error(res.error)
+  return Array.isArray(res.value) ? res.value : []
 }
 async function writeTriggers(agentId: string, triggers: Trigger[]): Promise<void> {
-  // @ts-expect-error — to be wired: window.api.orchestra.agent.writeTriggers
-  const fn = window.api?.orchestra?.agent?.writeTriggers as
-    | ((id: string, triggers: Trigger[]) => Promise<void>)
-    | undefined
+  const fn = window.api?.orchestra?.agent?.writeTriggers
   if (!fn) throw new Error('triggers IO not wired')
-  await fn(agentId, triggers)
+  const res = await fn(agentId, triggers)
+  if (!res.ok) throw new Error(res.error)
 }
 
 interface Props { agentId: string }

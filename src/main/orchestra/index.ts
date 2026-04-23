@@ -21,9 +21,14 @@ import {
   deleteTeamFolder,
   orchestraRoot,
   readSkills,
+  readSoul,
   readTeamClaudeMd,
   readTriggers,
-  teamDir
+  teamDir,
+  writeSkills,
+  writeSoul,
+  writeTeamClaudeMd,
+  writeTriggers
 } from './disk'
 import {
   clearApiKey as secretsClearApiKey,
@@ -332,6 +337,63 @@ export class OrchestraCore {
 
   messageLogForTask(taskId: UUID): MessageLog[] {
     return this.log.listForTask(taskId)
+  }
+
+  // --------------------------------------------------------------- agent files
+
+  /**
+   * Resolve the (teamSlug, agentSlug) pair for an agent id. Throws a plain
+   * Error so IPC wraps it cleanly — lookup failures happen when the
+   * renderer still has a stale agent in its cache.
+   */
+  private resolveAgentPaths(agentId: UUID): { teamSlug: string; agentSlug: string } {
+    const agent = this.registry.getAgent(agentId)
+    if (!agent) throw new Error('agent not found')
+    const team = this.registry.getTeam(agent.teamId)
+    if (!team) throw new Error('team not found')
+    return { teamSlug: team.slug, agentSlug: agent.slug }
+  }
+
+  async readAgentSoul(agentId: UUID): Promise<string> {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    return readSoul(teamSlug, agentSlug)
+  }
+
+  async writeAgentSoul(agentId: UUID, text: string): Promise<void> {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    await writeSoul(teamSlug, agentSlug, text)
+  }
+
+  async readAgentSkills(agentId: UUID) {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    return readSkills(teamSlug, agentSlug)
+  }
+
+  async writeAgentSkills(agentId: UUID, skills: Parameters<typeof writeSkills>[2]): Promise<void> {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    await writeSkills(teamSlug, agentSlug, skills)
+  }
+
+  async readAgentTriggers(agentId: UUID) {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    return readTriggers(teamSlug, agentSlug)
+  }
+
+  async writeAgentTriggers(agentId: UUID, triggers: Parameters<typeof writeTriggers>[2]): Promise<void> {
+    const { teamSlug, agentSlug } = this.resolveAgentPaths(agentId)
+    await writeTriggers(teamSlug, agentSlug, triggers)
+  }
+
+  async readTeamClaudeMd(teamId: UUID): Promise<string> {
+    const team = this.registry.getTeam(teamId)
+    if (!team) throw new Error('team not found')
+    return readTeamClaudeMd(team.slug)
+  }
+
+  async writeTeamClaudeMd(teamId: UUID, text: string): Promise<void> {
+    const team = this.registry.getTeam(teamId)
+    if (!team) throw new Error('team not found')
+    await writeTeamClaudeMd(team.slug, text)
   }
 
   // -------------------------------------------------------------------- keys

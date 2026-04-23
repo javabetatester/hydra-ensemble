@@ -169,7 +169,7 @@ export default function TeamRail() {
   const empty = teams.length === 0 && !creating
 
   return (
-    <aside aria-label="Teams"
+    <aside aria-label="Teams" data-coach="team-rail"
       className="flex h-full w-[220px] shrink-0 flex-col border-r border-border-soft bg-bg-2 text-text-2">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border-soft px-3">
         <Users size={13} strokeWidth={1.75} className="text-text-4" />
