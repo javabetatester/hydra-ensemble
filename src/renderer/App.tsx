@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Code2,
@@ -65,16 +65,15 @@ import { useSessions } from './state/sessions'
 import { useSessionsUi } from './state/sessionsExtra'
 import { useEditor } from './state/editor'
 import { useProjects } from './state/projects'
-import { useTranscripts } from './state/transcripts'
 import { useGh } from './state/gh'
-import { useToolkit } from './state/toolkit'
-import { useWatchdog } from './state/watchdog'
 import { fmtShortcut } from './lib/platform'
 import { useGlobalKeybinds } from './hooks/useGlobalKeybinds'
-import logoUrl from './assets/logo.png'
+import { useBootstrap } from './app/boot'
+import HeaderButton from './app/HeaderButton'
+import Welcome from './app/Welcome'
 
 export default function App() {
-  const [claudePath, setClaudePath] = useState<string | null | undefined>(undefined)
+  const claudePath = useBootstrap()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
@@ -82,7 +81,6 @@ export default function App() {
   const setOrchestraOpen = useOrchestra((s) => s.setOverlayOpen)
   const toggleOrchestra = useOrchestra((s) => s.toggleOverlay)
   const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
-  const initOrchestra = useOrchestra((s) => s.init)
   const setOrchestraSettings = useOrchestra((s) => s.setSettings)
   const spawnOpen = useSpawnDialog((s) => s.open)
   const showSpawn = useSpawnDialog((s) => s.show)
@@ -94,7 +92,6 @@ export default function App() {
     () => sessions.find((s) => s.id === activeId) ?? null,
     [sessions, activeId]
   )
-  const initSessions = useSessions((s) => s.init)
   const createSession = useSessions((s) => s.createSession)
   const destroySession = useSessions((s) => s.destroySession)
   const setActive = useSessions((s) => s.setActive)
@@ -133,10 +130,6 @@ export default function App() {
   const [sideHost, setSideHost] = useState<HTMLDivElement | null>(null)
   const terminalsHost = terminalsPosition === 'bottom' ? bottomHost : sideHost
 
-  const initToolkit = useToolkit((s) => s.init)
-  const initWatchdog = useWatchdog((s) => s.init)
-  const initProjects = useProjects((s) => s.init)
-  const initTranscripts = useTranscripts((s) => s.init)
   const currentProject = useProjects((s) => s.projects.find((p) => p.path === s.currentPath))
 
   // Keep useGh's cwd in sync when the PR panel is active so refresh works.
@@ -146,23 +139,6 @@ export default function App() {
 
   const contextCwd =
     activeSession?.worktreePath ?? activeSession?.cwd ?? currentProject?.path ?? null
-
-  useEffect(() => {
-    void initSessions()
-    void initToolkit()
-    void initWatchdog()
-    void initProjects()
-    initTranscripts()
-    void initOrchestra()
-    void window.api.claude.resolvePath().then(setClaudePath)
-  }, [
-    initSessions,
-    initToolkit,
-    initWatchdog,
-    initProjects,
-    initTranscripts,
-    initOrchestra
-  ])
 
   // Global keybind dispatcher extracted to `hooks/useGlobalKeybinds`.
   // All the routing logic + capture-phase listener + xterm-textarea
@@ -350,7 +326,7 @@ export default function App() {
             // spotlight, leaving the "hide chat" button visually inert.
             style={{ display: chatMinimized ? 'none' : undefined }}
           >
-            {sessions.length === 0 ? <EmptyMain claudePath={claudePath} /> : null}
+            {sessions.length === 0 ? <Welcome claudePath={claudePath} /> : null}
             {sessions.length > 0 ? (
               <>
                 {activeSession ? <ActiveAgentBar session={activeSession} /> : null}
@@ -650,179 +626,5 @@ export default function App() {
           )
         : null}
     </div>
-  )
-}
-
-function EmptyMain({ claudePath }: { claudePath: string | null | undefined }) {
-  const isCreating = useSessions((s) => s.isCreating)
-  const projects = useProjects((s) => s.projects)
-  const currentPath = useProjects((s) => s.currentPath)
-  const addProject = useProjects((s) => s.addProject)
-
-  return (
-    <div className="df-hero-bg df-scroll flex flex-1 items-center justify-center overflow-y-auto px-8 py-12">
-      <div className="w-full max-w-2xl df-fade-in">
-        {/* Hero */}
-        <div className="mb-8 text-center">
-          <div className="relative mx-auto mb-8 flex h-72 w-72 items-center justify-center">
-            <div className="absolute inset-0 animate-ping rounded-full bg-accent-500/20" />
-            <div className="absolute inset-4 rounded-full bg-accent-500/10 df-pulse" />
-            <img
-              src={logoUrl}
-              alt="Hydra Ensemble"
-              className="relative h-60 w-60 rounded-full"
-              draggable={false}
-            />
-          </div>
-          <h1 className="mb-2 text-2xl font-semibold tracking-tight text-text-1">
-            Run Claude agents in parallel.
-          </h1>
-          <p className="mx-auto max-w-md text-sm leading-relaxed text-text-3">
-            Each session runs with its own{' '}
-            <code className="rounded bg-bg-3 px-1.5 py-0.5 font-mono text-[11px] text-text-2">
-              CLAUDE_CONFIG_DIR
-            </code>{' '}
-            so they never collide on history, JSONL, or MCP state.
-          </p>
-        </div>
-
-        {/* Quickstart steps */}
-        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Step
-            num={1}
-            title="Pick a project"
-            body={
-              currentPath
-                ? `Active: ${currentPath.split(/[/\\]/).filter(Boolean).pop() ?? currentPath}`
-                : projects.length > 0
-                  ? `${projects.length} saved`
-                  : 'Open a directory to scope sessions and worktrees.'
-            }
-            done={!!currentPath || projects.length > 0}
-            action={
-              !currentPath ? (
-                <button
-                  type="button"
-                  onClick={() => void addProject()}
-                  className="text-[11px] font-medium text-accent-400 hover:text-accent-200"
-                >
-                  open directory →
-                </button>
-              ) : null
-            }
-          />
-          <Step
-            num={2}
-            title="Spawn a session"
-            body="A shell launches inside the project directory and execs claude — isolated per session."
-            done={false}
-          />
-          <Step
-            num={3}
-            title="Watch them work"
-            body="Status pills update live: thinking, generating, awaiting input, needs attention."
-            done={false}
-          />
-        </div>
-
-        {/* Primary CTA */}
-        <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => useSpawnDialog.getState().show()}
-            disabled={isCreating || claudePath === null}
-            className="group relative inline-flex items-center gap-2 overflow-hidden rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-card transition df-lift hover:from-accent-400 hover:to-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-            <span className="relative">
-              {isCreating ? 'spawning…' : 'Spawn first session'}
-            </span>
-            <span className="relative ml-1 rounded bg-white/15 px-1.5 py-0.5 font-mono text-[10px] text-white/85">
-              {fmtShortcut('N')}
-            </span>
-          </button>
-          {claudePath === null ? (
-            <p className="text-xs text-status-attention">
-              claude binary not found in PATH — install Claude Code first.
-            </p>
-          ) : (
-            <p className="text-[11px] text-text-4">
-              Tip: <Kbd>{fmtShortcut('T')}</Kbd> toggles the projects drawer ·{' '}
-              <Kbd>{fmtShortcut('`')}</Kbd> opens the terminals panel ·{' '}
-              <Kbd>?</Kbd> shows all shortcuts
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Step({
-  num,
-  title,
-  body,
-  done,
-  action
-}: {
-  num: number
-  title: string
-  body: string
-  done: boolean
-  action?: React.ReactNode
-}) {
-  return (
-    <div
-      className={`rounded-lg border px-3 py-3 transition ${
-        done
-          ? 'border-accent-500/30 bg-accent-500/5'
-          : 'border-border-soft bg-bg-3'
-      }`}
-    >
-      <div className="mb-1.5 flex items-center gap-2">
-        <span
-          className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
-            done
-              ? 'bg-accent-500 text-white'
-              : 'bg-bg-4 text-text-3 ring-1 ring-inset ring-border-mid'
-          }`}
-        >
-          {done ? '✓' : num}
-        </span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-text-2">
-          {title}
-        </span>
-      </div>
-      <p className="text-[11px] leading-relaxed text-text-3">{body}</p>
-      {action ? <div className="mt-2">{action}</div> : null}
-    </div>
-  )
-}
-
-interface HeaderButtonProps {
-  icon: React.ReactNode
-  label: string
-  shortcut?: string
-  onClick: () => void
-  disabled?: boolean
-  active?: boolean
-}
-
-function HeaderButton({ icon, label, shortcut, onClick, disabled, active }: HeaderButtonProps) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={shortcut ? `${label} (${shortcut})` : label}
-      className={`group flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3 ${
-        active
-          ? 'border-accent-500/40 bg-accent-500/10 text-accent-200'
-          : 'border-transparent text-text-3 hover:border-border-soft hover:bg-bg-3 hover:text-text-1'
-      }`}
-    >
-      {icon}
-      <span className="font-mono">{label}</span>
-    </button>
   )
 }

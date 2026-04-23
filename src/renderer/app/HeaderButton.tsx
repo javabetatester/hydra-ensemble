@@ -1,0 +1,40 @@
+import * as React from 'react'
+
+export interface HeaderButtonProps {
+  icon: React.ReactNode
+  label: string
+  shortcut?: string
+  onClick: () => void
+  disabled?: boolean
+  active?: boolean
+}
+
+/** Icon + label header button used across App.tsx's top chrome. Kept
+ *  as its own module so the shell isn't carrying helper declarations
+ *  inline. Retains the exact visual grammar of the previous inline
+ *  copy — no behavioural change. */
+export default function HeaderButton({
+  icon,
+  label,
+  shortcut,
+  onClick,
+  disabled,
+  active
+}: HeaderButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={shortcut ? `${label} (${shortcut})` : label}
+      className={`group flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3 ${
+        active
+          ? 'border-accent-500/40 bg-accent-500/10 text-accent-200'
+          : 'border-transparent text-text-3 hover:border-border-soft hover:bg-bg-3 hover:text-text-1'
+      }`}
+    >
+      {icon}
+      <span className="font-mono">{label}</span>
+    </button>
+  )
+}
