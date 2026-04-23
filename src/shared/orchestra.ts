@@ -230,6 +230,8 @@ export interface SubmitTaskInput {
   priority?: Priority
   tags?: string[]
   sourceEvent?: Task['sourceEvent']
+  /** When set, router skips scoring and dispatches directly to this agent. */
+  assignedAgentId?: UUID
 }
 
 // ---------------------------------------------------------------------------

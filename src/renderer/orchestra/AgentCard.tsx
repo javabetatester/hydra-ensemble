@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import {
@@ -49,19 +49,29 @@ const STATE_LABEL: Record<AgentState, string> = {
   error: 'error'
 }
 
-/** Four connection anchors. Hover reveals them; react-flow wires dragging. */
-const HANDLES: Array<{ id: string; position: Position; style: string }> = [
-  { id: 'n', position: Position.Top, style: 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2' },
-  { id: 's', position: Position.Bottom, style: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2' },
-  { id: 'w', position: Position.Left, style: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2' },
-  { id: 'e', position: Position.Right, style: 'right-0 top-1/2 translate-x-1/2 -translate-y-1/2' }
-]
+/**
+ * The reporting graph is a strict pyramid: what sits ABOVE a card manages
+ * it, what sits BELOW reports to it. Handles rendered in the body live
+ * only on top (inbound target) and bottom (outbound source) — no lateral
+ * anchors, so the user can't author a relationship the model doesn't
+ * know how to interpret.
+ */
 
 function AgentCardImpl(props: NodeProps<AgentNode>) {
   const { data, selected } = props
   const { agent, isMain } = data
   const RoleIcon = iconForRole(agent.role)
   const updateAgent = useOrchestra((s) => s.updateAgent)
+  const edges = useOrchestra((s) => s.edges)
+  const agents = useOrchestra((s) => s.agents)
+
+  // Resolve hierarchy counts straight off the live store so the badges
+  // follow every edge add/remove without a dedicated subscription.
+  const subordinateCount = edges.filter((e) => e.parentAgentId === agent.id).length
+  const managerAgent = (() => {
+    const up = edges.find((e) => e.childAgentId === agent.id)
+    return up ? agents.find((a) => a.id === up.parentAgentId) : undefined
+  })()
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(agent.name)
@@ -135,39 +145,38 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
       }}
       aria-label={`agent ${agent.name} — ${STATE_LABEL[agent.state]}`}
     >
-      {/* Anchor dots: each side carries a matched source + target handle so
-          drag-out and drop-on both work on the same dot. Visible on hover or
-          when the card is selected. Target sits under the source in the
-          DOM so drops register; source renders the coloured pip. */}
-      {HANDLES.map((h) => (
-        <Fragment key={h.id}>
-          <Handle
-            id={`${h.id}-t`}
-            type="target"
-            position={h.position}
-            className={[
-              'absolute !h-3 !w-3 !rounded-full !border-0 !bg-transparent',
-              'z-10',
-              h.style
-            ].join(' ')}
-            isConnectable
-          />
-          <Handle
-            id={`${h.id}-s`}
-            type="source"
-            position={h.position}
-            className={[
-              'absolute !h-2 !w-2 !rounded-full !border-0',
-              '!bg-[var(--color-accent-500)]',
-              'opacity-0 transition-opacity duration-100',
-              'group-hover:opacity-100',
-              selected ? '!opacity-100' : '',
-              h.style
-            ].join(' ')}
-            isConnectable
-          />
-        </Fragment>
-      ))}
+      {/* Single-purpose anchors: top = inbound from my manager; bottom =
+          outbound to my subordinates. That asymmetry is what makes the
+          graph a strict pyramid. The top dot is only a target; the bottom
+          dot is only a source. Both are hit-expanded via padding so the
+          user doesn't have to aim a 10-px circle. */}
+      <Handle
+        id="n-t"
+        type="target"
+        position={Position.Top}
+        className={[
+          'absolute !h-3 !w-3 !rounded-full !border-0',
+          '!bg-[var(--color-border-mid)] hover:!bg-[var(--color-accent-500)]',
+          'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2',
+          'opacity-70 group-hover:opacity-100 transition-opacity',
+          'z-10'
+        ].join(' ')}
+        isConnectable
+      />
+      <Handle
+        id="s-s"
+        type="source"
+        position={Position.Bottom}
+        className={[
+          'absolute !h-3 !w-3 !rounded-full !border-0',
+          '!bg-[var(--color-accent-500)]',
+          'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2',
+          'opacity-70 group-hover:opacity-100 transition-opacity',
+          selected ? '!opacity-100' : '',
+          'z-10'
+        ].join(' ')}
+        isConnectable
+      />
 
       <div className="flex items-center gap-2 px-3 pt-2">
         {isMain ? (
@@ -235,6 +244,27 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
       {subStatus ? (
         <div className="truncate px-3 pb-2 text-[11px] text-[var(--color-text-3)]">
           {subStatus}
+        </div>
+      ) : null}
+
+      {(managerAgent || subordinateCount > 0) ? (
+        <div className="flex flex-wrap items-center gap-1 border-t border-[var(--color-border-soft)] px-3 py-1.5 text-[10px]">
+          {managerAgent ? (
+            <span
+              className="rounded-sm bg-[var(--color-bg-3)] px-1.5 py-0.5 text-[var(--color-text-3)]"
+              title={`Reports to ${managerAgent.name}`}
+            >
+              ↑ {managerAgent.name}
+            </span>
+          ) : null}
+          {subordinateCount > 0 ? (
+            <span
+              className="rounded-sm bg-[var(--color-accent-500)]/15 px-1.5 py-0.5 text-[var(--color-accent-400)]"
+              title={`Manages ${subordinateCount} ${subordinateCount === 1 ? 'agent' : 'agents'}`}
+            >
+              ↓ {subordinateCount}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>

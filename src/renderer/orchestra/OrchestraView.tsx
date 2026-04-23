@@ -15,6 +15,7 @@ import TeamRail from './TeamRail'
 import Canvas from './Canvas'
 import Inspector from './Inspector'
 import TaskBar from './TaskBar'
+import TasksPanel from './TasksPanel'
 import ApiKeyModal from './modals/ApiKeyModal'
 import SettingsPanel from './SettingsPanel'
 import CoachMarks from './CoachMarks'
@@ -213,11 +214,15 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           )}
         </main>
 
-        {inspectorOpen ? (
-          <aside className="flex w-[360px] shrink-0 flex-col border-l border-border-soft bg-bg-2">
-            <Inspector />
+        {/* Right column: Tasks list always visible when a team is active;
+            Inspector slides over it when an agent is selected. The Inspector
+            is already a fixed-position drawer so it layers on top naturally. */}
+        {activeTeam ? (
+          <aside className="flex w-[340px] shrink-0 flex-col border-l border-border-soft bg-bg-2">
+            <TasksPanel />
           </aside>
         ) : null}
+        {inspectorOpen ? <Inspector /> : null}
       </div>
 
       {/* Bottom task bar (52px). Disabled visually is owned by TaskBar itself. */}

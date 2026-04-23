@@ -285,25 +285,48 @@ export class OrchestraCore {
     this.appendTask(task)
     this.emit({ kind: 'task.changed', task })
 
-    let pick: Awaited<ReturnType<Router['pickAgent']>>
-    try {
-      pick = await this.router.pickAgent(task)
-    } catch (err) {
-      return this.failTask(task.id, (err as Error).message || 'routing failed')
+    let chosenId: UUID
+    let candidates: UUID[]
+    let score: number
+    let reason: string
+    // Explicit assignment (user picked an agent from the New Task dialog or a
+    // parent agent delegated via tool). Skip trigger scoring — the user's
+    // intent wins. Router still runs for the reporting-line validation so
+    // delegation can't leak outside the DAG; but for top-level user submits
+    // the agent is taken at face value.
+    if (input.assignedAgentId) {
+      const target = this.registry.getAgent(input.assignedAgentId)
+      if (!target || target.teamId !== team.id) {
+        return this.failTask(task.id, 'assigned agent not in team')
+      }
+      chosenId = target.id
+      candidates = [target.id]
+      score = Number.POSITIVE_INFINITY
+      reason = 'explicit:user'
+    } else {
+      try {
+        const pick = await this.router.pickAgent(task)
+        chosenId = pick.chosen.id
+        candidates = pick.candidates.map((c) => c.id)
+        score = pick.score
+        reason = pick.reason
+      } catch (err) {
+        return this.failTask(task.id, (err as Error).message || 'routing failed')
+      }
     }
 
     const route: Route = {
       id: randomUUID(),
       taskId: task.id,
-      chosenAgentId: pick.chosen.id,
-      candidateAgentIds: pick.candidates.map((c) => c.id),
-      score: pick.score,
-      reason: pick.reason,
+      chosenAgentId: chosenId,
+      candidateAgentIds: candidates,
+      score,
+      reason,
       at: new Date().toISOString()
     }
     this.appendRoute(route)
     const routing = this.patchTask(task.id, {
-      assignedAgentId: pick.chosen.id,
+      assignedAgentId: chosenId,
       status: 'routing'
     })
     this.emit({ kind: 'task.changed', task: routing })
@@ -311,11 +334,11 @@ export class OrchestraCore {
 
     if (!this.apiKey) return this.failTask(routing.id, NO_API_KEY_REASON)
 
-    const host = await this.hostFor(pick.chosen.id)
+    const host = await this.hostFor(chosenId)
     if (!host) return this.failTask(routing.id, 'agent not found')
 
-    const extras = await this.buildSystemPromptExtras(team)
-    const result = await host.runTask(routing, extras)
+    const topology = await this.buildTopologySnapshot(chosenId, team.id)
+    const result = await host.runTask(routing, [topology])
     if (!result.ok) return this.failTask(routing.id, result.error)
 
     const inProgress = this.patchTask(task.id, { status: 'in_progress' })
@@ -431,10 +454,112 @@ export class OrchestraCore {
     }
   }
 
-  private async buildSystemPromptExtras(team: Team): Promise<string[]> {
+  /**
+   * Build the topology snapshot that tells an agent who they are, who their
+   * manager(s) and direct reports are, who their teammates are, and HOW to
+   * delegate. Appended to the system prompt before the current task so the
+   * model always sees this context when choosing to call `delegate_task`.
+   */
+  private async buildTopologySnapshot(
+    agentId: UUID,
+    teamId: UUID
+  ): Promise<string> {
+    const team = this.registry.getTeam(teamId)
+    const self = this.registry.getAgent(agentId)
+    if (!team || !self) return ''
+
+    const edges = this.registry.listEdges(teamId)
+    const allAgents = this.registry.listAgents(teamId)
+    const byId = new Map(allAgents.map((a) => [a.id, a]))
+
+    const reports = edges
+      .filter((e) => e.parentAgentId === agentId)
+      .map((e) => ({ agent: byId.get(e.childAgentId), edge: e }))
+      .filter((r): r is { agent: Agent; edge: ReportingEdge } => !!r.agent)
+
+    const managers = edges
+      .filter((e) => e.childAgentId === agentId)
+      .map((e) => byId.get(e.parentAgentId))
+      .filter((a): a is Agent => !!a)
+
+    const relatedIds = new Set<UUID>([
+      ...reports.map((r) => r.agent.id),
+      ...managers.map((m) => m.id)
+    ])
+    const teammates = allAgents.filter(
+      (a) => a.id !== agentId && !relatedIds.has(a.id)
+    )
+
+    const selfSkills = await this.safeReadSkills(self, team.slug)
+    const skillSummary = selfSkills.length
+      ? selfSkills.flatMap((s) => s.tags).join(', ')
+      : ''
+
+    const sections: string[] = []
+
+    const selfLines = [`## Your role`, `- id: ${self.id}`, `- name: ${self.name}`]
+    if (self.role) selfLines.push(`- role: ${self.role}`)
+    if (self.description) selfLines.push(`- description: ${self.description}`)
+    if (skillSummary) selfLines.push(`- skills: ${skillSummary}`)
+    sections.push(selfLines.join('\n'))
+
+    if (managers.length > 0) {
+      const lines = [`## Your manager(s)`]
+      for (const m of managers) {
+        lines.push(`- **${m.name}** (role: ${m.role || 'n/a'}, id: ${m.id})`)
+      }
+      sections.push(lines.join('\n'))
+    }
+
+    if (reports.length > 0) {
+      const lines = [`## Your direct reports`]
+      for (const r of reports) {
+        const skills = await this.safeReadSkills(r.agent, team.slug)
+        const tags = skills.flatMap((s) => s.tags).join(', ')
+        lines.push(
+          `- **${r.agent.name}** (role: ${r.agent.role || 'n/a'}, id: ${r.agent.id})`
+        )
+        if (tags) lines.push(`  skills: ${tags}`)
+        lines.push(`  delegation: ${r.edge.delegationMode}`)
+        if (r.agent.description) {
+          lines.push(`  description: ${r.agent.description}`)
+        }
+      }
+      sections.push(lines.join('\n'))
+    }
+
+    if (teammates.length > 0) {
+      const lines = [`## Your teammates`]
+      for (const t of teammates) {
+        lines.push(`- **${t.name}** (role: ${t.role || 'n/a'})`)
+      }
+      sections.push(lines.join('\n'))
+    }
+
+    sections.push(
+      [
+        `## Delegation protocol`,
+        `- Only delegate to a **direct report** listed above.`,
+        `- Use the \`delegate_task\` tool. Pass \`toAgentId\` (exact id from the list), \`reason\`, \`title\`, \`body\`, optional \`priority\` (P0-P3), optional \`tags\`.`,
+        `- If no report matches the skills needed, DO the work yourself.`,
+        `- After delegating, stop — the child agent will continue.`
+      ].join('\n')
+    )
+
+    sections.push(
+      [
+        `## Task completion`,
+        `- When you finish a turn AND the task is complete, end with a final message summarising what you did. Do not call any more tools.`,
+        `- If blocked, write a clear blocker message and stop.`
+      ].join('\n')
+    )
+
+    return sections.join('\n\n')
+  }
+
+  private async safeReadSkills(agent: Agent, teamSlug: string): Promise<Skill[]> {
     try {
-      const md = await readTeamClaudeMd(team.slug)
-      return md.trim().length > 0 ? [md] : []
+      return await readSkills(teamSlug, agent.slug)
     } catch {
       return []
     }

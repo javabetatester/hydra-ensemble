@@ -50,7 +50,11 @@ const exec = promisify(execCb)
 
 const delegateTool: Tool = {
   name: 'delegate_task',
-  description: 'Delegate a sub-task to another agent in the team.',
+  description:
+    'Delegate a sub-task to a direct report. Use ONLY an agent id that ' +
+    'appears under "Your direct reports" in your system prompt. After ' +
+    'delegating, the child agent takes over — do not keep working on the ' +
+    'parent task.',
   input_schema: {
     type: 'object',
     properties: {
@@ -202,6 +206,9 @@ async function buildSystemPrompt(
   const sections: string[] = []
   if (teamClaudeMd.trim()) sections.push(teamClaudeMd.trim())
   if (soul.trim()) sections.push(soul.trim())
+  // Topology/context extras go BEFORE the current task so the task is the
+  // last — and therefore most salient — section of the system prompt.
+  for (const x of extras) if (x?.trim()) sections.push(x.trim())
   sections.push(
     [
       `# Current task`,
@@ -214,7 +221,6 @@ async function buildSystemPrompt(
       .filter(Boolean)
       .join('\n')
   )
-  for (const x of extras) if (x?.trim()) sections.push(x.trim())
   return sections.join('\n\n---\n\n')
 }
 

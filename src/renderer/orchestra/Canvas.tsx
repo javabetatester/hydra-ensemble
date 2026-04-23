@@ -74,6 +74,10 @@ function toRFEdge(edge: ReportingEdgeT): ReportingEdgeType {
     type: 'reporting',
     source: edge.parentAgentId,
     target: edge.childAgentId,
+    // Pin handles so the edge always descends from the parent's bottom to
+    // the child's top (see onConnect for the full rationale).
+    sourceHandle: 's-s',
+    targetHandle: 'n-t',
     data: { delegationMode: edge.delegationMode },
     markerEnd: {
       type: MarkerType.ArrowClosed,
@@ -233,23 +237,43 @@ function CanvasInner() {
   const onConnect = useCallback(
     async (params: Connection): Promise<void> => {
       if (!activeTeamId || !params.source || !params.target) return
-      if (params.source === params.target) {
+
+      // Auto-orient: the reporting line points parent -> child, so whichever
+      // agent is visually higher on the canvas becomes the parent no matter
+      // which direction the user dragged from. 8px tie-breaker keeps same-row
+      // drags honoring the user's intent.
+      const sourceNode = teamAgents.find((a) => a.id === params.source)
+      const targetNode = teamAgents.find((a) => a.id === params.target)
+      const shouldSwap =
+        !!sourceNode &&
+        !!targetNode &&
+        sourceNode.position.y > targetNode.position.y + 8
+
+      const parentId = shouldSwap ? params.target : params.source
+      const childId = shouldSwap ? params.source : params.target
+
+      if (parentId === childId) {
         pushToast({
           kind: 'error',
-          title: 'Invalid edge',
-          body: 'An agent cannot report to itself.'
+          title: 'Cannot connect agent to itself'
         })
         return
       }
-      // Optimistically add the edge so the cursor feels connected; the real
-      // edge will replace this once main echoes the `edge.changed` event.
-      // `addEdge` generates a temporary id; we cast because the helper's
-      // return type widens back to `EdgeType` which matches our alias.
+
+      // Force the edge's anchors to the parent's bottom-source and the child's
+      // top-target. This keeps the arrow visually descending (parent on top,
+      // arrow pointing down to child) regardless of which handle the user
+      // happened to grab — otherwise swapping source/target ids without
+      // swapping the handles leaves the edge drawn from the wrong side,
+      // which is exactly the "ele liga EM CIMA do CEO" bug the user reported.
       setEdges(
         (curr) =>
           addEdge(
             {
-              ...params,
+              source: parentId,
+              target: childId,
+              sourceHandle: 's-s',
+              targetHandle: 'n-t',
               type: 'reporting',
               data: { delegationMode: 'auto' as const },
               markerEnd: {
@@ -264,27 +288,23 @@ function CanvasInner() {
       )
       const created = await createEdge({
         teamId: activeTeamId,
-        parentAgentId: params.source,
-        childAgentId: params.target
+        parentAgentId: parentId,
+        childAgentId: childId
       })
       if (!created) {
-        // `createEdge` already toasted on failure (including DAG cycles).
-        // Drop the optimistic edge; derivedEdges will re-sync on the next
-        // store update anyway, but being explicit avoids a visual flicker.
         setEdges((curr) =>
           curr.filter(
             (e) =>
               !(
-                e.source === params.source &&
-                e.target === params.target &&
-                // Kill only the optimistic id (react-flow's default is `xy-edge__...`).
+                e.source === parentId &&
+                e.target === childId &&
                 !teamEdges.some((te) => te.id === e.id)
               )
           )
         )
       }
     },
-    [activeTeamId, createEdge, setEdges, pushToast, teamEdges]
+    [activeTeamId, createEdge, setEdges, pushToast, teamEdges, teamAgents]
   )
 
   const onNodeClick = useCallback(

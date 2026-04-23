@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -6,7 +7,9 @@ import {
   type Edge,
   type EdgeProps
 } from '@xyflow/react'
+import { X } from 'lucide-react'
 import type { DelegationMode } from '../../shared/orchestra'
+import { useOrchestra } from './state/orchestra'
 
 /**
  * Custom react-flow edge for a reporting line (parent -> child).
@@ -48,7 +51,9 @@ function ReportingEdgeImpl(props: EdgeProps<ReportingEdgeType>) {
 
   const mode: DelegationMode = data?.delegationMode ?? 'auto'
   const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState(false)
   const popoverRef = useRef<HTMLDivElement | null>(null)
+  const active = hovered || Boolean(selected)
 
   // Click-away closes the popover. Using mousedown (not click) so the
   // handler fires before a downstream onClick can reopen it.
@@ -64,8 +69,10 @@ function ReportingEdgeImpl(props: EdgeProps<ReportingEdgeType>) {
 
   const setMode = useCallback(
     (next: DelegationMode): void => {
-      // Real persistence lands when `state.updateEdge` ships; logging keeps
-      // the UX testable today without pretending to have wired it.
+      // TODO: wire to a store action. `useOrchestra` currently exposes
+      // `createEdge` / `deleteEdge` but no `updateEdge` / `setEdgeDelegationMode`
+      // for patching `delegationMode`. Follow-up lands the action; for now the
+      // popover closes so the UX flow is exercised end-to-end.
       // eslint-disable-next-line no-console
       console.log('[orchestra] edge delegationMode change requested', {
         edgeId: id,
@@ -77,6 +84,14 @@ function ReportingEdgeImpl(props: EdgeProps<ReportingEdgeType>) {
     [id, mode]
   )
 
+  const onDelete = useCallback(
+    (e: ReactMouseEvent<HTMLButtonElement>): void => {
+      e.stopPropagation()
+      void useOrchestra.getState().deleteEdge(id)
+    },
+    [id]
+  )
+
   return (
     <>
       <BaseEdge
@@ -84,19 +99,21 @@ function ReportingEdgeImpl(props: EdgeProps<ReportingEdgeType>) {
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke: selected
+          stroke: active
             ? 'var(--color-accent-500)'
             : 'var(--color-border-hard)',
-          strokeWidth: selected ? 2 : 1.25
+          strokeWidth: active ? 2.5 : 1.5
         }}
       />
       <EdgeLabelRenderer>
         <div
-          className="nodrag nopan absolute z-10"
+          className="nodrag nopan absolute z-10 flex items-center gap-1"
           style={{
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
             pointerEvents: 'all'
           }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
           <button
             type="button"
@@ -117,6 +134,22 @@ function ReportingEdgeImpl(props: EdgeProps<ReportingEdgeType>) {
           >
             {mode}
           </button>
+          {active ? (
+            <button
+              type="button"
+              onClick={onDelete}
+              className={[
+                'nodrag nopan inline-flex items-center justify-center',
+                'rounded-[var(--radius-sm)] border border-[var(--color-border-mid)]',
+                'bg-[var(--color-bg-3)] p-0.5',
+                'text-[var(--color-text-2)] hover:text-red-400',
+                'hover:border-red-400'
+              ].join(' ')}
+              aria-label="delete reporting edge"
+            >
+              <X size={10} strokeWidth={1.75} />
+            </button>
+          ) : null}
           {open ? (
             <div
               ref={popoverRef}
