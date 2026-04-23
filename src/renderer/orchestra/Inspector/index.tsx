@@ -10,6 +10,7 @@ import TriggersTab from './TriggersTab'
 import InboxTab from './InboxTab'
 import ConsoleTab from './ConsoleTab'
 import PromptTab from './PromptTab'
+import OverviewTab from './OverviewTab'
 
 /**
  * Right-hand Inspector drawer for a single selected agent.
@@ -20,6 +21,7 @@ import PromptTab from './PromptTab'
  */
 
 type TabKey =
+  | 'overview'
   | 'identity'
   | 'soul'
   | 'skills'
@@ -30,6 +32,7 @@ type TabKey =
   | 'console'
 
 const TABS: ReadonlyArray<{ key: TabKey; label: string }> = [
+  { key: 'overview', label: 'overview' },
   { key: 'identity', label: 'identity' },
   { key: 'soul', label: 'soul' },
   { key: 'skills', label: 'skills' },
@@ -48,7 +51,7 @@ export default function Inspector() {
 
   // Active tab is session-local; resets to identity when the selected agent
   // changes so you don't land on a tab that's meaningless for the new one.
-  const [activeTab, setActiveTab] = useState<TabKey>('identity')
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
   const agent = useMemo(() => {
     if (selectedAgentIds.length !== 1) return null
@@ -59,7 +62,7 @@ export default function Inspector() {
   // Reset the tab whenever the selected agent changes — prevents sticky state
   // where opening agent B still shows agent A's runtime tab scroll position.
   useEffect(() => {
-    setActiveTab('identity')
+    setActiveTab('overview')
   }, [agent?.id])
 
   // Esc closes the drawer. Scoped to when it's actually open so the listener
@@ -139,6 +142,9 @@ export default function Inspector() {
           </nav>
 
           <div className="df-scroll min-h-0 flex-1 overflow-y-auto">
+            {activeTab === 'overview' && (
+              <OverviewTab agent={agent} onSwitchTab={(k) => setActiveTab(k)} />
+            )}
             {activeTab === 'identity' && (
               <IdentityTab agent={agent} onSwitchTab={(k) => setActiveTab(k)} />
             )}

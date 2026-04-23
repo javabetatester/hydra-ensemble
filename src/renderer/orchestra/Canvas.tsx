@@ -40,6 +40,7 @@ import { useToasts } from '../state/toasts'
 import { AgentCard, type AgentNode } from './AgentCard'
 import { ReportingEdge, type ReportingEdgeType } from './ReportingEdge'
 import { NewAgentPopover } from './modals/NewAgentPopover'
+import CanvasMinimap from './CanvasMinimap'
 
 /**
  * Orchestra canvas.
@@ -511,6 +512,7 @@ function CanvasInner() {
           showInteractive={false}
           className="!bg-[var(--color-bg-2)] !border !border-[var(--color-border-mid)]"
         />
+        <CanvasMinimap />
       </ReactFlow>
 
       {popover && activeTeamId ? (

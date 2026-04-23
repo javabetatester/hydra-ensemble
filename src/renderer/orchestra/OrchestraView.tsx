@@ -9,7 +9,14 @@
  * See PRD.md §11 (UI layout), §13 (empty states) and PLAN.md §5.1.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Crown, Network, Plus, Settings, Activity } from 'lucide-react'
+import {
+  ArrowLeft,
+  Crown,
+  Network,
+  Plus,
+  Settings,
+  Activity
+} from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
 import TeamRail from './TeamRail'
 import Canvas from './Canvas'
@@ -28,6 +35,11 @@ import NotificationsBell from './NotificationsBell'
 import TeamHealthPanel from './TeamHealthPanel'
 import AgentWizard from './modals/AgentWizard'
 import NewTaskDialog from './modals/NewTaskDialog'
+import NewTeamDialog from './modals/NewTeamDialog'
+import TeamTemplatesDialog from './TeamTemplatesDialog'
+import TeamSwitcher from './TeamSwitcher'
+import BulkActionsBar from './BulkActionsBar'
+import OrchestraToasts from './OrchestraToasts'
 import {
   useOrchestraKeybinds,
   ORCHESTRA_EVENTS,
@@ -105,18 +117,37 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [healthOpen, setHealthOpen] = useState<boolean>(false)
   const [wizardOpen, setWizardOpen] = useState<boolean>(false)
   const [newTaskOpen, setNewTaskOpen] = useState<boolean>(false)
+  const [templatesOpen, setTemplatesOpen] = useState<boolean>(false)
+  const [sidePanelsHidden, setSidePanelsHidden] = useState<boolean>(false)
+  const [newTeamOpen, setNewTeamOpen] = useState<boolean>(false)
+  const [newTeamMode, setNewTeamMode] = useState<'blank' | 'template'>('blank')
+  const [newTeamTemplateId, setNewTeamTemplateId] = useState<string | undefined>(undefined)
 
   // Register Orchestra-wide keyboard shortcuts. Each shortcut dispatches
   // a custom window event; subscribers below translate into setOpen() calls.
   useOrchestraKeybinds()
   useEffect(() => {
+    const subscribe = (name: string, handler: () => void): (() => void) => {
+      const listener = (): void => handler()
+      window.addEventListener(name, listener)
+      return () => window.removeEventListener(name, listener)
+    }
     const offs = [
       onOrchestraEvent(ORCHESTRA_EVENTS.help, () => setHelpOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.search, () => setSearchOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.settings, () => setSettingsOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.newTask, () => setNewTaskOpen(true)),
       onOrchestraEvent(ORCHESTRA_EVENTS.newAgentWizard, () => setWizardOpen(true)),
-      onOrchestraEvent(ORCHESTRA_EVENTS.healthToggle, () => setHealthOpen((v) => !v))
+      onOrchestraEvent(ORCHESTRA_EVENTS.healthToggle, () => setHealthOpen((v) => !v)),
+      // Rail footer / empty-state / template buttons dispatch these;
+      // centralising the listener here means every entry point ends up
+      // in the same modal code path.
+      subscribe('orchestra:new-team', () => {
+        setNewTeamMode('blank')
+        setNewTeamTemplateId(undefined)
+        setNewTeamOpen(true)
+      }),
+      subscribe('orchestra:open-templates', () => setTemplatesOpen(true))
     ]
     return () => {
       for (const off of offs) off()
@@ -162,14 +193,25 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const apiKeyMissing = hasApiKey === false
 
   const handleCreateBlank = (): void => {
-    // Team creation needs a worktree path, which the user has to pick —
-    // delegate the full flow to the TeamRail inline-creation affordance
-    // rather than trying to auto-create from the empty state.
-    setCreatingInline('blank')
+    // Open the real modal. Previously the click fired a window.prompt
+    // chain that silently no-oped inside Electron windows.
+    setNewTeamMode('blank')
+    setNewTeamTemplateId(undefined)
+    setNewTeamOpen(true)
   }
 
   const handleUseTemplate = (tpl: StarterTemplate): void => {
-    setCreatingInline(tpl.id)
+    // Map the starter template ids to the real TEAM_TEMPLATES ids that
+    // ship agents + edges with the team.
+    const templateId =
+      tpl.id === 'pr-review'
+        ? 'pr-review-swarm'
+        : tpl.id === 'feature-factory'
+          ? 'feature-factory'
+          : 'bug-triage'
+    setNewTeamMode('template')
+    setNewTeamTemplateId(templateId)
+    setNewTeamOpen(true)
   }
 
   return (
@@ -189,19 +231,15 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           <span className="h-3 w-px bg-border-soft" aria-hidden />
           <Network size={13} strokeWidth={1.75} className="text-accent-400" />
           <span className="df-label text-sm font-semibold text-text-1">Orchestra</span>
-          {activeTeam ? (
-            <>
-              <span className="font-mono text-[10px] text-text-4">·</span>
-              <span className="truncate text-xs text-text-2">{activeTeam.name}</span>
-              {activeTeam.mainAgentId ? (
-                <Crown
-                  size={11}
-                  strokeWidth={1.75}
-                  className="text-accent-400"
-                  aria-label="main agent set"
-                />
-              ) : null}
-            </>
+          <span className="font-mono text-[10px] text-text-4">·</span>
+          <TeamSwitcher />
+          {activeTeam?.mainAgentId ? (
+            <Crown
+              size={11}
+              strokeWidth={1.75}
+              className="text-accent-400"
+              aria-label="main agent set"
+            />
           ) : null}
         </div>
         <div className="flex items-center gap-2 font-mono text-[10px] text-text-4">
@@ -263,6 +301,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
               <CanvasToolbar />
               {/* Bottom-right FABs (new agent, new task). */}
               <CanvasFabs />
+              {/* Multi-select floating actions (pause/stop/delete N). */}
+              <BulkActionsBar />
             </>
           )}
         </main>
@@ -270,7 +310,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
         {/* Right column: tabbed side panels (Tasks · History · Changes ·
             Activity + BudgetMeter footer). Inspector is a fixed-position
             drawer that layers on top when an agent is selected. */}
-        {activeTeam ? (
+        {activeTeam && !sidePanelsHidden ? (
           <aside className="flex w-[340px] shrink-0 flex-col border-l border-border-soft bg-bg-2">
             <SidePanels />
           </aside>
@@ -287,12 +327,13 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           the component decides its own visibility via the store. */}
       <CoachMarks open={true} />
 
-      {/* Task drawer — internal logic reads `taskDrawerTaskId` to decide
-          visibility, so passing a constant `open` is fine. */}
-      <TaskDrawer
-        open={true}
-        onClose={() => useOrchestra.getState().setTaskDrawer(null)}
-      />
+      {/* Task drawer — gate on taskDrawerTaskId so it never even mounts
+          without a target, killing the "task not found" flash. */}
+      <OrchestraTaskDrawerMount />
+
+      {/* Side-effect observer: emits toasts on done/failed/error/delegation. */}
+      <OrchestraToasts />
+
 
       {/* Orchestra settings panel (gear icon + Ctrl+,). */}
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -322,6 +363,19 @@ export default function OrchestraView({ onBackToClassic }: Props) {
 
       {/* New task dialog (Ctrl+Shift+N). */}
       <NewTaskDialog open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
+
+      {/* Team templates dialog (Templates button in the action bar). */}
+      <TeamTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
+
+      {/* New team dialog — prompted from the empty state, the Team rail
+          footer, or the team switcher. Handles both blank creation and
+          full template provisioning. */}
+      <NewTeamDialog
+        open={newTeamOpen}
+        mode={newTeamMode}
+        templateId={newTeamTemplateId}
+        onClose={() => setNewTeamOpen(false)}
+      />
 
       {/* Blocking API-key modal. Rendered last so it layers above everything. */}
       {apiKeyResolved && apiKeyMissing ? (
@@ -394,6 +448,15 @@ function EmptyTeamsState({ onBlank, onPickTemplate, pending }: EmptyTeamsStatePr
   )
 }
 
+/** Thin wrapper that only mounts the TaskDrawer when a task is selected,
+ *  so a stale id never produces a "task not found" flash on boot. */
+function OrchestraTaskDrawerMount() {
+  const taskId = useOrchestra((s) => s.taskDrawerTaskId)
+  const close = useOrchestra((s) => s.setTaskDrawer)
+  if (!taskId) return null
+  return <TaskDrawer open={true} onClose={() => close(null)} />
+}
+
 function CanvasGhostState() {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -402,9 +465,14 @@ function CanvasGhostState() {
         <Plus size={28} strokeWidth={1.25} className="text-text-4" />
         <div className="text-sm text-text-2">No agents yet</div>
         <div className="font-mono text-[11px] text-text-4">
-          Double-click the canvas or press <kbd className="rounded-sm border border-border-soft bg-bg-3 px-1 py-0.5 text-[10px] text-text-2">A</kbd>
+          Double-click the canvas, press <kbd className="rounded-sm border border-border-soft bg-bg-3 px-1 py-0.5 text-[10px] text-text-2">A</kbd>, or click
+          <span className="mx-1 inline-flex items-center gap-1 rounded-sm border border-accent-500/40 bg-accent-500/10 px-1.5 py-0.5 text-accent-400">
+            <Plus size={10} strokeWidth={1.75} />New agent
+          </span>
+          in the action bar above.
         </div>
       </div>
     </div>
   )
 }
+

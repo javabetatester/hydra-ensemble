@@ -9,7 +9,12 @@ import {
   ShieldCheck,
   Bug,
   Code2,
-  Briefcase
+  Briefcase,
+  ListTodo,
+  Pause,
+  Play,
+  Square,
+  Trash2
 } from 'lucide-react'
 import type { Agent, AgentState } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
@@ -64,6 +69,10 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
   const updateAgent = useOrchestra((s) => s.updateAgent)
   const edges = useOrchestra((s) => s.edges)
   const agents = useOrchestra((s) => s.agents)
+  const promoteMain = useOrchestra((s) => s.promoteMain)
+  const pauseAgent = useOrchestra((s) => s.pauseAgent)
+  const stopAgent = useOrchestra((s) => s.stopAgent)
+  const deleteAgent = useOrchestra((s) => s.deleteAgent)
 
   // Resolve hierarchy counts straight off the live store so the badges
   // follow every edge add/remove without a dedicated subscription.
@@ -198,6 +207,115 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
         ].join(' ')}
         isConnectable
       />
+
+      {/* Floating quick-action strip. Sits outside the top-right border so it
+          never overlaps the crown/role icon, and only materialises on hover
+          or while the card is selected. Each button stops propagation so the
+          click doesn't bubble up into react-flow's drag/select machinery. */}
+      <div
+        className={[
+          'absolute -top-3 -right-1 z-20 flex items-center gap-1',
+          'transition-opacity duration-150',
+          selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        ].join(' ')}
+        role="toolbar"
+        aria-label="agent quick actions"
+      >
+        {!isMain ? (
+          <button
+            type="button"
+            title="Promote to main"
+            aria-label="promote to main"
+            onClick={(e) => {
+              e.stopPropagation()
+              void promoteMain(agent.id)
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
+          >
+            <Crown className="h-3 w-3" aria-hidden />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title="Assign task"
+          aria-label="assign task"
+          onClick={(e) => {
+            e.stopPropagation()
+            // TODO: top-level NewTaskDialog should subscribe to this event
+            // (`orchestra:new-task`) and open itself pre-filled with
+            // `assignedAgentId`. Listener not implemented yet.
+            window.dispatchEvent(
+              new CustomEvent('orchestra:new-task', {
+                detail: { assignedAgentId: agent.id }
+              })
+            )
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
+        >
+          <ListTodo className="h-3 w-3" aria-hidden />
+        </button>
+        {agent.state === 'running' ? (
+          <button
+            type="button"
+            title="Pause"
+            aria-label="pause agent"
+            onClick={(e) => {
+              e.stopPropagation()
+              void pauseAgent(agent.id)
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
+          >
+            <Pause className="h-3 w-3" aria-hidden />
+          </button>
+        ) : null}
+        {agent.state === 'paused' ? (
+          <button
+            type="button"
+            title="Resume"
+            aria-label="resume agent"
+            onClick={(e) => {
+              e.stopPropagation()
+              // TODO: no dedicated resumeAgent action exists in the store yet.
+              // We dispatch a DOM event so a top-level listener can bridge to
+              // the main process once the resume IPC handler is wired up.
+              window.dispatchEvent(
+                new CustomEvent('orchestra:resume-agent', {
+                  detail: { agentId: agent.id }
+                })
+              )
+            }}
+            className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
+          >
+            <Play className="h-3 w-3" aria-hidden />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title="Stop"
+          aria-label="stop agent"
+          onClick={(e) => {
+            e.stopPropagation()
+            void stopAgent(agent.id)
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
+        >
+          <Square className="h-3 w-3" aria-hidden />
+        </button>
+        <button
+          type="button"
+          title="Delete"
+          aria-label="delete agent"
+          onClick={(e) => {
+            e.stopPropagation()
+            if (window.confirm('Delete this agent?')) {
+              void deleteAgent(agent.id)
+            }
+          }}
+          className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-red-400 hover:border-red-400/40 hover:bg-[var(--color-bg-3)]"
+        >
+          <Trash2 className="h-3 w-3" aria-hidden />
+        </button>
+      </div>
 
       <div className="flex items-center gap-2 px-3 pt-2">
         {isMain ? (

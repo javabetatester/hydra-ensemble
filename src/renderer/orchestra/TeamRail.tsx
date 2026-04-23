@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from 'react'
-import { ChevronRight, Plus, Trash2, Users } from 'lucide-react'
+import { Activity, ChevronRight, HelpCircle, Plus, Search, Settings, Trash2, Users } from 'lucide-react'
 import type { SafeMode, Team, UUID } from '../../shared/orchestra'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import { useEditor } from '../state/editor'
@@ -49,6 +49,10 @@ export default function TeamRail() {
     const i = teams.findIndex((t) => t.id === activeTeamId)
     return i === -1 ? 0 : i
   }, [teams, activeTeamId])
+  const activeTeam = useMemo(
+    () => teams.find((t) => t.id === activeTeamId) ?? null,
+    [teams, activeTeamId]
+  )
 
   const cancelCreate = useCallback((): void => { setCreating(false); setDraftName('') }, [])
   const beginCreate = useCallback((): void => { setCreating(true); setDraftName('') }, [])
@@ -184,7 +188,10 @@ export default function TeamRail() {
               <Users size={18} strokeWidth={1.5} />
             </div>
             <div className="mb-3 text-xs text-text-4">No teams yet</div>
-            <button type="button" onClick={beginCreate}
+            <button type="button"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent('orchestra:new-team'))
+              }
               className="df-lift inline-flex items-center gap-1.5 rounded-md border border-border-mid px-3 py-1.5 text-[11px] font-medium text-text-3 hover:border-accent-500 hover:text-accent-400">
               <Plus size={12} strokeWidth={1.75} /><span>Create first team</span>
             </button>
@@ -208,11 +215,43 @@ export default function TeamRail() {
       </div>
 
       <footer className="shrink-0 border-t border-border-soft p-1">
+        {activeTeam && (
+          <div className="px-2 pb-1 pt-0.5">
+            <span title={`Active team: ${activeTeam.name}`}
+              className="inline-block max-w-full truncate rounded-sm bg-accent-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-accent-400">
+              {activeTeam.name}
+            </span>
+          </div>
+        )}
         <button type="button"
-          onClick={() => (creating ? void commitCreate() : beginCreate())}
+          onClick={() => window.dispatchEvent(new CustomEvent('orchestra:new-team'))}
           className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs text-text-3 transition-colors hover:bg-bg-3 hover:text-accent-400">
           <Plus size={12} strokeWidth={1.75} /><span>New Team</span>
         </button>
+        <div className="mt-1 border-t border-border-soft pt-1">
+          <button type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('orchestra:settings-toggle'))}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] text-text-3 hover:bg-bg-3 hover:text-text-1">
+            <Settings size={12} strokeWidth={1.75} /><span>Settings</span>
+          </button>
+          <button type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('orchestra:help-toggle'))}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] text-text-3 hover:bg-bg-3 hover:text-text-1">
+            <HelpCircle size={12} strokeWidth={1.75} /><span>Help</span>
+          </button>
+          <button type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('orchestra:search-toggle'))}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] text-text-3 hover:bg-bg-3 hover:text-text-1">
+            <Search size={12} strokeWidth={1.75} /><span>Search</span>
+          </button>
+          <button type="button"
+            disabled={!activeTeam}
+            onClick={() => window.dispatchEvent(new CustomEvent('orchestra:health-toggle'))}
+            aria-disabled={!activeTeam}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-[11px] text-text-3 hover:bg-bg-3 hover:text-text-1 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-3">
+            <Activity size={12} strokeWidth={1.75} /><span>Health</span>
+          </button>
+        </div>
       </footer>
 
       {menu && (

@@ -196,32 +196,13 @@ export default function TaskDrawer({ open, onClose }: Props) {
 
   if (!open) return null
 
-  // Task might be missing briefly if the id points to a deleted row;
-  // render a minimal frame rather than crashing.
+  // When the drawer is told to open but the task id points nowhere (stale
+  // click, cancelled submit, task drained from the cache), silently close
+  // instead of showing a "task not found" dead-end. The user sees the
+  // previous surface again, no dead modal in their way.
   if (!task) {
-    return (
-      <aside
-        className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col border-l border-border-mid bg-bg-2 shadow-[-12px_0_24px_-8px_rgba(0,0,0,0.6)]"
-        role="dialog"
-        aria-label="Task drawer"
-      >
-        <header className="flex shrink-0 items-center justify-between border-b border-border-soft px-3 py-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-sm p-1.5 text-text-3 hover:bg-bg-3 hover:text-text-1"
-            aria-label="Close"
-            title="Esc"
-          >
-            <X size={14} strokeWidth={1.75} />
-          </button>
-          <span className="text-[11px] text-text-4">task not found</span>
-        </header>
-        <div className="flex flex-1 items-center justify-center text-xs text-text-4">
-          This task no longer exists.
-        </div>
-      </aside>
-    )
+    onClose()
+    return null
   }
 
   const assignedAgent = agents.find((a) => a.id === task.assignedAgentId)
