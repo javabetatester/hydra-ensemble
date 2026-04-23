@@ -193,7 +193,8 @@ async function safeReadFile(p: string): Promise<string> {
 async function buildSystemPrompt(
   ctx: RunnerContext,
   task: Task,
-  extras: string[]
+  extras: string[],
+  opts?: { cliDelegationProtocol?: boolean }
 ): Promise<string> {
   const teamClaudeMd = await safeReadFile(
     path.join(ctx.team.worktreePath, 'CLAUDE.md')
@@ -214,6 +215,37 @@ async function buildSystemPrompt(
   // Topology/context extras go BEFORE the current task so the task is the
   // last — and therefore most salient — section of the system prompt.
   for (const x of extras) if (x?.trim()) sections.push(x.trim())
+
+  // CLI path has no delegate_task tool, so we teach the agent a
+  // textual escape hatch: emit a <delegate> block at the end of its
+  // turn when the task belongs to a direct report. The runner parses
+  // that block post-hoc and kicks off a sub-task through the same
+  // handleDelegate path the SDK path uses.
+  if (opts?.cliDelegationProtocol) {
+    sections.push(
+      [
+        `# Delegation protocol (text mode)`,
+        `You are running without the delegate_task tool. If the current task should`,
+        `go to a direct report listed above, finish your turn by emitting EXACTLY`,
+        `one <delegate> block per handoff, like this:`,
+        ``,
+        `<delegate>`,
+        `  <toAgentId>the-exact-id-from-your-direct-reports</toAgentId>`,
+        `  <reason>one sentence on why this agent</reason>`,
+        `  <title>short task title for the child</title>`,
+        `  <body>full task body for the child; may span multiple lines</body>`,
+        `  <priority>P2</priority>`,
+        `</delegate>`,
+        ``,
+        `Rules:`,
+        `- Use ONLY ids that appear under "Your direct reports".`,
+        `- No free-form prose between blocks. Place all delegations at the end.`,
+        `- If you can answer yourself, DO — don't delegate trivia.`,
+        `- After the <delegate> block(s), stop. Your turn is over.`
+      ].join('\n')
+    )
+  }
+
   sections.push(
     [
       `# Current task`,
@@ -227,6 +259,64 @@ async function buildSystemPrompt(
       .join('\n')
   )
   return sections.join('\n\n---\n\n')
+}
+
+/** Parses every well-formed <delegate>…</delegate> block out of `text`.
+ *  Malformed blocks (missing required field, unknown agent id) are
+ *  reported to the caller via the second tuple element so they can
+ *  surface a status message rather than failing silent. */
+interface ParsedDelegate {
+  toAgentId: string
+  reason: string
+  title: string
+  body: string
+  priority: 'P0' | 'P1' | 'P2' | 'P3'
+  tags: string[]
+}
+
+function parseCliDelegations(
+  text: string
+): { delegations: ParsedDelegate[]; errors: string[] } {
+  const delegations: ParsedDelegate[] = []
+  const errors: string[] = []
+  const blockRe = /<delegate>([\s\S]*?)<\/delegate>/gi
+  const fieldRe = (tag: string): RegExp =>
+    new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'i')
+
+  let match: RegExpExecArray | null
+  while ((match = blockRe.exec(text)) !== null) {
+    const inner = match[1] ?? ''
+    const toAgentId = fieldRe('toAgentId').exec(inner)?.[1]?.trim() ?? ''
+    const reason = fieldRe('reason').exec(inner)?.[1]?.trim() ?? ''
+    const title = fieldRe('title').exec(inner)?.[1]?.trim() ?? ''
+    const body = fieldRe('body').exec(inner)?.[1]?.trim() ?? ''
+    const rawPrio = fieldRe('priority').exec(inner)?.[1]?.trim() ?? 'P2'
+    const priority = (['P0', 'P1', 'P2', 'P3'] as const).includes(
+      rawPrio as 'P0' | 'P1' | 'P2' | 'P3'
+    )
+      ? (rawPrio as 'P0' | 'P1' | 'P2' | 'P3')
+      : 'P2'
+    const tagsRaw = fieldRe('tags').exec(inner)?.[1]?.trim() ?? ''
+    const tags = tagsRaw
+      ? tagsRaw
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : []
+
+    if (!toAgentId || !title || !body) {
+      errors.push('delegate block missing toAgentId/title/body')
+      continue
+    }
+    delegations.push({ toAgentId, reason: reason || 'delegated via CLI', title, body, priority, tags })
+  }
+  return { delegations, errors }
+}
+
+/** Strip every <delegate>…</delegate> block from the reply so the
+ *  human-readable output doesn't contain the raw XML envelopes. */
+function stripDelegateBlocks(text: string): string {
+  return text.replace(/<delegate>[\s\S]*?<\/delegate>/gi, '').trim()
 }
 
 // ---------------------------------------------------------------------------
@@ -496,7 +586,26 @@ async function runConversation(
   task: Task,
   extras: string[]
 ): Promise<void> {
-  if (!ctx.hasApiKey) {
+  // Per-agent provider wins; 'inherit' (or undefined) falls back to
+  // 'API key when available, else CLI' — the original global default.
+  const provider = ctx.agent.provider ?? 'inherit'
+  const chosen: 'cli' | 'sdk' =
+    provider === 'claude-cli'
+      ? 'cli'
+      : provider === 'anthropic-api'
+        ? 'sdk'
+        : ctx.hasApiKey
+          ? 'sdk'
+          : 'cli'
+  if (chosen === 'sdk' && !ctx.hasApiKey) {
+    emit({
+      kind: 'error',
+      message:
+        'Agent provider is set to anthropic-api but no ANTHROPIC_API_KEY is configured. Open Providers to add a key or switch this agent to claude-cli.'
+    })
+    return
+  }
+  if (chosen === 'cli') {
     await runConversationCli(ctx, task, extras)
     return
   }
@@ -516,7 +625,9 @@ async function runConversationCli(
 ): Promise<void> {
   emit({ kind: 'state', state: 'running' })
 
-  const sys = await buildSystemPrompt(ctx, task, extras)
+  const sys = await buildSystemPrompt(ctx, task, extras, {
+    cliDelegationProtocol: true
+  })
   const userPrompt = task.body || task.title
 
   const args = [
@@ -576,12 +687,55 @@ async function runConversationCli(
 
     child.on('close', (code) => {
       if (code === 0) {
-        const reply = stdoutBuf.trim()
-        if (reply) logMessage(ctx, task, 'output', reply)
-        // Also surface a small status pill so the UI can render a
-        // clear "✓ done" marker at the end of the timeline, separate
-        // from the long reply card.
-        logMessage(ctx, task, 'status', '✓ task complete')
+        const fullReply = stdoutBuf.trim()
+        const { delegations, errors } = parseCliDelegations(fullReply)
+        // Human-facing reply minus the delegation envelopes so the
+        // TaskDrawer card shows prose, not XML.
+        const humanReply = stripDelegateBlocks(fullReply)
+        if (humanReply) logMessage(ctx, task, 'output', humanReply)
+
+        // Fire-and-forget every parsed delegation. We don't await the
+        // delegate-response message because the CLI agent already
+        // exited — there's no conversation to resume. Each delegate
+        // spins a child task through core.handleDelegate, and the
+        // child task routes/runs on its own.
+        let seq = 0
+        for (const d of delegations) {
+          seq += 1
+          const requestId = `cli-${Date.now()}-${seq}`
+          emit({
+            kind: 'delegate',
+            requestId,
+            payload: {
+              toAgentId: d.toAgentId,
+              reason: d.reason,
+              sub: {
+                title: d.title,
+                body: d.body,
+                priority: d.priority,
+                tags: d.tags
+              }
+            }
+          })
+          logMessage(
+            ctx,
+            task,
+            'delegation',
+            `delegate -> ${d.toAgentId}: ${d.reason}`,
+            d.toAgentId
+          )
+        }
+
+        for (const err of errors) logMessage(ctx, task, 'error', err)
+
+        logMessage(
+          ctx,
+          task,
+          'status',
+          delegations.length > 0
+            ? `✓ handed off to ${delegations.length} agent(s)`
+            : '✓ task complete'
+        )
         emit({ kind: 'done' })
       } else {
         const tail = (stderrBuf || stdoutBuf).slice(-300).trim()

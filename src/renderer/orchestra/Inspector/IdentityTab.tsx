@@ -44,6 +44,9 @@ export default function IdentityTab({ agent, onSwitchTab }: Props) {
   const [model, setModel] = useState(agent.model)
   const [maxTokens, setMaxTokens] = useState(agent.maxTokens)
   const [color, setColor] = useState(agent.color ?? '')
+  const [provider, setProvider] = useState<'inherit' | 'claude-cli' | 'anthropic-api'>(
+    agent.provider ?? 'inherit'
+  )
   const [saveState, setSaveState] = useState<SaveState>('idle')
 
   // Reset drafts only when the inspector switches to a different agent.
@@ -56,6 +59,7 @@ export default function IdentityTab({ agent, onSwitchTab }: Props) {
     setModel(agent.model)
     setMaxTokens(agent.maxTokens)
     setColor(agent.color ?? '')
+    setProvider(agent.provider ?? 'inherit')
     setSaveState('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.id])
@@ -73,6 +77,8 @@ export default function IdentityTab({ agent, onSwitchTab }: Props) {
     if (maxTokens !== agent.maxTokens) patch.maxTokens = maxTokens
     const nextColor = color || undefined
     if (nextColor !== agent.color) patch.color = nextColor
+    const nextProvider = provider === 'inherit' ? undefined : provider
+    if (nextProvider !== agent.provider) patch.provider = nextProvider
     if (Object.keys(patch).length === 0) return
 
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -90,7 +96,7 @@ export default function IdentityTab({ agent, onSwitchTab }: Props) {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [name, role, description, model, maxTokens, color, agent, updateAgent])
+  }, [name, role, description, model, maxTokens, color, provider, agent, updateAgent])
 
   useEffect(() => {
     return () => {
@@ -223,6 +229,29 @@ export default function IdentityTab({ agent, onSwitchTab }: Props) {
             />
           </Field>
         </div>
+
+        {/* Provider picker — determines which backend the runner spawns
+            for this agent. 'Inherit' uses the global default (SDK if an
+            API key is set, else CLI). Explicit values force the path
+            regardless of what's configured globally. */}
+        <Field label="provider">
+          <select
+            value={provider}
+            onChange={(e) =>
+              setProvider(e.target.value as 'inherit' | 'claude-cli' | 'anthropic-api')
+            }
+            className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-xs text-text-1 focus:border-accent-500 focus:outline-none"
+          >
+            <option value="inherit">Inherit (API key if set, else CLI)</option>
+            <option value="claude-cli">Claude Code CLI (OAuth)</option>
+            <option value="anthropic-api">Anthropic API key</option>
+          </select>
+          <p className="mt-1 text-[10px] leading-snug text-text-4">
+            CLI uses your <span className="text-text-3">~/.claude</span> login;
+            API uses the key from Providers. Multi-agent delegation works on
+            both paths.
+          </p>
+        </Field>
 
         <button
           type="button"

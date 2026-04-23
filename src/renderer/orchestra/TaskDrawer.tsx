@@ -171,6 +171,22 @@ export default function TaskDrawer({ open, onClose }: Props) {
     return rows
   }, [task, routes, messageLog, taskIdSet])
 
+  // Final result: the agent's last 'output' message for THIS task (not
+  // delegated children). Surfaces the actual answer in a prominent card
+  // so users don't have to scroll the timeline to find the resolution.
+  const finalResult = useMemo(() => {
+    if (!task) return null
+    let latest: { at: string; content: string } | null = null
+    for (const m of messageLog) {
+      if (m.taskId !== task.id) continue
+      if (m.kind !== 'output') continue
+      if (!latest || m.at > latest.at) {
+        latest = { at: m.at, content: m.content }
+      }
+    }
+    return latest
+  }, [task, messageLog])
+
   const onCancel = useCallback(async (): Promise<void> => {
     if (!task) return
     if (task.status === 'in_progress') {
@@ -281,6 +297,47 @@ export default function TaskDrawer({ open, onClose }: Props) {
 
       {/* Body */}
       <div className="df-scroll min-h-0 flex-1 overflow-y-auto">
+        {/* Final result — prominent at the top when we have one. Shows
+            the agent's last reply so the user doesn't have to scroll
+            through the timeline to find what was done. Styled distinctly
+            from timeline cards (accent border, extra padding). */}
+        {finalResult ? (
+          <section className="border-b border-border-soft bg-bg-1 px-3 py-3">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="df-label text-accent-400">
+                {task.status === 'done'
+                  ? 'result'
+                  : task.status === 'failed'
+                    ? 'last reply (failed)'
+                    : task.status === 'blocked'
+                      ? 'last reply (blocked)'
+                      : 'latest reply'}
+              </div>
+              <span className="font-mono text-[10px] text-text-4">
+                {clockTime(finalResult.at)}
+              </span>
+            </div>
+            <div className="rounded-md border border-accent-500/30 bg-bg-2 p-3 text-[12px] leading-relaxed text-text-1">
+              <pre className="whitespace-pre-wrap break-words font-mono">
+                {finalResult.content}
+              </pre>
+            </div>
+            <div className="mt-2 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(finalResult.content)
+                    .catch(() => undefined)
+                }}
+                className="rounded-sm border border-border-soft bg-bg-2 px-2 py-0.5 font-mono text-[10px] text-text-3 hover:border-border-mid hover:text-text-1"
+              >
+                copy
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         {/* Why this agent? */}
         <section className="border-b border-border-soft px-3 py-3">
           <div className="df-label mb-2">why this agent?</div>

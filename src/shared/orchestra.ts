@@ -49,6 +49,15 @@ export interface Team {
   updatedAt: ISO
 }
 
+/** Which backend the runner should use for this agent.
+ *  - `claude-cli`   — spawn `claude -p` and reuse the OAuth login in ~/.claude
+ *  - `anthropic-api` — call Anthropic SDK with ANTHROPIC_API_KEY
+ *  - `inherit`      — pick automatically: API if a key is set, else CLI
+ *
+ *  Keeping this field optional on Agent so pre-existing teams load
+ *  without migration; absence means 'inherit'. */
+export type AgentProvider = 'inherit' | 'claude-cli' | 'anthropic-api'
+
 export interface Agent {
   id: UUID
   teamId: UUID
@@ -61,6 +70,8 @@ export interface Agent {
   /** If empty, falls back to Team.defaultModel. */
   model: string
   maxTokens: number
+  /** Per-agent provider override. Undefined == 'inherit'. */
+  provider?: AgentProvider
   soulPath: string
   skillsPath: string
   triggersPath: string
@@ -212,6 +223,7 @@ export interface UpdateAgentInput {
       | 'color'
       | 'model'
       | 'maxTokens'
+      | 'provider'
     >
   >
 }
