@@ -249,6 +249,22 @@ export default function OrchestraView({ onBackToClassic }: Props) {
 
   return (
     <div className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-bg-1 text-text-1">
+      {/* DEVELOPING banner — Orchestra is still in active development.
+          CLI-path delegation rides on an XML envelope protocol, approval
+          flow is a UI shell without runtime pause, and multi-provider
+          routing past Claude is scaffolded but not wired. Loud banner so
+          users don't treat this as a finished product. */}
+      <div
+        role="note"
+        aria-label="Orchestra is in active development"
+        className="flex shrink-0 items-center justify-center gap-3 border-b border-status-thinking/60 bg-status-thinking/15 px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-status-thinking"
+      >
+        <span className="h-1.5 w-1.5 animate-ping rounded-full bg-status-thinking" />
+        <span className="text-[13px] tracking-[0.32em]">DEVELOPING</span>
+        <span className="hidden text-[10px] font-medium tracking-[0.18em] text-status-thinking/80 sm:inline">
+          · surface still shifting, expect rough edges
+        </span>
+      </div>
       {/* Top header strip — 48px, two logical groups separated by a visible
           divider on the right. See PRD.md §11. */}
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-4">
