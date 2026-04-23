@@ -786,15 +786,18 @@ function ToolkitStatusIcon({
   return null
 }
 
+/** Resolves to a CSS custom-property expression so the palette stays in
+ *  sync with @theme tokens — previously this helper returned raw hex
+ *  strings that copied the status palette by value. */
 function statusAccent(status?: 'running' | 'success' | 'error'): string {
   switch (status) {
     case 'running':
-      return '#fbbf24'
+      return 'var(--color-status-running)'
     case 'success':
-      return '#2ecc71'
+      return 'var(--color-status-success)'
     case 'error':
-      return '#ff4d5d'
+      return 'var(--color-status-danger)'
     default:
-      return '#ff6b4d'
+      return 'var(--color-accent-500)'
   }
 }

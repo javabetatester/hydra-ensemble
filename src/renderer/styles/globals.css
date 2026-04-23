@@ -30,13 +30,25 @@
   --color-text-3: #888884;
   --color-text-4: #54544f;
 
-  /* Accent — coral / terminal orange (Claude vibe) */
+  /* Accent — coral / terminal orange (Claude vibe). The 100/300 rungs
+     used to be referenced in code without existing — Tailwind silently
+     resolved to `undefined` and the classes no-op'd. Fill the ramp so
+     existing call sites start rendering. */
   --color-accent-50:  #fef4f0;
+  --color-accent-100: #ffddd0;
   --color-accent-200: #ffcab7;
+  --color-accent-300: #ffb094;
   --color-accent-400: #ff9476;
   --color-accent-500: #ff6b4d;
   --color-accent-600: #e5543a;
   --color-accent-700: #b8402a;
+
+  /* Accent alphas — used by selection halos, focus glow, xterm cursor.
+     Spelled out here so future hard-coded `rgba(255,107,77,0.35)` et al
+     migrate to `var(--color-accent-alpha-35)` in Phase 2. */
+  --color-accent-alpha-10: rgba(255, 107, 77, 0.10);
+  --color-accent-alpha-35: rgba(255, 107, 77, 0.35);
+  --color-accent-alpha-50: rgba(255, 107, 77, 0.50);
 
   /* Status semantics */
   --color-status-idle:       #5e6070;
@@ -48,15 +60,35 @@
   --color-status-reading:    #60a5fa;
   --color-status-running:    #fbbf24;
 
+  /* Semantic aliases — product code reads more naturally as
+     success/warning/danger than as the underlying state that happens
+     to share the colour. Aliases only; no new palette entries. */
+  --color-status-success: #2ecc71;
+  --color-status-warning: #ffb829;
+  --color-status-danger:  #ff4d5d;
+
+  /* Neutral informational blue. Was hardcoded as `#7aa2f7` in three
+     chat-surface fallback paths; token-ise so the default session
+     accent has a single source of truth. */
+  --color-info: #7aa2f7;
+
+  /* QuickTerminalApp title strip sat between bg-2 and bg-3 as a bare
+     literal (`#16161a`). Formalised so chrome swaps keep its identity. */
+  --color-surface-titlebar: #16161a;
+
   /* Radii — brutalist: small, sharp */
   --radius-sm: 0.125rem;  /* 2px */
   --radius-md: 0.25rem;   /* 4px */
   --radius-lg: 0.375rem;  /* 6px */
+  --radius-pill: 9999px;
 
   /* Shadows — flat, use inset rings instead of drop shadows */
-  --shadow-soft: 0 0 0 1px var(--color-border-soft) inset;
-  --shadow-card: 0 0 0 1px var(--color-border-mid) inset;
-  --shadow-pop:  0 2px 0 0 rgba(0,0,0,0.6), 0 0 0 1px var(--color-border-hard) inset;
+  --shadow-soft:   0 0 0 1px var(--color-border-soft) inset;
+  --shadow-card:   0 0 0 1px var(--color-border-mid) inset;
+  --shadow-pop:    0 2px 0 0 rgba(0,0,0,0.6), 0 0 0 1px var(--color-border-hard) inset;
+  /* Drawer slide-in shadow, duplicated 2x as an arbitrary Tailwind value
+     in TaskDrawer/TaskChat. Named so callers can use `shadow-drawer`. */
+  --shadow-drawer: -12px 0 24px -8px rgba(0, 0, 0, 0.6);
 }
 
 /* ============================================================
@@ -170,7 +202,7 @@ select:focus-visible {
 }
 
 ::selection {
-  background: rgba(255, 107, 77, 0.35);
+  background: var(--color-accent-alpha-35);
   color: var(--color-text-1);
 }
 
@@ -236,8 +268,8 @@ select:focus-visible {
 /* Active card glow — coral accent ring */
 .df-glow-accent {
   box-shadow:
-    0 0 0 1px rgba(255, 107, 77, 0.35),
-    0 0 18px -6px rgba(255, 107, 77, 0.5);
+    0 0 0 1px var(--color-accent-alpha-35),
+    0 0 18px -6px var(--color-accent-alpha-50);
 }
 
 /* ============================================================
@@ -245,7 +277,7 @@ select:focus-visible {
  * ============================================================ */
 .df-hero-bg {
   background-image:
-    radial-gradient(ellipse at 50% 30%, rgba(255, 107, 77, 0.08), transparent 50%),
+    radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--color-accent-500) 8%, transparent), transparent 50%),
     linear-gradient(var(--color-border-soft) 1px, transparent 1px),
     linear-gradient(90deg, var(--color-border-soft) 1px, transparent 1px);
   background-size: auto, 24px 24px, 24px 24px;

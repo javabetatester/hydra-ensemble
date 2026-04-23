@@ -187,15 +187,22 @@ const diffGutter = gutter({
 
 // -------------- theme --------------
 
+// color-mix keeps the palette in sync with @theme tokens at render
+// time — Chromium (Electron ≥ 111) supports it natively, so we don't
+// need a fallback. The raw rgba/hex values these replaced were exact
+// duplicates of status-generating / status-thinking / status-attention.
 const diffTheme = EditorView.baseTheme({
   '.cm-diff-added': {
-    backgroundColor: 'rgba(46, 204, 113, 0.10)',
+    backgroundColor:
+      'color-mix(in srgb, var(--color-status-success) 10%, transparent)',
   },
   '.cm-diff-modified': {
-    backgroundColor: 'rgba(255, 184, 41, 0.10)',
+    backgroundColor:
+      'color-mix(in srgb, var(--color-status-warning) 10%, transparent)',
   },
   '.cm-diff-deleted-before': {
-    borderTop: '2px solid rgba(255, 77, 93, 0.55)',
+    borderTop:
+      '2px solid color-mix(in srgb, var(--color-status-danger) 55%, transparent)',
   },
   '.cm-diff-gutter-col': {
     width: '3px',
@@ -207,13 +214,14 @@ const diffTheme = EditorView.baseTheme({
     height: '100%',
   },
   '.cm-diff-gutter-added': {
-    backgroundColor: '#2ecc71',
+    backgroundColor: 'var(--color-status-success)',
   },
   '.cm-diff-gutter-modified': {
-    backgroundColor: '#ffb829',
+    backgroundColor: 'var(--color-status-warning)',
   },
   '.cm-diff-gutter-deleted-before': {
-    background: 'linear-gradient(to bottom, #ff4d5d 0 35%, transparent 35%)',
+    background:
+      'linear-gradient(to bottom, var(--color-status-danger) 0 35%, transparent 35%)',
   },
 })
 

@@ -128,14 +128,18 @@ export default function CodeMirrorView({ path, initial, onChange, onSave, vimMod
         '&': { height: '100%' },
         '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit' },
         '.cm-searchMatch': {
-          backgroundColor: 'rgba(255, 184, 41, 0.32)',
-          outline: '1px solid rgba(255, 184, 41, 0.85)',
+          backgroundColor:
+            'color-mix(in srgb, var(--color-status-warning) 32%, transparent)',
+          outline:
+            '1px solid color-mix(in srgb, var(--color-status-warning) 85%, transparent)',
           borderRadius: '2px'
         },
         '.cm-searchMatch .cm-selectionMatch': { backgroundColor: 'transparent' },
         '.cm-searchMatch-selected': {
-          backgroundColor: 'rgba(255, 107, 77, 0.55)',
-          outline: '1px solid rgba(255, 107, 77, 0.95)'
+          backgroundColor:
+            'color-mix(in srgb, var(--color-accent-500) 55%, transparent)',
+          outline:
+            '1px solid color-mix(in srgb, var(--color-accent-500) 95%, transparent)'
         }
       }),
       langCompartment.current.of([]),

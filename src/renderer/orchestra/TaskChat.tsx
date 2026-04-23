@@ -197,7 +197,8 @@ export default function TaskChat({ taskId, onClose }: Props) {
   if (!task) {
     return (
       <aside
-        className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col border-l border-border-mid bg-bg-2 shadow-[-12px_0_24px_-8px_rgba(0,0,0,0.6)]"
+        style={{ boxShadow: 'var(--shadow-drawer)' }}
+        className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col border-l border-border-mid bg-bg-2"
         role="dialog"
         aria-label="Task chat"
       >
@@ -231,7 +232,8 @@ export default function TaskChat({ taskId, onClose }: Props) {
 
   return (
     <aside
-      className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col border-l border-border-mid bg-bg-2 shadow-[-12px_0_24px_-8px_rgba(0,0,0,0.6)]"
+      style={{ boxShadow: 'var(--shadow-drawer)' }}
+        className="df-slide-in fixed right-0 top-0 z-40 flex h-full w-[420px] flex-col border-l border-border-mid bg-bg-2"
       role="dialog"
       aria-label={`Task chat: ${task.title}`}
     >
