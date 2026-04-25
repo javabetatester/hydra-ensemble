@@ -345,6 +345,11 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
           setSearchOpen(false)
           return
         }
+        // With vim mode ON, Esc is the user's way back to NORMAL
+        // mode — letting onClose() fire would slam the editor shut
+        // every time the user wants to leave INSERT. Defer to
+        // CodeMirror's vim keymap instead; close via the X button.
+        if (vimMode) return
         onClose()
         return
       }
@@ -504,7 +509,8 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
     activeKind,
     closeFile,
     closeDiff,
-    setActive
+    setActive,
+    vimMode
   ])
 
   // Overlay mode is gated on `open` (no portal when closed). Inline

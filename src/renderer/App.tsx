@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Code2,
@@ -112,6 +112,24 @@ export default function App() {
   const toggleChatMinimized = useSessionsUi((s) => s.toggleChatMinimized)
 
   const activePanel = useSlidePanel((s) => s.current)
+  // Only ONE panel body should be in the DOM at a time — both CodeEditor
+  // and Dashboard are inline-mounted and were stacking when active was
+  // 'dashboard' (editor's body covered it). Track which panel to keep
+  // mounted with a delayed unmount so the close animation can finish
+  // before the body disappears.
+  const [mountedPanel, setMountedPanel] = useState<typeof activePanel>(activePanel)
+  useEffect(() => {
+    if (activePanel) {
+      // Switching open → open OR null → open: render immediately.
+      setMountedPanel(activePanel)
+      return
+    }
+    // Open → null (close): keep the previously-mounted panel in the DOM
+    // for the slide animation duration so the body stays painted while
+    // the wrapper width animates to 0.
+    const t = window.setTimeout(() => setMountedPanel(null), 520)
+    return () => window.clearTimeout(t)
+  }, [activePanel])
   const panelWidth = usePanelSize((s) => s.width)
   const setPanelWidth = usePanelSize((s) => s.setWidth)
   const rightColumnWidth = useRightColumnSize((s) => s.width)
@@ -461,16 +479,25 @@ export default function App() {
               />
             ) : null}
             <div className="absolute inset-0">
-              <CodeEditor
-                open={activePanel === 'editor'}
-                onClose={closePanel}
-                mode="inline"
-              />
-              <Dashboard
-                open={activePanel === 'dashboard'}
-                onClose={closePanel}
-                mode="inline"
-              />
+              {/* Render ONLY the panel that's currently mounted (active
+                  or recently-active for the close animation). Mounting
+                  both bodies was stacking them — editor sat on top of
+                  dashboard so clicking dashboard appeared to open the
+                  editor. */}
+              {mountedPanel === 'editor' ? (
+                <CodeEditor
+                  open={activePanel === 'editor'}
+                  onClose={closePanel}
+                  mode="inline"
+                />
+              ) : null}
+              {mountedPanel === 'dashboard' ? (
+                <Dashboard
+                  open={activePanel === 'dashboard'}
+                  onClose={closePanel}
+                  mode="inline"
+                />
+              ) : null}
               {/* Side-mode portal slot for the terminals UI. Kept mounted
                   in the DOM (display:none when inactive) so the portalled
                   TerminalsPanel keeps its xterm instances alive even when
