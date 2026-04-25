@@ -14,10 +14,12 @@ import {
   Bot,
   Eye,
   EyeOff,
-  KeyRound
+  KeyRound,
+  Trash2
 } from 'lucide-react'
 import { useProjects } from '../state/projects'
 import { useSessions } from '../state/sessions'
+import { useKeys } from '../state/keys'
 import {
   PROVIDER_SPECS,
   type Provider,
@@ -26,6 +28,11 @@ import {
 } from '../../shared/types'
 
 const LAST_PROVIDER_KEY = 'hydra.lastProvider'
+
+/** Sentinel values for the saved-keys dropdown. Anything else is a
+ *  vault record id. */
+const KEY_PICK_NEW = '__new__'
+const KEY_PICK_NONE = '__none__'
 
 const PROVIDER_ORDER: Provider[] = ['claude', 'codex', 'copilot']
 
@@ -84,6 +91,25 @@ export default function NewSessionDialog({ open, onClose }: Props) {
   const [apiKey, setApiKey] = useState('')
   const [apiKeyName, setApiKeyName] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
+  /** id of a saved vault key, or one of the sentinels above. */
+  const [pickedKeyId, setPickedKeyId] = useState<string>(KEY_PICK_NONE)
+  /** When the user picks "(new key)", whether the form should write the
+   *  entered key to the vault on submit. Default true — the user is in
+   *  the vault flow at this point. */
+  const [saveNewKey, setSaveNewKey] = useState(true)
+  /** Reflects safeStorage.isEncryptionAvailable() on the main side. We
+   *  set it after a save throws — the only reliable signal we get from
+   *  the renderer. Defaults to true (optimistic). */
+  const [vaultUnavailable, setVaultUnavailable] = useState(false)
+  const refreshKeys = useKeys((s) => s.refresh)
+  const saveKey = useKeys((s) => s.save)
+  const removeKey = useKeys((s) => s.remove)
+  const savedKeysAll = useKeys((s) => s.byProvider)
+  const savedKeys = useMemo(() => savedKeysAll[provider] ?? [], [savedKeysAll, provider])
+  const pickedKey = useMemo(
+    () => savedKeys.find((k) => k.id === pickedKeyId) ?? null,
+    [savedKeys, pickedKeyId]
+  )
 
   // Sync picked project with current when dialog opens
   useEffect(() => {
@@ -102,7 +128,18 @@ export default function NewSessionDialog({ open, onClose }: Props) {
     setApiKey('')
     setApiKeyName('')
     setShowApiKey(false)
-  }, [open, currentPath])
+    setPickedKeyId(KEY_PICK_NONE)
+    setSaveNewKey(true)
+    setVaultUnavailable(false)
+    // Refresh the vault contents so the dropdown reflects what's
+    // actually saved on disk at this moment. Lazy on purpose — the
+    // store does not auto-load on creation.
+    void refreshKeys().catch(() => {
+      // refresh() failing usually means main hasn't wired the IPC yet
+      // (rare HMR edge). Treat as "no saved keys" — the inline form
+      // still works.
+    })
+  }, [open, currentPath, refreshKeys])
 
   // When the provider changes, persist the choice so the next open of
   // the dialog reflects the user's pick. Model selection is no longer
@@ -116,6 +153,10 @@ export default function NewSessionDialog({ open, onClose }: Props) {
       setUseApiKey(false)
       setApiKey('')
     }
+    // Saved keys are scoped per provider, so a switch always resets the
+    // picker. The dropdown will be re-populated by the byProvider memo.
+    setPickedKeyId(KEY_PICK_NONE)
+    setSaveNewKey(true)
   }, [provider])
 
   // Refresh worktrees when project changes
@@ -150,8 +191,41 @@ export default function NewSessionDialog({ open, onClose }: Props) {
       const cwd = pickedWorktree?.path ?? pickedProject
       const branch = pickedWorktree?.branch
       const trimmedKey = apiKey.trim()
-      const keyToSend =
-        useApiKey && providerSpec.apiKeyEnv && trimmedKey ? trimmedKey : undefined
+      const trimmedKeyName = apiKeyName.trim()
+      const keyEnv = providerSpec.apiKeyEnv
+
+      // Resolve the API-key payload for createSession.
+      // Three branches: picked saved key → apiKeyId; new + save → vault
+      // write then apiKeyId; new + don't save (or vault unavailable) →
+      // ad-hoc apiKey. Plaintext in `apiKey` is never persisted by main.
+      let apiKeyIdToSend: string | undefined
+      let apiKeyToSend: string | undefined
+      if (useApiKey && keyEnv) {
+        if (pickedKey) {
+          apiKeyIdToSend = pickedKey.id
+        } else if (trimmedKey) {
+          if (saveNewKey && trimmedKeyName && !vaultUnavailable) {
+            try {
+              const id = await saveKey({
+                name: trimmedKeyName,
+                provider,
+                apiKeyEnv: keyEnv,
+                value: trimmedKey
+              })
+              apiKeyIdToSend = id
+            } catch {
+              // safeStorage unavailable / write failed — degrade to
+              // ad-hoc plaintext for THIS session and surface a warning
+              // so the user knows nothing got saved.
+              setVaultUnavailable(true)
+              apiKeyToSend = trimmedKey
+            }
+          } else {
+            apiKeyToSend = trimmedKey
+          }
+        }
+      }
+      const usingKey = apiKeyIdToSend !== undefined || apiKeyToSend !== undefined
       await createSession({
         cwd,
         worktreePath: pickedWorktree && !pickedWorktree.isMain ? pickedWorktree.path : undefined,
@@ -161,9 +235,10 @@ export default function NewSessionDialog({ open, onClose }: Props) {
         // When the user supplies an API key we IGNORE the global/fresh
         // toggle — the key supersedes account auth, and isolating a
         // fresh config dir for an env-only auth would just be churn.
-        freshConfig: keyToSend ? false : freshConfig,
+        freshConfig: usingKey ? false : freshConfig,
         provider,
-        apiKey: keyToSend
+        apiKey: apiKeyToSend,
+        apiKeyId: apiKeyIdToSend
       })
       onClose()
     } finally {
@@ -218,14 +293,17 @@ export default function NewSessionDialog({ open, onClose }: Props) {
           </button>
         </header>
 
-        {/* 2-column grid (collapses to 1 col on narrow screens). The
-            wide rows (PROJECT, AGENT, ACCOUNT) span both columns; the
-            narrower fields (WORKTREE, NAME, VIEW, API KEY) lay out
-            side-by-side. Inner container scrolls if it ever exceeds
-            90vh — keeps the dialog usable on short screens. */}
-        <div className="grid max-h-[calc(90vh-7rem)] grid-cols-1 gap-x-5 gap-y-4 overflow-y-auto p-5 lg:grid-cols-2">
+        {/* Two distinct columns:
+            LEFT  — project context (project, worktree, name)
+            RIGHT — agent config (view, agent, api key, account)
+            Each column owns its own vertical space-y rhythm; the outer
+            grid only controls the gutter. Collapses to 1 column on
+            narrow screens. */}
+        <div className="grid max-h-[calc(90vh-7rem)] grid-cols-1 gap-x-6 gap-y-4 overflow-y-auto p-5 lg:grid-cols-2">
+          {/* LEFT COLUMN — project context */}
+          <div className="space-y-4">
           {/* Project */}
-          <div className="lg:col-span-2">
+          <div>
             <label className="df-label mb-1.5 flex items-center justify-between">
               <span>project</span>
               <button
@@ -410,8 +488,10 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             />
           </div>
 
-          {/* View mode selector — CLI (raw xterm) vs visual chat. */}
-          <div className="lg:col-span-2">
+          {/* View mode selector — CLI (raw xterm) vs visual chat.
+              Lives in the LEFT column with the rest of the per-session
+              presentation knobs. */}
+          <div>
             <label className="df-label mb-1.5 block">view</label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -462,10 +542,14 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             </div>
           </div>
 
+          </div>
+
+          {/* RIGHT COLUMN — agent config */}
+          <div className="space-y-4">
           {/* Provider — pick the agent CLI this session runs. Codex and
               Copilot manage their own model selection inside the TUI;
               Claude is pinned to Opus 4.7 via PROVIDER_SPECS. */}
-          <div className="lg:col-span-2">
+          <div>
             <label className="df-label mb-1.5 block">agent</label>
             <div className="grid grid-cols-3 gap-2">
               {PROVIDER_ORDER.map((p) => {
@@ -506,9 +590,19 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             </div>
           </div>
 
-          {/* API key (chavinha) — only providers with an apiKeyEnv. The
-              key is exported into the spawn's PTY env and never written
-              to disk. Toggling off blanks the field on close. */}
+          {/* API key (chavinha) — only providers with an apiKeyEnv.
+              The key block has three sub-flows when toggled on:
+                1. saved keys exist -> show dropdown above the form so the
+                   user can pick a previously-saved entry by name. Picking
+                   one collapses the inline name+value inputs and renders a
+                   small chip with a remove-from-vault button.
+                2. saved keys exist + user picks "(new key)" -> show the
+                   inline name+value inputs along with a "save this key
+                   for reuse" toggle (defaults ON since the user is in the
+                   vault flow already).
+                3. no saved keys yet -> render the inline form directly,
+                   no dropdown needed. The save toggle still controls
+                   whether the entered key is persisted to the vault. */}
           {providerSpec.apiKeyEnv ? (
             <div>
               <div className="mb-1.5 flex items-center justify-between">
@@ -525,64 +619,130 @@ export default function NewSessionDialog({ open, onClose }: Props) {
               </div>
               {useApiKey ? (
                 <div className="space-y-2">
-                  {/* NAME — clearly labelled. Will be the human-readable
-                      handle when this key is saved to the vault for
-                      reuse in future sessions. Required when "save"
-                      is on (TODO: vault wiring). */}
-                  <div>
-                    <label className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-300">
-                      <span>name</span>
-                      <span className="rounded-sm bg-accent-500/15 px-1 py-px text-[9px] font-medium text-accent-200">
-                        label
+                  {vaultUnavailable ? (
+                    <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-yellow-200">
+                      vault unavailable on this OS — keys can&apos;t be saved.
+                      The key you enter below will be used for this session
+                      only and never written to disk.
+                    </div>
+                  ) : null}
+
+                  {/* Saved-keys picker. Hidden when none exist for the
+                      current provider — the inline form does the right
+                      thing on its own. */}
+                  {savedKeys.length > 0 ? (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
+                        saved keys
+                      </label>
+                      <select
+                        value={pickedKeyId}
+                        onChange={(e) => {
+                          const next = e.target.value
+                          setPickedKeyId(next)
+                          // Picking a saved entry clears the inline form;
+                          // picking "(new key)" or "(none)" leaves it
+                          // ready for input.
+                          if (next !== KEY_PICK_NEW && next !== KEY_PICK_NONE) {
+                            setApiKey('')
+                            setApiKeyName('')
+                          }
+                        }}
+                        className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 focus:border-accent-500 focus:outline-none"
+                      >
+                        <option value={KEY_PICK_NONE}>(none — enter below)</option>
+                        <option value={KEY_PICK_NEW}>(new key)</option>
+                        {savedKeys.map((k) => (
+                          <option key={k.id} value={k.id}>
+                            {k.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+
+                  {pickedKey ? (
+                    /* Picked a saved key — collapse the inline form into
+                       a chip with a delete-from-vault affordance. The
+                       spawn pulls the plaintext from the vault on submit
+                       so the renderer never sees the key value. */
+                    <div className="flex items-center justify-between gap-2 rounded-sm border border-accent-500/40 bg-accent-500/10 px-2.5 py-1.5">
+                      <span className="flex items-center gap-1.5 text-[11px] text-text-1">
+                        <KeyRound size={12} strokeWidth={1.75} className="text-accent-400" />
+                        <span className="font-mono">saved · {pickedKey.name}</span>
+                        <span className="text-text-4">— exported as {pickedKey.apiKeyEnv}</span>
                       </span>
-                      <span className="text-text-4 normal-case tracking-normal">
-                        — friendly name for this key (e.g. "personal", "work")
-                      </span>
-                    </label>
-                    <input
-                      type="text"
-                      value={apiKeyName}
-                      onChange={(e) => setApiKeyName(e.target.value)}
-                      placeholder="e.g. personal-openai"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
-                      key value
-                    </label>
-                    <div className="relative">
-                      <KeyRound
-                        size={12}
-                        strokeWidth={1.75}
-                        className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-4"
-                      />
-                      <input
-                        type={showApiKey ? 'text' : 'password'}
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder={`exported as ${providerSpec.apiKeyEnv}`}
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="w-full rounded-sm border border-border-mid bg-bg-1 pl-7 pr-9 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
-                      />
                       <button
                         type="button"
-                        onClick={() => setShowApiKey((v) => !v)}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
-                        title={showApiKey ? 'hide key' : 'show key'}
-                        aria-label={showApiKey ? 'hide key' : 'show key'}
+                        onClick={async () => {
+                          try {
+                            await removeKey(pickedKey.id)
+                          } finally {
+                            setPickedKeyId(KEY_PICK_NONE)
+                          }
+                        }}
+                        className="rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
+                        title="remove from vault"
+                        aria-label="remove from vault"
                       >
-                        {showApiKey ? (
-                          <EyeOff size={12} strokeWidth={1.75} />
-                        ) : (
-                          <Eye size={12} strokeWidth={1.75} />
-                        )}
+                        <Trash2 size={12} strokeWidth={1.75} />
                       </button>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      {/* NAME field intentionally NOT rendered — kept in
+                          state so the vault save path can auto-derive a
+                          handle (timestamp / "key-N") when the user opts
+                          to save without typing one. UI stays compact. */}
+                      <div>
+                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
+                          key value
+                        </label>
+                        <div className="relative">
+                          <KeyRound
+                            size={12}
+                            strokeWidth={1.75}
+                            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-4"
+                          />
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder={`exported as ${providerSpec.apiKeyEnv}`}
+                            autoComplete="off"
+                            spellCheck={false}
+                            className="w-full rounded-sm border border-border-mid bg-bg-1 pl-7 pr-9 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey((v) => !v)}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
+                            title={showApiKey ? 'hide key' : 'show key'}
+                            aria-label={showApiKey ? 'hide key' : 'show key'}
+                          >
+                            {showApiKey ? (
+                              <EyeOff size={12} strokeWidth={1.75} />
+                            ) : (
+                              <Eye size={12} strokeWidth={1.75} />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-2">
+                        <input
+                          type="checkbox"
+                          checked={saveNewKey && !vaultUnavailable}
+                          onChange={(e) => setSaveNewKey(e.target.checked)}
+                          disabled={vaultUnavailable}
+                          className="h-3 w-3 accent-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        />
+                        <span>save this key for reuse</span>
+                        <span className="text-text-4">
+                          — encrypted with the OS key store, plaintext never leaves your machine
+                        </span>
+                      </label>
+                    </>
+                  )}
                   <p className="text-[10px] leading-snug text-text-4">
                     Key supersedes the agent&apos;s saved login — the
                     Account selector below is disabled for this session.
@@ -599,7 +759,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
           {/* Account — share the host login (default) or run this
               session under an isolated config dir so the agent CLI
               prompts for a brand-new login. */}
-          <div className={`lg:col-span-2 ${useApiKey ? 'opacity-50' : ''}`}>
+          <div className={useApiKey ? 'opacity-50' : ''}>
             <label className="df-label mb-1.5 flex items-center justify-between">
               <span>account</span>
               {useApiKey ? (
@@ -656,6 +816,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
                 </div>
               </button>
             </div>
+          </div>
           </div>
         </div>
 

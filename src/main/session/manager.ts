@@ -5,6 +5,7 @@ import type { BrowserWindow } from 'electron'
 import type { PtyManager } from '../pty/manager'
 import type { AnalyzerManager } from '../pty/analyzer-manager'
 import type { JsonlManager } from '../claude/jsonl-manager'
+import type { KeyVault } from '../keys/vault'
 import { resolveBinaryPath } from '../claude/resolve'
 import { safeSend } from '../lib/safeSend'
 import {
@@ -40,6 +41,9 @@ export interface SessionManagerDeps {
   pty: PtyManager
   analyzer?: AnalyzerManager
   jsonl?: JsonlManager
+  /** Optional — when present, sessions can refer to keys by id and the
+   *  manager re-reveals the plaintext from disk at spawn time. */
+  keyVault?: KeyVault
 }
 
 export class SessionManager {
@@ -132,6 +136,22 @@ export class SessionManager {
       return { ok: false, error: `failed to create isolated config: ${(err as Error).message}` }
     }
 
+    // Resolve an optional vault-stored key. We persist `apiKeyId` on the
+    // session meta so a restart / rehydrate can re-reveal the same key,
+    // but the plaintext stays purely in the spawn env.
+    let resolvedKey: string | undefined = opts.apiKey
+    if (!resolvedKey && opts.apiKeyId && this.deps.keyVault) {
+      const fromVault = this.deps.keyVault.reveal(opts.apiKeyId)
+      if (fromVault) {
+        resolvedKey = fromVault
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[session] vault key ${opts.apiKeyId} could not be revealed — spawning without env var`
+        )
+      }
+    }
+
     const meta: SessionMeta = {
       id,
       name,
@@ -147,14 +167,15 @@ export class SessionManager {
       viewMode: opts.viewMode ?? 'cli',
       isFreshConfig: isolated.isFreshConfig,
       provider,
-      providerModel: model
+      providerModel: model,
+      ...(opts.apiKeyId ? { apiKeyId: opts.apiKeyId } : {})
     }
 
     const spawn = this.spawnFor(meta, {
       cols: opts.cols,
       rows: opts.rows,
       shellOnly: opts.shellOnly,
-      apiKey: opts.apiKey
+      apiKey: resolvedKey
     })
     if (!spawn.ok) {
       await destroyIsolatedSession(id).catch(() => {})
@@ -177,7 +198,19 @@ export class SessionManager {
     const meta = this.sessions.get(id)
     if (!meta) return { ok: false, error: `session ${id} not found` }
     this.teardown(meta, { removeIsolatedDir: false })
-    const result = this.spawnFor(meta, { cols: 120, rows: 30 })
+    let apiKey: string | undefined
+    if (meta.apiKeyId && this.deps.keyVault) {
+      const revealed = this.deps.keyVault.reveal(meta.apiKeyId)
+      if (revealed) {
+        apiKey = revealed
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[session] vault key ${meta.apiKeyId} no longer available — restarting ${meta.id} without env var`
+        )
+      }
+    }
+    const result = this.spawnFor(meta, { cols: 120, rows: 30, apiKey })
     if (!result.ok) {
       return { ok: false, error: result.error }
     }
@@ -271,7 +304,28 @@ export class SessionManager {
   // --- private ----------------------------------------------------------
 
   private respawn(meta: SessionMeta): void {
-    const spawn = this.spawnFor(meta, { cols: 120, rows: 30, shellOnly: false })
+    // If the session was created against a vault key, re-reveal it now so
+    // the respawn re-exports the env var. If reveal fails (key was
+    // deleted between launches) we warn but still respawn — the binary
+    // will fall back to ambient auth instead of the session crashing.
+    let apiKey: string | undefined
+    if (meta.apiKeyId && this.deps.keyVault) {
+      const revealed = this.deps.keyVault.reveal(meta.apiKeyId)
+      if (revealed) {
+        apiKey = revealed
+      } else {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[session] vault key ${meta.apiKeyId} no longer available — respawning ${meta.id} without env var`
+        )
+      }
+    }
+    const spawn = this.spawnFor(meta, {
+      cols: 120,
+      rows: 30,
+      shellOnly: false,
+      apiKey
+    })
     if (!spawn.ok) {
       throw new Error(spawn.error)
     }

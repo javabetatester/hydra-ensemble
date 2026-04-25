@@ -137,6 +137,11 @@ export interface SessionMeta {
   /** Model id passed via --model. Undefined for providers without a
    *  model picker (Copilot). */
   providerModel?: string
+  /** Reference to a key in the per-user vault. When present the spawn
+   *  re-reveals the plaintext from the vault and exports it as the
+   *  provider's apiKeyEnv. Plaintext is NEVER persisted in SessionMeta —
+   *  only the id. */
+  apiKeyId?: string
 }
 
 export interface SessionUpdate {
@@ -181,6 +186,25 @@ export interface SessionCreateOptions {
    *  PTY env as the provider's apiKeyEnv var (if it has one). Never
    *  persisted to disk; lives only in the spawned process env. */
   apiKey?: string
+  /** When set, the spawn pulls the plaintext key from the vault (main
+   *  process only) and exports it as the provider's apiKeyEnv var.
+   *  Mutually exclusive with `apiKey` (which carries an ad-hoc key for
+   *  this session that doesn't get saved). */
+  apiKeyId?: string
+}
+
+// =============================================================================
+// Key vault — per-user encrypted storage for provider API keys
+// =============================================================================
+
+/** Sanitised view of a vault record — never carries the encrypted blob. */
+export interface VaultEntry {
+  id: string
+  name: string
+  provider: Provider
+  apiKeyEnv: string
+  createdAt: string
+  lastUsedAt?: string
 }
 
 export type SessionCreateResult =
@@ -587,6 +611,19 @@ export interface HydraEnsembleApi {
   }
   quickTerm: {
     toggle: () => Promise<void>
+  }
+  keys: {
+    /** Stripped list (no cipher blob) — optionally filtered by provider. */
+    list: (provider?: Provider) => Promise<VaultEntry[]>
+    /** Saves a new key. Returns the new vault record's id. */
+    save: (input: {
+      name: string
+      provider: Provider
+      apiKeyEnv: string
+      value: string
+    }) => Promise<{ id: string }>
+    remove: (id: string) => Promise<void>
+    rename: (id: string, name: string) => Promise<void>
   }
   window: {
     minimize: () => Promise<void>

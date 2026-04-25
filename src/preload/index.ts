@@ -12,6 +12,7 @@ import type {
   NotifyOptions,
   Platform,
   ProjectMeta,
+  Provider,
   PtyDataEvent,
   PtyExitEvent,
   SessionCreateOptions,
@@ -21,6 +22,7 @@ import type {
   ToolkitItem,
   ToolkitRunResult,
   TranscriptPayload,
+  VaultEntry,
   WriteFileResult,
   Worktree
 } from '../shared/types'
@@ -194,6 +196,14 @@ const api: HydraEnsembleApi = {
   },
   quickTerm: {
     toggle: () => ipcRenderer.invoke('quickTerm:toggle')
+  },
+  keys: {
+    list: (provider?: Provider): Promise<VaultEntry[]> =>
+      ipcRenderer.invoke('keys:list', provider !== undefined ? { provider } : {}),
+    save: (input: { name: string; provider: Provider; apiKeyEnv: string; value: string }) =>
+      ipcRenderer.invoke('keys:save', input),
+    remove: (id: string) => ipcRenderer.invoke('keys:remove', { id }),
+    rename: (id: string, name: string) => ipcRenderer.invoke('keys:rename', { id, name })
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

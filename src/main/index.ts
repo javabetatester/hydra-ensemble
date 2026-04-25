@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, Menu, ipcMain, safeStorage, shell } from 'electron'
 import { join } from 'node:path'
 import { PtyManager } from './pty/manager'
 import { AnalyzerManager } from './pty/analyzer-manager'
@@ -20,6 +20,8 @@ import { registerToolkitIpc } from './ipc/toolkit'
 import { registerNotifyIpc } from './ipc/notify'
 import { registerEditorIpc } from './ipc/editor'
 import { registerQuickTermIpc } from './ipc/quickTerm'
+import { registerKeysIpc } from './ipc/keys'
+import { KeyVault, defaultVaultPath } from './keys/vault'
 import { OrchestraCore } from './orchestra'
 import { registerOrchestraIpc, broadcastOrchestraEvent } from './ipc/orchestra'
 import { initStore } from './store'
@@ -43,6 +45,7 @@ let toolkitService!: ToolkitService
 let notificationService!: NotificationService
 let editorFs!: EditorFs
 let quickTermService!: QuickTermService
+let keyVault!: KeyVault
 let orchestraCore!: OrchestraCore
 
 function setupServices(): void {
@@ -55,11 +58,16 @@ function setupServices(): void {
   toolkitService = new ToolkitService()
   notificationService = new NotificationService()
   editorFs = new EditorFs()
+  keyVault = new KeyVault({
+    filePath: defaultVaultPath(app.getPath('userData')),
+    safeStorage
+  })
 
   sessionManager = new SessionManager({
     pty: ptyManager,
     analyzer: analyzerManager,
-    jsonl: jsonlManager
+    jsonl: jsonlManager,
+    keyVault
   })
 
   quickTermService = new QuickTermService(ptyManager)
@@ -232,6 +240,7 @@ app.whenReady().then(async () => {
   registerNotifyIpc(notificationService)
   registerEditorIpc(editorFs)
   registerQuickTermIpc(quickTermService)
+  registerKeysIpc(keyVault)
 
   const win = createWindow()
   initUpdater(win)
