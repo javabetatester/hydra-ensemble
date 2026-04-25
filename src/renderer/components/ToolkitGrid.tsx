@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useToolkit } from '../state/toolkit'
 import { useClaudeCommands } from '../state/claudeCommands'
 import { useEditor } from '../state/editor'
-import { useSlidePanel } from '../state/panels'
+import { useSlidePanel, useToolkitSize } from '../state/panels'
 import type { ClaudeCommand, DirEntry, ToolkitItem } from '../../shared/types'
 import { ToolkitIcon, guessIconForLabel } from '../lib/toolkit-icons'
 import { hexAlpha } from '../lib/agent'
@@ -55,6 +55,22 @@ export default function ToolkitGrid({
 
   const [tab, setTab] = useState<Tab>('bashes')
   const [commandsQuery, setCommandsQuery] = useState('')
+  const expanded = useToolkitSize((s) => s.expanded)
+  const setExpanded = useToolkitSize((s) => s.setExpanded)
+  const toggleExpanded = useToolkitSize((s) => s.toggleExpanded)
+
+  /** Tab click logic: clicking the ACTIVE tab toggles the panel
+   *  expanded/collapsed; clicking an INACTIVE tab switches to it AND
+   *  ensures the panel is expanded. So the panel acts as a slide-up
+   *  drawer rooted in its tab strip. */
+  const handleTabClick = (next: Tab): void => {
+    if (next === tab) {
+      toggleExpanded()
+      return
+    }
+    setTab(next)
+    if (!expanded) setExpanded(true)
+  }
 
   // Re-fetch claude commands whenever cwd or tab changes to commands.
   useEffect(() => {
@@ -86,22 +102,22 @@ export default function ToolkitGrid({
     <section className="flex h-full flex-col border-l border-t border-border-soft bg-bg-2">
       <header className="flex shrink-0 items-center gap-1.5 border-b border-border-soft px-2 py-1.5">
         <TabButton
-          active={tab === 'bashes'}
+          active={tab === 'bashes' && expanded}
           icon={TerminalSquare}
           label="bashes"
-          onClick={() => setTab('bashes')}
+          onClick={() => handleTabClick('bashes')}
         />
         <TabButton
-          active={tab === 'commands'}
+          active={tab === 'commands' && expanded}
           icon={SlashSquare}
           label="commands"
-          onClick={() => setTab('commands')}
+          onClick={() => handleTabClick('commands')}
         />
         <TabButton
-          active={tab === 'claude'}
+          active={tab === 'claude' && expanded}
           icon={Sparkles}
           label=".claude"
-          onClick={() => setTab('claude')}
+          onClick={() => handleTabClick('claude')}
         />
         <div className="ml-auto flex items-center gap-1">
           {tab === 'bashes' ? (

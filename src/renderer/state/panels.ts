@@ -130,20 +130,33 @@ export const TOOLKIT_HEIGHT_DEFAULT = 360
 
 interface ToolkitSizeState {
   height: number
+  /** When false the toolkit is collapsed to a tab-strip-only sliver
+   *  (~38px). Clicking the active tab toggles this; clicking an
+   *  inactive tab switches tab AND ensures expanded. The user-defined
+   *  `height` is what the panel grows back to. */
+  expanded: boolean
   setHeight: (value: number) => void
+  setExpanded: (v: boolean) => void
+  toggleExpanded: () => void
 }
+
+/** Collapsed height — exactly the tab strip + its border, no content. */
+export const TOOLKIT_COLLAPSED_HEIGHT = 38
 
 export const useToolkitSize = create<ToolkitSizeState>()(
   persist(
     (set) => ({
       height: TOOLKIT_HEIGHT_DEFAULT,
+      expanded: false,
       setHeight: (value) => {
         const clamped = Math.min(
           TOOLKIT_HEIGHT_MAX,
           Math.max(TOOLKIT_HEIGHT_MIN, value)
         )
         set({ height: clamped })
-      }
+      },
+      setExpanded: (v) => set({ expanded: v }),
+      toggleExpanded: () => set((s) => ({ expanded: !s.expanded }))
     }),
     { name: 'hydra.toolkit-size' }
   )

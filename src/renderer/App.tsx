@@ -58,7 +58,8 @@ import {
   useToolkitSize,
   TOOLKIT_HEIGHT_MIN,
   TOOLKIT_HEIGHT_MAX,
-  TOOLKIT_HEIGHT_DEFAULT
+  TOOLKIT_HEIGHT_DEFAULT,
+  TOOLKIT_COLLAPSED_HEIGHT
 } from './state/panels'
 import { isMac } from './lib/platform'
 import { useSessions } from './state/sessions'
@@ -113,6 +114,7 @@ export default function App() {
   const rightPanelHidden = useRightPanel((s) => s.hidden)
   const toolkitHeight = useToolkitSize((s) => s.height)
   const setToolkitHeight = useToolkitSize((s) => s.setHeight)
+  const toolkitExpanded = useToolkitSize((s) => s.expanded)
   const openPanel = useSlidePanel((s) => s.open)
   const closePanel = useSlidePanel((s) => s.close)
   const togglePanelFor = useSlidePanel((s) => s.toggle)
@@ -583,17 +585,28 @@ export default function App() {
               </div>
               <div
                 className="relative flex shrink-0 flex-col overflow-hidden border-t border-border-soft"
-                style={{ height: toolkitHeight }}
+                style={{
+                  height: toolkitExpanded ? toolkitHeight : TOOLKIT_COLLAPSED_HEIGHT,
+                  // Same 520ms / Material easing as the other panel
+                  // toggles (Ctrl+T / Ctrl+Q / Ctrl+E) so clicking a
+                  // tab to expand/collapse feels like one motion family.
+                  transition: 'height 520ms cubic-bezier(0.4, 0, 0.2, 1)'
+                }}
               >
                 {/* Resize handle — grabbable 4px strip on the top edge.
                     Drag up/down to resize the Toolkit; SessionsPanel
                     above absorbs the delta via flex-1. Persisted in
-                    `useToolkitSize`; double-click to reset. */}
+                    `useToolkitSize`; double-click to reset. Only
+                    interactive when the panel is expanded. */}
                 <div
                   role="separator"
                   aria-orientation="horizontal"
                   aria-label="Resize toolkit panel"
-                  className="absolute left-0 right-0 top-0 z-20 h-1.5 cursor-row-resize bg-transparent transition-colors hover:bg-accent-500/40 active:bg-accent-500/60"
+                  className={`absolute left-0 right-0 top-0 z-20 h-1.5 transition-colors hover:bg-accent-500/40 active:bg-accent-500/60 ${
+                    toolkitExpanded
+                      ? 'cursor-row-resize bg-transparent'
+                      : 'pointer-events-none'
+                  }`}
                   onMouseDown={(e) => {
                     e.preventDefault()
                     const startY = e.clientY
