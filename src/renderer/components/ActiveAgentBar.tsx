@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
-import { GitBranch, Edit3, RotateCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { GitBranch, Folder, Edit3, RotateCw } from 'lucide-react'
 import type { SessionMeta } from '../../shared/types'
 import AgentAvatar from './AgentAvatar'
 import SessionStatePill from './SessionStatePill'
 import AgentEditDialog from './AgentEditDialog'
 import { defaultAgentColor, hexAlpha } from '../lib/agent'
 import { formatModel } from './StatusBar'
+import { useProjects } from '../state/projects'
 
 interface Props {
   session: SessionMeta
@@ -20,6 +21,16 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
   const [editing, setEditing] = useState<SessionMeta | null>(null)
   const [, force] = useState(0)
   const accent = session.accentColor || defaultAgentColor(session.id)
+  const projects = useProjects((s) => s.projects)
+  /** Project label derived from the session's cwd: friendly name when
+   *  the cwd matches a known project, basename otherwise. */
+  const projectName = useMemo(() => {
+    if (!session.cwd) return ''
+    const matched = projects.find((p) => p.path === session.cwd)
+    if (matched) return matched.name
+    const parts = session.cwd.split(/[/\\]/).filter(Boolean)
+    return parts[parts.length - 1] ?? ''
+  }, [session.cwd, projects])
 
   // Cheap re-render so the live sub-status feels alive (clock dots).
   useEffect(() => {
@@ -50,10 +61,6 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
         </div>
       </button>
 
-      <span className="h-6 w-px bg-border-soft" aria-hidden />
-
-      <SessionStatePill state={session.state ?? 'idle'} />
-
       {session.subStatus ? (
         <div className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[11px] text-text-3">
           <span className="text-text-4">{session.subStatus}</span>
@@ -66,6 +73,9 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
         </div>
       ) : null}
 
+      {/* Right cluster — order: branch · project · input status (state
+          pill). Model + edit/restart actions hang at the very end so the
+          user sees the most relevant context first. */}
       <div className="ml-auto flex shrink-0 items-center gap-3 text-[11px] text-text-3">
         {session.branch ? (
           <span className="flex items-center gap-1.5 font-mono">
@@ -73,12 +83,22 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
             <span className="text-text-2">{session.branch}</span>
           </span>
         ) : null}
+        {projectName ? (
+          <>
+            <span className="font-mono text-text-4">·</span>
+            <span className="flex items-center gap-1.5 font-mono" title={session.cwd}>
+              <Folder size={12} strokeWidth={1.75} className="text-text-4" />
+              <span className="text-text-2">{projectName}</span>
+            </span>
+          </>
+        ) : null}
         <span className="font-mono text-text-4">·</span>
+        <SessionStatePill state={session.state ?? 'idle'} />
+        <span className="h-5 w-px bg-border-soft" aria-hidden />
         <span className="font-mono">
           <span className="text-text-4">model</span>{' '}
           <span className="text-text-2">{formatModel(session.model)}</span>
         </span>
-        <span className="h-5 w-px bg-border-soft" aria-hidden />
         <button
           type="button"
           onClick={() => setEditing(session)}

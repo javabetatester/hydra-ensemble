@@ -195,7 +195,7 @@ export default function App() {
             <span className="h-5 w-px bg-border-soft" aria-hidden />
             <HeaderButton
               icon={<FolderTree size={13} strokeWidth={1.75} />}
-              label={currentProject?.name ?? 'projects'}
+              label="manager"
               shortcut={fmtShortcut('T')}
               active={drawerOpen}
               onClick={() => setDrawerOpen((v) => !v)}
