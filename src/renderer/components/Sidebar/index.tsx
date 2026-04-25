@@ -128,7 +128,11 @@ export default function Sidebar() {
   const [showCreate, setShowCreate] = useState(false)
   const [worktreesOpen, setWorktreesOpen] = useState(true)
   const [filesOpen, setFilesOpen] = useState(true)
-  const [orchestraOpen, setOrchestraOpen] = useState(true)
+  // Orchestrador starts COLLAPSED on every app launch — same pattern
+  // as the toolkit drawer. The DEVELOPING badge is already attention-
+  // grabbing; we don't also need the section auto-expanded forcing
+  // its content into the user's face every cold start.
+  const [orchestraOpen, setOrchestraOpen] = useState(false)
   const [agentsOpen, setAgentsOpen] = useState(true)
   const [agentFilter, setAgentFilter] = useState('')
   const [collapsedAgentGroups, setCollapsedAgentGroups] = useState<Set<string>>(() =>
