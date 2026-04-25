@@ -26,6 +26,7 @@ import NewSessionDialog from './components/NewSessionDialog'
 import TerminalsPanel from './components/TerminalsPanel'
 import WindowControls from './components/WindowControls'
 import OrchestraView from './orchestra/OrchestraView'
+import StarOnGithub from './components/StarOnGithub'
 import WelcomeScreen from './components/WelcomeScreen'
 import { Kbd } from './ui'
 
@@ -710,6 +711,10 @@ export default function App() {
       {/* First-run welcome screen — only the very first time the user
           opens the app. After dismissal writes hydra.welcome.shown. */}
       <WelcomeGate />
+      {/* One-time "star on GitHub" CTA — fires ~1.6s after first
+          launch so the welcome has a beat to settle. Persists its own
+          dismissal in localStorage; never asks twice. */}
+      <StarOnGithub />
       {orchestraEnabled && orchestraOpen ? (
         <div className="fixed inset-0 z-[60] bg-bg-0">
           <OrchestraView onBackToClassic={() => setOrchestraOpen(false)} />
