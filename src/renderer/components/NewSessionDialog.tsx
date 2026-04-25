@@ -617,142 +617,156 @@ export default function NewSessionDialog({ open, onClose }: Props) {
                   />
                 </label>
               </div>
-              {useApiKey ? (
-                <div className="space-y-2">
-                  {vaultUnavailable ? (
-                    <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-yellow-200">
-                      vault unavailable on this OS — keys can&apos;t be saved.
-                      The key you enter below will be used for this session
-                      only and never written to disk.
-                    </div>
-                  ) : null}
+              {/* Form is ALWAYS rendered so the user sees what they'll
+                  fill in. When the toggle above is OFF, every control
+                  is disabled and the whole block dims — labels stay
+                  visible but inert until the toggle activates them. */}
+              <div className={`space-y-2 ${useApiKey ? '' : 'opacity-50'}`}>
+                {useApiKey && vaultUnavailable ? (
+                  <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-1.5 text-[11px] leading-snug text-yellow-200">
+                    vault unavailable on this OS — keys can&apos;t be saved.
+                    The key you enter below will be used for this session
+                    only and never written to disk.
+                  </div>
+                ) : null}
 
-                  {/* Saved-keys picker. Hidden when none exist for the
-                      current provider — the inline form does the right
-                      thing on its own. */}
-                  {savedKeys.length > 0 ? (
+                {/* Saved-keys picker — only when entries exist for the
+                    current provider. */}
+                {savedKeys.length > 0 ? (
+                  <div>
+                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
+                      saved keys
+                    </label>
+                    <select
+                      value={pickedKeyId}
+                      disabled={!useApiKey}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        setPickedKeyId(next)
+                        if (next !== KEY_PICK_NEW && next !== KEY_PICK_NONE) {
+                          setApiKey('')
+                          setApiKeyName('')
+                        }
+                      }}
+                      className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed"
+                    >
+                      <option value={KEY_PICK_NONE}>(none — enter below)</option>
+                      <option value={KEY_PICK_NEW}>(new key)</option>
+                      {savedKeys.map((k) => (
+                        <option key={k.id} value={k.id}>
+                          {k.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                {pickedKey && useApiKey ? (
+                  /* Saved key picked — collapse to a chip + delete. */
+                  <div className="flex items-center justify-between gap-2 rounded-sm border border-accent-500/40 bg-accent-500/10 px-2.5 py-1.5">
+                    <span className="flex items-center gap-1.5 text-[11px] text-text-1">
+                      <KeyRound size={12} strokeWidth={1.75} className="text-accent-400" />
+                      <span className="font-mono">saved · {pickedKey.name}</span>
+                      <span className="text-text-4">— exported as {pickedKey.apiKeyEnv}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await removeKey(pickedKey.id)
+                        } finally {
+                          setPickedKeyId(KEY_PICK_NONE)
+                        }
+                      }}
+                      className="rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
+                      title="remove from vault"
+                      aria-label="remove from vault"
+                    >
+                      <Trash2 size={12} strokeWidth={1.75} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* NAME — friendly handle, used when saved to vault. */}
                     <div>
                       <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
-                        saved keys
+                        name
                       </label>
-                      <select
-                        value={pickedKeyId}
-                        onChange={(e) => {
-                          const next = e.target.value
-                          setPickedKeyId(next)
-                          // Picking a saved entry clears the inline form;
-                          // picking "(new key)" or "(none)" leaves it
-                          // ready for input.
-                          if (next !== KEY_PICK_NEW && next !== KEY_PICK_NONE) {
-                            setApiKey('')
-                            setApiKeyName('')
-                          }
-                        }}
-                        className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 focus:border-accent-500 focus:outline-none"
-                      >
-                        <option value={KEY_PICK_NONE}>(none — enter below)</option>
-                        <option value={KEY_PICK_NEW}>(new key)</option>
-                        {savedKeys.map((k) => (
-                          <option key={k.id} value={k.id}>
-                            {k.name}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        type="text"
+                        value={apiKeyName}
+                        disabled={!useApiKey}
+                        onChange={(e) => setApiKeyName(e.target.value)}
+                        placeholder="e.g. personal-openai"
+                        autoComplete="off"
+                        spellCheck={false}
+                        className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed"
+                      />
                     </div>
-                  ) : null}
-
-                  {pickedKey ? (
-                    /* Picked a saved key — collapse the inline form into
-                       a chip with a delete-from-vault affordance. The
-                       spawn pulls the plaintext from the vault on submit
-                       so the renderer never sees the key value. */
-                    <div className="flex items-center justify-between gap-2 rounded-sm border border-accent-500/40 bg-accent-500/10 px-2.5 py-1.5">
-                      <span className="flex items-center gap-1.5 text-[11px] text-text-1">
-                        <KeyRound size={12} strokeWidth={1.75} className="text-accent-400" />
-                        <span className="font-mono">saved · {pickedKey.name}</span>
-                        <span className="text-text-4">— exported as {pickedKey.apiKeyEnv}</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          try {
-                            await removeKey(pickedKey.id)
-                          } finally {
-                            setPickedKeyId(KEY_PICK_NONE)
-                          }
-                        }}
-                        className="rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
-                        title="remove from vault"
-                        aria-label="remove from vault"
-                      >
-                        <Trash2 size={12} strokeWidth={1.75} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* NAME field intentionally NOT rendered — kept in
-                          state so the vault save path can auto-derive a
-                          handle (timestamp / "key-N") when the user opts
-                          to save without typing one. UI stays compact. */}
-                      <div>
-                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
-                          key value
-                        </label>
-                        <div className="relative">
-                          <KeyRound
-                            size={12}
-                            strokeWidth={1.75}
-                            className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-4"
-                          />
-                          <input
-                            type={showApiKey ? 'text' : 'password'}
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            placeholder={`exported as ${providerSpec.apiKeyEnv}`}
-                            autoComplete="off"
-                            spellCheck={false}
-                            className="w-full rounded-sm border border-border-mid bg-bg-1 pl-7 pr-9 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowApiKey((v) => !v)}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
-                            title={showApiKey ? 'hide key' : 'show key'}
-                            aria-label={showApiKey ? 'hide key' : 'show key'}
-                          >
-                            {showApiKey ? (
-                              <EyeOff size={12} strokeWidth={1.75} />
-                            ) : (
-                              <Eye size={12} strokeWidth={1.75} />
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                      <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-2">
-                        <input
-                          type="checkbox"
-                          checked={saveNewKey && !vaultUnavailable}
-                          onChange={(e) => setSaveNewKey(e.target.checked)}
-                          disabled={vaultUnavailable}
-                          className="h-3 w-3 accent-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-text-3">
+                        key value
+                      </label>
+                      <div className="relative">
+                        <KeyRound
+                          size={12}
+                          strokeWidth={1.75}
+                          className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-4"
                         />
-                        <span>save this key for reuse</span>
-                        <span className="text-text-4">
-                          — encrypted with the OS key store, plaintext never leaves your machine
-                        </span>
-                      </label>
-                    </>
-                  )}
+                        <input
+                          type={showApiKey ? 'text' : 'password'}
+                          value={apiKey}
+                          disabled={!useApiKey}
+                          onChange={(e) => setApiKey(e.target.value)}
+                          placeholder={`exported as ${providerSpec.apiKeyEnv}`}
+                          autoComplete="off"
+                          spellCheck={false}
+                          className="w-full rounded-sm border border-border-mid bg-bg-1 pl-7 pr-9 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none disabled:cursor-not-allowed"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowApiKey((v) => !v)}
+                          disabled={!useApiKey}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                          title={showApiKey ? 'hide key' : 'show key'}
+                          aria-label={showApiKey ? 'hide key' : 'show key'}
+                        >
+                          {showApiKey ? (
+                            <EyeOff size={12} strokeWidth={1.75} />
+                          ) : (
+                            <Eye size={12} strokeWidth={1.75} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                    <label
+                      className={`flex items-center gap-1.5 text-[11px] text-text-2 ${
+                        useApiKey && !vaultUnavailable
+                          ? 'cursor-pointer'
+                          : 'cursor-not-allowed'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={saveNewKey && useApiKey && !vaultUnavailable}
+                        onChange={(e) => setSaveNewKey(e.target.checked)}
+                        disabled={!useApiKey || vaultUnavailable}
+                        className="h-3 w-3 accent-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      />
+                      <span>save this key for reuse</span>
+                      <span className="text-text-4">
+                        — encrypted with the OS key store, plaintext never leaves your machine
+                      </span>
+                    </label>
+                  </>
+                )}
+                {useApiKey ? (
                   <p className="text-[10px] leading-snug text-text-4">
                     Key supersedes the agent&apos;s saved login — the
                     Account selector below is disabled for this session.
                   </p>
-                </div>
-              ) : (
-                <div className="rounded-sm border border-dashed border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-4">
-                  agent will inherit ambient auth (no per-session key)
-                </div>
-              )}
+                ) : null}
+              </div>
             </div>
           ) : null}
 
