@@ -8,6 +8,34 @@ import { Kbd } from '../ui'
 import { useTour } from './tour/store'
 import logoUrl from '../assets/logo.png'
 
+/** Words cycled in the headline. Mirrors the landing page Hero so a
+ *  user opening Hydra sees the same "Run Claude / Codex / Copilot
+ *  agents" rotation that brought them here. Gradients hand-picked to
+ *  match each brand's visual family without shipping a Tailwind
+ *  safelist (these strings would get tree-shaken otherwise). */
+const HEADLINE_PROVIDERS: ReadonlyArray<{ name: string; gradient: string }> = [
+  {
+    name: 'Claude',
+    gradient: 'linear-gradient(135deg, #ffcab7 0%, #ff9476 50%, #ff5b39 100%)'
+  },
+  {
+    name: 'Codex',
+    gradient: 'linear-gradient(135deg, #A8B0FF 0%, #7B86F7 45%, #4B5BE6 100%)'
+  },
+  {
+    name: 'Copilot',
+    gradient:
+      'linear-gradient(120deg, #A78BFA 0%, #22D3EE 35%, #34D399 70%, #FBBF24 100%)'
+  }
+]
+/** Word with the most letters across the cycle — used as an invisible
+ *  width-locker so the headline never reflows between cycles. */
+const HEADLINE_WIDEST = HEADLINE_PROVIDERS.reduce(
+  (a, b) => (a.length >= b.name.length ? a : b.name),
+  ''
+)
+const HEADLINE_DWELL_MS = 3500
+
 /** Classic-shell welcome screen shown when no session is active.
  *  Extracted from App.tsx so the shell component is about composition,
  *  not 120 lines of hero markup. No behavioural change. */
@@ -22,6 +50,17 @@ export default function Welcome({
   const addProject = useProjects((s) => s.addProject)
   const completedTourIds = useTour((s) => s.completedIds)
   const welcomeTaken = !!completedTourIds['welcome']
+
+  // Cycle the highlighted provider word in the headline so the welcome
+  // screen mirrors the LP Hero's rotating "Run Claude / Codex / Copilot".
+  const [providerIdx, setProviderIdx] = React.useState(0)
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      setProviderIdx((i) => (i + 1) % HEADLINE_PROVIDERS.length)
+    }, HEADLINE_DWELL_MS)
+    return () => clearInterval(t)
+  }, [])
+  const provider = HEADLINE_PROVIDERS[providerIdx]!
   // Dispatching through getState() so the click is fully decoupled
   // from React state — bypasses any stale-closure suspicion while
   // debugging the 'replay tutorial' no-op report.
@@ -72,7 +111,28 @@ export default function Welcome({
             />
           </div>
           <h1 className="mb-2 text-2xl font-semibold tracking-tight text-text-1">
-            Run Claude agents in parallel.
+            Run{' '}
+            <span className="relative inline-grid overflow-hidden align-baseline">
+              {/* Invisible width-locker — sizes the cell to the
+                  longest provider name so the line never reflows
+                  when the cycled word changes length. */}
+              <span aria-hidden className="invisible col-start-1 row-start-1">
+                {HEADLINE_WIDEST}
+              </span>
+              <span
+                key={provider.name}
+                className="df-fade-in col-start-1 row-start-1 inline-block bg-clip-text"
+                style={{
+                  backgroundImage: provider.gradient,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent'
+                }}
+              >
+                {provider.name}
+              </span>
+            </span>{' '}
+            agents in parallel.
           </h1>
           <p className="mx-auto max-w-md text-sm leading-relaxed text-text-3">
             Each session runs with its own{' '}
