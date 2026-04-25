@@ -158,7 +158,14 @@ export const useToolkitSize = create<ToolkitSizeState>()(
       setExpanded: (v) => set({ expanded: v }),
       toggleExpanded: () => set((s) => ({ expanded: !s.expanded }))
     }),
-    { name: 'hydra.toolkit-size' }
+    {
+      name: 'hydra.toolkit-size',
+      // Persist ONLY the user-tuned height — `expanded` stays
+      // session-local so every app launch (and every full reload)
+      // starts with the toolkit collapsed, even if the user left it
+      // open at quit time.
+      partialize: (s) => ({ height: s.height })
+    }
   )
 )
 
