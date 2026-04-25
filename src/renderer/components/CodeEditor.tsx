@@ -112,6 +112,21 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
   const [previewMd, setPreviewMd] = useState(false)
   // Which sidebar pane is active — files tree or git changes.
   const [sideTab, setSideTab] = useState<SideTab>('files')
+
+  // Cross-component bridge so the guided tour (and other features
+  // that live outside this component) can flip the sidebar tab —
+  // e.g. the "Changes — stage, diff, commit" tour step needs the
+  // changes pane visible to anchor on it.
+  useEffect(() => {
+    const onSet = (e: Event): void => {
+      const detail = (e as CustomEvent<SideTab>).detail
+      if (detail === 'files' || detail === 'changes' || detail === 'search') {
+        setSideTab(detail)
+      }
+    }
+    window.addEventListener('hydra.editor.setSideTab', onSet as EventListener)
+    return () => window.removeEventListener('hydra.editor.setSideTab', onSet as EventListener)
+  }, [])
   // Lazy-mount guard for the git changes pane. Mounting it immediately
   // fires a `git status` + `git diff` the moment the editor opens, which
   // in a repo with a huge lockfile staged can ship megabytes across the

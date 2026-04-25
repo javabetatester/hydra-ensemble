@@ -51,6 +51,27 @@ async function openToolkitDrawer(): Promise<void> {
   await wait(540)
 }
 
+function closeToolkitDrawer(): void {
+  // Restore the default collapsed state once the user steps out of
+  // the toolkit-anchored chunk of the tour. Synchronous — the next
+  // step's `before` (if any) will await its own animation.
+  useToolkitSize.getState().setExpanded(false)
+}
+
+async function openEditorChangesTab(): Promise<void> {
+  // The Changes tab inside the editor sidebar lives behind a tab
+  // strip — without flipping to it the M/A/D badges and the AI
+  // commit button never render in the DOM, so the tour step that
+  // anchors on `editor-changes-tab` (or the AI button next to it)
+  // would either find nothing or just spotlight a dormant tab.
+  // Bridge: the editor listens for `hydra.editor.setSideTab` events.
+  await openEditorPanel()
+  window.dispatchEvent(
+    new CustomEvent<'changes'>('hydra.editor.setSideTab', { detail: 'changes' })
+  )
+  await wait(120)
+}
+
 function hasSessions(): boolean {
   return useSessions.getState().sessions.length > 0
 }
@@ -236,14 +257,19 @@ export const EDITOR_TOUR: Tour = {
       title: 'Changes — stage, diff, commit',
       body:
         'Click a file to see its diff. Click the M/A/D badge to stage/unstage. Bottom has the commit message box and the Generate-with-AI button that drafts a message via claude -p using the current diff. Commits run from the repo toplevel so subpath workspaces work.',
-      placement: 'right'
+      placement: 'right',
+      // Activates the Changes tab in the editor sidebar so the diff
+      // list, M/A/D badges, and AI-commit button are actually rendered
+      // when the spotlight lands.
+      before: () => openEditorChangesTab()
     },
     {
       anchor: 'editor-generate-ai',
       title: 'Generate commit with AI',
       body:
         'Pipes the staged diff (or unstaged if nothing staged) into claude -p, along with your custom "rules" (scope conventions, language, ticket-id format — set via the 📜 icon). Haiku on short diffs, Sonnet once the diff is multi-file or >4KB. 120s timeout with a live elapsed counter on the button.',
-      placement: 'right'
+      placement: 'right',
+      before: () => openEditorChangesTab()
     },
     {
       anchor: null,
@@ -287,7 +313,12 @@ export const TOOLKIT_TOUR: Tour = {
       body:
         'Plus opens the editor dialog. You pick a name, an icon from the Lucide set, a command, a per-tool accent colour, and optionally a cwd (defaults to the session\'s cwd). Persisted to ~/.config/Hydra, so it follows you across installs.',
       placement: 'left',
-      before: () => openToolkitDrawer()
+      before: () => openToolkitDrawer(),
+      // Last step that needs the drawer expanded — collapse it back
+      // when the user moves past so the UI returns to its normal
+      // resting state. Going BACK to an earlier step that calls
+      // openToolkitDrawer() will reopen it, no flicker.
+      after: () => closeToolkitDrawer()
     },
     {
       anchor: null,
