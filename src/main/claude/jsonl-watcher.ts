@@ -451,7 +451,10 @@ export class JsonlWatcher {
 
     const rawModel = msg['model']
     if (typeof rawModel === 'string') {
-      this.latestModel = shortModelName(rawModel)
+      // Keep the FULL raw id so the renderer can surface variant info
+      // (version + 1M context marker). Pricing still uses the short name
+      // — derived on the fly at lookup time, not stored.
+      this.latestModel = rawModel
     }
 
     const text = extractText(msg['content'])
@@ -472,7 +475,8 @@ export class JsonlWatcher {
     // here (rather than summing) makes this a current-context gauge.
     this.latestContextTokens = inputTokens + cacheCreationTokens + cacheReadTokens
 
-    const pricing = PRICING[this.latestModel] ?? PRICING['sonnet']!
+    const pricing =
+      PRICING[shortModelName(this.latestModel)] ?? PRICING['sonnet']!
     const inputCost = inputTokens * pricing.inputPerToken
     const cacheCreateCost = cacheCreationTokens * pricing.cacheCreationPerToken
     const cacheReadCost = cacheReadTokens * pricing.cacheReadPerToken

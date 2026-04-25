@@ -22,15 +22,20 @@ function activeBranch(active: SessionMeta | undefined): string {
   return 'main'
 }
 
-/** Strip Anthropic's full model id ("claude-opus-4-7-20251001") down to
- *  a friendly "opus 4.7" / "sonnet 4.6" / "haiku 4.5". Unknown formats
+/** Strip Anthropic's full model id ("claude-opus-4-7-20251001[1m]")
+ *  down to a friendly "opus 4.7 (1M)" / "sonnet 4.6" / "haiku 4.5".
+ *  The (1M) suffix only appears when the raw id carries the `1m` marker
+ *  the CLI uses for the extended-context Opus variant. Unknown formats
  *  fall through unchanged so the user sees the raw value rather than a
  *  silent miscategorisation. */
 export function formatModel(raw: string | undefined): string {
   if (!raw) return '—'
   const m = /claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i.exec(raw)
   if (!m) return raw
-  return `${m[1]?.toLowerCase()} ${m[2]}.${m[3]}`
+  const family = m[1]?.toLowerCase()
+  const version = `${m[2]}.${m[3]}`
+  const has1M = /\b1m\b|\[1m\]/i.test(raw)
+  return has1M ? `${family} ${version} (1M)` : `${family} ${version}`
 }
 
 export default function StatusBar() {

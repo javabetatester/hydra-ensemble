@@ -61,6 +61,28 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
         </div>
       </button>
 
+      {/* Project chip lives on the LEFT next to the session identity so
+          repo context is the first thing the user sees, not the last.
+          Branch follows it (still left-side). */}
+      {projectName ? (
+        <span
+          className="flex items-center gap-1.5 font-mono text-[11px] text-text-3"
+          title={session.cwd}
+        >
+          <Folder size={12} strokeWidth={1.75} className="text-text-4" />
+          <span className="text-text-2">{projectName}</span>
+        </span>
+      ) : null}
+      {session.branch ? (
+        <>
+          <span className="font-mono text-[11px] text-text-4">·</span>
+          <span className="flex items-center gap-1.5 font-mono text-[11px] text-text-3">
+            <GitBranch size={12} strokeWidth={1.75} className="text-text-4" />
+            <span className="text-text-2">{session.branch}</span>
+          </span>
+        </>
+      ) : null}
+
       {session.subStatus ? (
         <div className="flex min-w-0 items-center gap-1.5 truncate font-mono text-[11px] text-text-3">
           <span className="text-text-4">{session.subStatus}</span>
@@ -73,26 +95,9 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
         </div>
       ) : null}
 
-      {/* Right cluster — order: branch · project · input status (state
-          pill). Model + edit/restart actions hang at the very end so the
-          user sees the most relevant context first. */}
+      {/* Right cluster — input status (state pill) + model. Edit and
+          restart actions hang at the very end. */}
       <div className="ml-auto flex shrink-0 items-center gap-3 text-[11px] text-text-3">
-        {session.branch ? (
-          <span className="flex items-center gap-1.5 font-mono">
-            <GitBranch size={12} strokeWidth={1.75} className="text-text-4" />
-            <span className="text-text-2">{session.branch}</span>
-          </span>
-        ) : null}
-        {projectName ? (
-          <>
-            <span className="font-mono text-text-4">·</span>
-            <span className="flex items-center gap-1.5 font-mono" title={session.cwd}>
-              <Folder size={12} strokeWidth={1.75} className="text-text-4" />
-              <span className="text-text-2">{projectName}</span>
-            </span>
-          </>
-        ) : null}
-        <span className="font-mono text-text-4">·</span>
         <SessionStatePill state={session.state ?? 'idle'} />
         <span className="h-5 w-px bg-border-soft" aria-hidden />
         <span className="font-mono">

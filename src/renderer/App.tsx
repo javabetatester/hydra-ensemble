@@ -367,8 +367,12 @@ export default function App() {
               maxWidth:
                 activePanel && !chatMinimized ? `${PANEL_WIDTH_MAX}px` : undefined,
               opacity: activePanel ? 1 : 0,
+              // Slower transform (420ms) for the slide so the close
+              // motion reads as deliberate, not snappy. Opacity fades
+              // a touch quicker (320ms) but still trails enough that
+              // the pane is visible during most of the slide.
               transition:
-                'transform 280ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease-out',
+                'transform 420ms cubic-bezier(0.32, 0.72, 0, 1), opacity 320ms cubic-bezier(0.32, 0.72, 0, 1)',
               transform: activePanel ? 'translateX(0)' : 'translateX(100%)'
             }}
             aria-hidden={!activePanel}
