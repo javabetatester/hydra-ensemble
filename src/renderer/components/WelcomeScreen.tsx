@@ -547,7 +547,7 @@ function StepLaunch({ onClassic, onOrchestra }: StepLaunchProps) {
           </div>
           <div>
             <div className="mb-1 text-[13px] font-medium text-text-1">
-              Try Orchestra
+              Try Orchestrador
             </div>
             <p className="text-[11px] leading-relaxed text-text-3">
               A canvas of agents wired together. Route messages between them,

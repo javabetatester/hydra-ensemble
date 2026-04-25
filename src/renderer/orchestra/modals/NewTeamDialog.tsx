@@ -242,7 +242,7 @@ export default function NewTeamDialog({
               </button>
             </div>
             <p className="mt-1 text-[10px] text-text-4">
-              Orchestra agents run inside this folder. They can only read/write files beneath it.
+              Orchestrador agents run inside this folder. They can only read/write files beneath it.
             </p>
           </div>
 

@@ -101,7 +101,7 @@ export function EmptyOrchestra({
 
         <div className="mt-8 flex items-center gap-2 text-text-3">
           <Users className="h-4 w-4" />
-          <span className="text-xs uppercase tracking-wider">Orchestra</span>
+          <span className="text-xs uppercase tracking-wider">Orchestrador</span>
         </div>
 
         <h2 className="mt-2 text-2xl font-semibold text-text-1">

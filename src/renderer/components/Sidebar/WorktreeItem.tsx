@@ -6,6 +6,11 @@ import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
 interface WorktreeItemProps {
   worktree: Worktree
   hasSession: boolean
+  /** Total sessions tied to this worktree (running + idle). */
+  sessionCount?: number
+  /** Sessions currently in 'thinking' or 'generating' — i.e. an agent
+   *  is actively working in this worktree right now. */
+  activeCount?: number
   onOpenSession: () => void
   onRemove: () => void
   onCopyPath: () => void
@@ -14,6 +19,8 @@ interface WorktreeItemProps {
 export default function WorktreeItem({
   worktree,
   hasSession,
+  sessionCount = 0,
+  activeCount = 0,
   onOpenSession,
   onRemove,
   onCopyPath
@@ -72,13 +79,36 @@ export default function WorktreeItem({
               main
             </span>
           )}
-          {hasSession && (
+          {activeCount > 0 ? (
             <span
-              className="ml-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-status-generating"
-              title="session open"
-              aria-label="session open"
-            />
-          )}
+              className="ml-0.5 flex shrink-0 items-center gap-1"
+              title={`${activeCount} agent${activeCount > 1 ? 's' : ''} working`}
+              aria-label={`${activeCount} agent${activeCount > 1 ? 's' : ''} working`}
+            >
+              <span className="relative flex h-2 w-2 items-center justify-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-status-thinking opacity-60" />
+                <span className="relative h-2 w-2 rounded-full bg-status-thinking" />
+              </span>
+              {sessionCount > 1 && (
+                <span className="rounded-sm bg-status-thinking/15 px-1 py-px font-mono text-[9px] font-medium text-status-thinking">
+                  {sessionCount}
+                </span>
+              )}
+            </span>
+          ) : hasSession ? (
+            <span
+              className="ml-0.5 flex shrink-0 items-center gap-1"
+              title={`${sessionCount} idle session${sessionCount > 1 ? 's' : ''}`}
+              aria-label={`${sessionCount} idle session${sessionCount > 1 ? 's' : ''}`}
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-text-4" />
+              {sessionCount > 1 && (
+                <span className="rounded-sm bg-bg-3 px-1 py-px font-mono text-[9px] text-text-4">
+                  {sessionCount}
+                </span>
+              )}
+            </span>
+          ) : null}
         </button>
         <button
           type="button"

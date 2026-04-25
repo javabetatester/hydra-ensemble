@@ -104,8 +104,8 @@ export default function StatusBar() {
               type="button"
               onClick={() => setOrchestraOverlayOpen(true)}
               className="flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-bg-3"
-              title="Open Orchestra"
-              aria-label="Open Orchestra — teams"
+              title="Open Orchestrador"
+              aria-label="Open Orchestrador — teams"
             >
               <span className="text-text-4">
                 <Network size={10} strokeWidth={1.75} />
@@ -117,8 +117,8 @@ export default function StatusBar() {
               type="button"
               onClick={() => setOrchestraOverlayOpen(true)}
               className="flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-bg-3"
-              title="Open Orchestra"
-              aria-label="Open Orchestra — running agents"
+              title="Open Orchestrador"
+              aria-label="Open Orchestrador — running agents"
             >
               <span className="relative flex items-center text-text-4">
                 <Loader2 size={10} strokeWidth={1.75} />
@@ -136,8 +136,8 @@ export default function StatusBar() {
               type="button"
               onClick={() => setOrchestraOverlayOpen(true)}
               className="flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-bg-3"
-              title="Open Orchestra"
-              aria-label="Open Orchestra — queued tasks"
+              title="Open Orchestrador"
+              aria-label="Open Orchestrador — queued tasks"
             >
               <span className="text-text-4">
                 <Inbox size={10} strokeWidth={1.75} />

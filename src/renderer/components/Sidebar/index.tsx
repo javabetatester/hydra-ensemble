@@ -8,16 +8,21 @@ import {
   FolderPlus,
   AlertTriangle,
   Network,
-  Filter
+  Filter,
+  Construction,
+  Files
 } from 'lucide-react'
 import { useProjects } from '../../state/projects'
 import { useSessions } from '../../state/sessions'
+import { useEditor } from '../../state/editor'
+import { useSlidePanel } from '../../state/panels'
 import { useOrchestra } from '../../orchestra/state/orchestra'
-import ProjectItem from './ProjectItem'
+import { getActiveView } from '../editor/CodeMirrorView'
 import WorktreeItem from './WorktreeItem'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
 import SessionStatePill from '../SessionStatePill'
 import AgentAvatar from '../AgentAvatar'
+import FileTree from '../editor/FileTree'
 import type { SessionMeta } from '../../../shared/types'
 
 const AGENT_GROUP_COLLAPSED_KEY = 'hydra.sidebar.agentGroupCollapsed'
@@ -84,14 +89,34 @@ export default function Sidebar() {
   const loadingWorktrees = useProjects((s) => s.loadingWorktrees)
   const error = useProjects((s) => s.error)
   const addProject = useProjects((s) => s.addProject)
-  const removeProject = useProjects((s) => s.removeProject)
-  const setCurrent = useProjects((s) => s.setCurrent)
   const createWorktree = useProjects((s) => s.createWorktree)
   const removeWorktree = useProjects((s) => s.removeWorktree)
 
   const sessions = useSessions((s) => s.sessions)
+  const activeSessionId = useSessions((s) => s.activeId)
   const setActiveSession = useSessions((s) => s.setActive)
   const createSession = useSessions((s) => s.createSession)
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.id === activeSessionId) ?? null,
+    [sessions, activeSessionId]
+  )
+  const filesRoot = activeSession?.worktreePath ?? activeSession?.cwd ?? null
+
+  /** Per-worktree session stats: total sessions tied to it + how many are
+   *  in an active state (thinking/generating). Drives the WorktreeItem
+   *  marker so the user sees at a glance which worktrees have agents
+   *  working in them right now. */
+  const worktreeStats = useMemo(() => {
+    const map = new Map<string, { count: number; active: number }>()
+    for (const s of sessions) {
+      const key = s.worktreePath ?? s.cwd
+      const existing = map.get(key) ?? { count: 0, active: 0 }
+      existing.count += 1
+      if (s.state === 'thinking' || s.state === 'generating') existing.active += 1
+      map.set(key, existing)
+    }
+    return map
+  }, [sessions])
 
   const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
   const orchestraTeams = useOrchestra((s) => s.teams)
@@ -101,8 +126,8 @@ export default function Sidebar() {
   const setOrchestraActiveTeam = useOrchestra((s) => s.setActiveTeam)
 
   const [showCreate, setShowCreate] = useState(false)
-  const [projectsOpen, setProjectsOpen] = useState(true)
   const [worktreesOpen, setWorktreesOpen] = useState(true)
+  const [filesOpen, setFilesOpen] = useState(true)
   const [orchestraOpen, setOrchestraOpen] = useState(true)
   const [agentsOpen, setAgentsOpen] = useState(true)
   const [agentFilter, setAgentFilter] = useState('')
@@ -268,41 +293,6 @@ export default function Sidebar() {
               </div>
             )}
 
-            {/* PROJECTS */}
-            <SectionHeader
-              open={projectsOpen}
-              onToggle={() => setProjectsOpen((v) => !v)}
-              label="Projects"
-              action={
-                <button
-                  type="button"
-                  onClick={() => void addProject()}
-                  className="flex h-5 w-5 items-center justify-center rounded text-text-4 transition-colors hover:bg-bg-3 hover:text-text-1"
-                  title="open project"
-                  aria-label="open project"
-                >
-                  <Plus size={12} strokeWidth={1.75} />
-                </button>
-              }
-            />
-            {projectsOpen && (
-              <div className="mb-3 flex flex-col gap-0.5 px-1">
-                {projects.map((p) => {
-                  const active = p.path === currentPath
-                  return (
-                    <ProjectItem
-                      key={p.path}
-                      project={p}
-                      active={active}
-                      onSelect={() => void setCurrent(p.path)}
-                      onRemove={() => void removeProject(p.path)}
-                      onCopyPath={() => copyToClipboard(p.path)}
-                    />
-                  )
-                })}
-              </div>
-            )}
-
             {currentPath && (
               <>
                 {/* WORKTREES */}
@@ -339,20 +329,23 @@ export default function Sidebar() {
                     ) : worktrees.length === 0 ? (
                       <div className="px-3 py-2 text-xs text-text-4">no worktrees</div>
                     ) : (
-                      worktrees.map((wt) => (
-                        <WorktreeItem
-                          key={wt.path}
-                          worktree={wt}
-                          hasSession={sessions.some(
-                            (s) => s.worktreePath === wt.path || s.cwd === wt.path
-                          )}
-                          onOpenSession={() =>
-                            void openSessionForWorktree(wt.path, wt.branch)
-                          }
-                          onRemove={() => void removeWorktree(wt.path)}
-                          onCopyPath={() => copyToClipboard(wt.path)}
-                        />
-                      ))
+                      worktrees.map((wt) => {
+                        const stats = worktreeStats.get(wt.path) ?? { count: 0, active: 0 }
+                        return (
+                          <WorktreeItem
+                            key={wt.path}
+                            worktree={wt}
+                            hasSession={stats.count > 0}
+                            sessionCount={stats.count}
+                            activeCount={stats.active}
+                            onOpenSession={() =>
+                              void openSessionForWorktree(wt.path, wt.branch)
+                            }
+                            onRemove={() => void removeWorktree(wt.path)}
+                            onCopyPath={() => copyToClipboard(wt.path)}
+                          />
+                        )
+                      })
                     )}
                   </div>
                 )}
@@ -360,97 +353,161 @@ export default function Sidebar() {
               </>
             )}
 
-            {/* ORCHESTRA */}
-            <SectionHeader
-              open={orchestraOpen}
-              onToggle={() => setOrchestraOpen((v) => !v)}
-              icon={<Network size={11} strokeWidth={1.75} className="text-text-4" />}
-              label="Orchestra"
-            />
-            {orchestraOpen && (
-              <div className="mb-3 flex flex-col gap-0.5 px-1">
-                <div className="mb-1 px-2 py-1 text-center font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-status-thinking">
-                  developing
-                </div>
-                {!orchestraEnabled ? (
-                  <div className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs text-text-4 transition-colors hover:bg-bg-3 hover:text-text-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void setOrchestraSettings({ enabled: true })
-                        setOrchestraOverlayOpen(true)
+            {/* FILES — files of the active agent's worktree. Reroots
+                automatically when the user switches agents or worktrees;
+                clicking a file opens it in the editor pane (and reveals
+                the editor if it was hidden). */}
+            {activeSession && filesRoot && (
+              <>
+                <SectionHeader
+                  open={filesOpen}
+                  onToggle={() => setFilesOpen((v) => !v)}
+                  icon={<Files size={11} strokeWidth={1.75} className="text-text-4" />}
+                  label="Files"
+                />
+                {filesOpen && (
+                  <div
+                    className="mb-3 mx-1 overflow-hidden rounded-sm border border-border-soft bg-bg-2/40"
+                    style={{ height: 320 }}
+                  >
+                    <FileTree
+                      root={filesRoot}
+                      sessionId={activeSession.id}
+                      breadcrumb={null}
+                      onOpenFile={(p) => {
+                        // Open file → reveal the slide-panel editor →
+                        // focus CodeMirror on the next frame so the
+                        // buffer has time to mount before we hand it
+                        // focus. openEditor() flips the editor store's
+                        // own flag; useSlidePanel.open('editor') is what
+                        // actually reveals the right-side pane.
+                        void useEditor
+                          .getState()
+                          .openFile(p)
+                          .then(() => {
+                            useEditor.getState().openEditor()
+                            useSlidePanel.getState().open('editor')
+                            requestAnimationFrame(() => {
+                              getActiveView()?.focus()
+                            })
+                          })
                       }}
-                      className="flex flex-1 items-center gap-2 text-left"
-                      title="Enable Orchestra"
-                    >
-                      <Network size={14} strokeWidth={1.75} />
-                      <span className="flex-1 truncate">Orchestra</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void setOrchestraSettings({ enabled: true })
-                        setOrchestraOverlayOpen(true)
-                      }}
-                      className="hidden rounded-sm bg-bg-3 px-1.5 py-0.5 text-[10px] font-medium text-text-2 transition-colors hover:bg-accent-500/15 hover:text-accent-500 group-hover:inline-flex"
-                    >
-                      Enable
-                    </button>
+                    />
                   </div>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setOrchestraOverlayOpen(true)}
-                      className="group flex items-center gap-2 rounded-sm px-2 py-1 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
-                      title="Open Orchestra overlay"
-                    >
-                      <Network size={14} strokeWidth={1.75} />
-                      <span className="flex-1 truncate">Orchestra</span>
-                    </button>
-                    {orchestraTeams.length > 0 && (
-                      <>
-                        {orchestraTeams.slice(0, 4).map((t) => {
-                          const active = teamActivity.get(t.id) === true
-                          return (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => {
-                                setOrchestraActiveTeam(t.id)
-                                setOrchestraOverlayOpen(true)
-                              }}
-                              className="group flex items-center gap-2 rounded-sm py-1 pl-6 pr-2 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
-                              title={t.name}
-                            >
-                              <span
-                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                                  active
-                                    ? 'animate-pulse bg-accent-500'
-                                    : 'bg-text-4'
-                                }`}
-                                aria-hidden
-                              />
-                              <span className="flex-1 truncate">{t.name}</span>
-                            </button>
-                          )
-                        })}
-                        {orchestraTeams.length > 4 && (
-                          <div className="py-0.5 pl-6 pr-2 text-[10px] text-text-4">
-                            +{orchestraTeams.length - 4} more
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {orchestraAgents.length > 0 && (
-                      <div className="py-0.5 pl-6 pr-2 font-mono text-[10px] text-text-4">
-                        {orchestraAgents.length} agents · {orchestraRunningAgents} running
-                      </div>
-                    )}
-                  </>
                 )}
-              </div>
+              </>
             )}
+
+            {/* DEVELOPING ZONE — wraps the experimental Orchestrador surface
+                so users see at a glance that everything inside is still WIP. */}
+            <div
+              className={`df-fade-in relative mx-1 mb-3 rounded-sm border border-dashed bg-status-thinking/[0.03] p-1 pt-3 ${
+                orchestraRunningAgents > 0
+                  ? 'border-accent-500/40 shadow-[0_0_0_1px_rgba(99,102,241,0.18)]'
+                  : 'border-status-thinking/30'
+              }`}
+            >
+              <span className="absolute -top-2 left-2 flex items-center gap-1 bg-bg-2 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-status-thinking">
+                <Construction size={10} strokeWidth={1.75} className="text-status-thinking" />
+                <span>Developing</span>
+                <span
+                  className="ml-0.5 h-1 w-1 animate-pulse rounded-full bg-status-thinking"
+                  aria-hidden
+                />
+              </span>
+
+              <SectionHeader
+                open={orchestraOpen}
+                onToggle={() => setOrchestraOpen((v) => !v)}
+                icon={<Network size={11} strokeWidth={1.75} className="text-text-4" />}
+                label="Orchestrador"
+              />
+              {orchestraOpen && (
+                <div className="flex flex-col gap-0.5 px-1">
+                  {!orchestraEnabled ? (
+                    <div className="group flex items-center gap-2 rounded-sm px-2 py-1 text-xs text-text-4 transition-colors hover:bg-bg-3 hover:text-text-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void setOrchestraSettings({ enabled: true })
+                          setOrchestraOverlayOpen(true)
+                        }}
+                        className="flex flex-1 items-center gap-2 text-left"
+                        title="Enable Orchestrador"
+                      >
+                        <Network size={14} strokeWidth={1.75} />
+                        <span className="flex-1 truncate">Orchestrador</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void setOrchestraSettings({ enabled: true })
+                          setOrchestraOverlayOpen(true)
+                        }}
+                        className="hidden rounded-sm bg-bg-3 px-1.5 py-0.5 text-[10px] font-medium text-text-2 transition-colors hover:bg-accent-500/15 hover:text-accent-500 group-hover:inline-flex"
+                      >
+                        Enable
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setOrchestraOverlayOpen(true)}
+                        className="group flex items-center gap-2 rounded-sm px-2 py-1 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
+                        title="Open Orchestrador overlay"
+                      >
+                        <Network size={14} strokeWidth={1.75} />
+                        <span className="flex-1 truncate">Orchestrador</span>
+                      </button>
+                      {orchestraTeams.length === 0 ? (
+                        <div className="px-2 py-2 text-[11px] italic text-text-4">
+                          No teams yet — open the overlay to create one.
+                        </div>
+                      ) : (
+                        <>
+                          {orchestraTeams.slice(0, 4).map((t) => {
+                            const active = teamActivity.get(t.id) === true
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => {
+                                  setOrchestraActiveTeam(t.id)
+                                  setOrchestraOverlayOpen(true)
+                                }}
+                                className="group flex items-center gap-2 rounded-sm py-1 pl-6 pr-2 text-left text-xs text-text-2 transition-colors hover:bg-bg-3 hover:text-text-1"
+                                title={t.name}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                    active
+                                      ? 'animate-pulse bg-accent-500'
+                                      : 'bg-text-4'
+                                  }`}
+                                  aria-hidden
+                                />
+                                <span className="flex-1 truncate">{t.name}</span>
+                              </button>
+                            )
+                          })}
+                          {orchestraTeams.length > 4 && (
+                            <div className="py-0.5 pl-6 pr-2 text-[10px] text-text-4">
+                              +{orchestraTeams.length - 4} more
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {orchestraAgents.length > 0 && (
+                        <div className="py-0.5 pl-6 pr-2 font-mono text-[10px] text-text-4">
+                          {orchestraAgents.length} agents · {orchestraRunningAgents} running
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

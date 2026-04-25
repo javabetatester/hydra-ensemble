@@ -100,7 +100,7 @@ export default function ProvidersDialog(props: Props) {
       const o = window.api?.orchestra
       if (!o) {
         setTestStatus((s) => ({ ...s, [def.id]: 'error' }))
-        setTestError((s) => ({ ...s, [def.id]: 'Orchestra IPC unavailable in this build.' }))
+        setTestError((s) => ({ ...s, [def.id]: 'Orchestrador IPC unavailable in this build.' }))
         return
       }
       const result = await o.apiKey.test()
@@ -131,7 +131,7 @@ export default function ProvidersDialog(props: Props) {
     pushToast({
       kind: 'info',
       title: 'Re-checking Claude OAuth',
-      body: 'Orchestra will refresh the CLI session state.'
+      body: 'Orchestrador will refresh the CLI session state.'
     })
   }
 
@@ -143,7 +143,7 @@ export default function ProvidersDialog(props: Props) {
       }}
       role="dialog"
       aria-modal="true"
-      aria-label="Orchestra providers"
+      aria-label="Orchestrador providers"
     >
       <div
         className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden border border-border-mid bg-bg-2 shadow-pop"
@@ -166,7 +166,7 @@ export default function ProvidersDialog(props: Props) {
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           <p className="mb-4 text-[11px] leading-relaxed text-text-3">
-            Every Orchestra agent picks a provider. The default is{' '}
+            Every Orchestrador agent picks a provider. The default is{' '}
             <span className="font-mono text-text-2">claude-oauth</span> — it reuses your{' '}
             <code className="font-mono text-[10px]">claude</code> CLI login, no setup needed.
             Enable additional providers below to use them from the agent or team settings.

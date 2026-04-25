@@ -121,9 +121,9 @@ function FeatureFlagSection({
       <div className="rounded-sm border border-border-soft bg-bg-1 p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold text-text-1">Enable Orchestra mode (experimental)</div>
+            <div className="text-sm font-semibold text-text-1">Enable Orchestrador mode (experimental)</div>
             <p className="mt-1 text-[11px] leading-relaxed text-text-3">
-              Orchestra runs headless claude agents on tasks you submit.{' '}
+              Orchestrador runs headless claude agents on tasks you submit.{' '}
               <button type="button" onClick={onReadPrd} className="text-accent-400 hover:text-accent-200">Read the PRD</button>.
             </p>
           </div>
@@ -206,7 +206,7 @@ function ApiKeySection(p: ApiKeySectionProps) {
           Hydra already works with the <code className="font-mono text-[10px]">claude</code> CLI
           using OAuth. Those sessions talk to Claude via the interactive CLI and share the
           host&apos;s <code className="font-mono text-[10px]">~/.claude</code> credentials.
-          Orchestra agents run <strong className="text-text-2">headless</strong> — no interactive
+          Orchestrador agents run <strong className="text-text-2">headless</strong> — no interactive
           prompt, no OAuth flow — via the Claude Agent SDK, which needs an Anthropic API key from{' '}
           <span className="font-mono text-text-2">console.anthropic.com</span>. They&apos;re
           additive, not replacements.
@@ -395,7 +395,7 @@ function DangerZoneSection({
       </button>
       {open ? (
         <div className="mt-2 rounded-sm border border-status-error/40 bg-status-error/5 p-3">
-          <div className="text-sm font-semibold text-text-1">Delete all Orchestra data (teams, agents, message logs)</div>
+          <div className="text-sm font-semibold text-text-1">Delete all Orchestrador data (teams, agents, message logs)</div>
           <p className="mt-1 text-[11px] leading-relaxed text-text-3">
             This will remove {teamCount} team{teamCount === 1 ? '' : 's'}, every agent inside
             them, and clear the stored Anthropic API key. This cannot be undone.
@@ -439,7 +439,7 @@ function Switch({
 /** Greys out children when `disabled` and exposes a tooltip — used so every
  *  section except the feature-flag switch is inert while the flag is off. */
 function DisabledWrap({ disabled, children }: { disabled: boolean; children: React.ReactNode }) {
-  const tooltip = useMemo(() => (disabled ? 'Turn on Orchestra to configure' : undefined), [disabled])
+  const tooltip = useMemo(() => (disabled ? 'Turn on Orchestrador to configure' : undefined), [disabled])
   return (
     <div className={disabled ? 'pointer-events-none select-none opacity-50' : ''}
       title={tooltip} aria-disabled={disabled}>

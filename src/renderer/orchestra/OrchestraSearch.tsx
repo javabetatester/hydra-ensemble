@@ -270,7 +270,7 @@ export default function OrchestraSearch({ open, onClose }: Props): React.ReactEl
       onKeyDown={onKeyDown}
       role="dialog"
       aria-modal="true"
-      aria-label="Orchestra search"
+      aria-label="Orchestrador search"
     >
       <div
         className="mt-[20vh] w-[640px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border-mid bg-bg-2 shadow-2xl"

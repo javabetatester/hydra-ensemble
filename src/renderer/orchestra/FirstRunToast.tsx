@@ -109,7 +109,7 @@ export default function FirstRunToast(): ReactElement | null {
         </span>
         <div className="min-w-0 flex-1 pr-4">
           <div className="truncate text-sm font-semibold text-text-1">
-            New: Orchestra mode
+            New: Orchestrador mode
           </div>
           <div className="mt-1 text-[12px] leading-snug text-text-3">
             Run teams of headless claude agents on tasks. Alpha — opt in to try.
@@ -123,7 +123,7 @@ export default function FirstRunToast(): ReactElement | null {
           onClick={handleOpen}
           className="rounded border border-border-mid bg-bg-3 px-2.5 py-1 text-[12px] font-medium text-text-1 hover:bg-bg-1"
         >
-          Open Orchestra
+          Open Orchestrador
         </button>
         <button
           type="button"

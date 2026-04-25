@@ -109,7 +109,7 @@ export default function RouteExplain({ taskId }: Props) {
               Auto-routed to main agent
             </div>
             <div className="mt-0.5 text-text-3">
-              No trigger matched this task, so Orchestra sent it to the team
+              No trigger matched this task, so Orchestrador sent it to the team
               lead.
             </div>
           </div>

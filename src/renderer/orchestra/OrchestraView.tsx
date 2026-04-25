@@ -256,7 +256,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           users don't treat this as a finished product. */}
       <div
         role="note"
-        aria-label="Orchestra is in active development"
+        aria-label="Orchestrador is in active development"
         className="flex shrink-0 items-center justify-center gap-3 border-b border-status-thinking/60 bg-status-thinking/15 px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-status-thinking"
       >
         <span className="h-1.5 w-1.5 animate-ping rounded-full bg-status-thinking" />
@@ -281,7 +281,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           </button>
           <div className="flex items-center gap-2">
             <Network size={15} strokeWidth={1.75} className="text-accent-400" />
-            <span className="df-label text-sm font-semibold text-text-1">Orchestra</span>
+            <span className="df-label text-sm font-semibold text-text-1">Orchestrador</span>
           </div>
           {teams.length > 0 ? (
             <>
@@ -363,7 +363,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
               type="button"
               onClick={() => setSettingsOpen(true)}
               className="group relative flex h-7 w-7 items-center justify-center rounded-sm text-text-3 hover:bg-bg-3 hover:text-text-1"
-              aria-label="Orchestra settings"
+              aria-label="Orchestrador settings"
             >
               <Settings size={15} strokeWidth={1.75} />
               <HeaderTooltip label="Settings · Ctrl+," />

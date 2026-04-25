@@ -152,7 +152,7 @@ export default function TasksPanel() {
           New task
         </button>
         <span className="font-mono text-[10px] text-text-4">
-          Assign to anyone in the team — Auto-route lets Orchestra pick.
+          Assign to anyone in the team — Auto-route lets Orchestrador pick.
         </span>
       </div>
 

@@ -175,7 +175,7 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     <div
       className="flex h-7 w-full items-center justify-between gap-2 border-b border-border-soft bg-bg-2 px-3 py-1 text-[11px] text-text-3"
       role="navigation"
-      aria-label="Orchestra breadcrumb"
+      aria-label="Orchestrador breadcrumb"
     >
       {/* Left: breadcrumb trail */}
       <div className="flex min-w-0 items-center gap-1.5">
@@ -183,9 +183,9 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
           className="rounded-sm px-1 py-0.5 text-text-4 hover:text-text-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent-400"
           tabIndex={0}
           role="link"
-          aria-label="Orchestra"
+          aria-label="Orchestrador"
         >
-          Orchestra
+          Orchestrador
         </span>
 
         <ChevronRight
@@ -260,7 +260,7 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
             <div
               className="absolute right-0 top-full z-50 mt-1 w-[180px] rounded-sm border border-border-mid bg-bg-2 py-1 shadow-pop"
               role="menu"
-              aria-label="Orchestra view toggles"
+              aria-label="Orchestrador view toggles"
             >
               {VIEW_TOGGLES.map((t) => {
                 const on = flags[t.key]

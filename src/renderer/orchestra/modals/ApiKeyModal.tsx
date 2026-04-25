@@ -106,7 +106,7 @@ export default function ApiKeyModal({ open, onClose, blocking = false }: Props) 
     <Modal
       open={open}
       onClose={handleClose}
-      title="Anthropic API key for Orchestra"
+      title="Anthropic API key for Orchestrador"
       titleIcon={<Key size={14} strokeWidth={1.75} className="text-accent-400" />}
       maxWidth="max-w-md"
       closeOnBackdrop={!blocking}
@@ -130,7 +130,7 @@ export default function ApiKeyModal({ open, onClose, blocking = false }: Props) 
     >
         <div className="space-y-4">
           <div>
-            <h2 className="text-sm font-semibold text-text-1">Anthropic API key for Orchestra</h2>
+            <h2 className="text-sm font-semibold text-text-1">Anthropic API key for Orchestrador</h2>
             <p className="mt-1 text-[11px] leading-relaxed text-text-3">
               Separate from your <code className="font-mono text-[10px]">claude</code> CLI login.{' '}
               <button
@@ -143,7 +143,7 @@ export default function ApiKeyModal({ open, onClose, blocking = false }: Props) 
                 Hydra already works with the <code className="font-mono text-[10px]">claude</code>{' '}
                 CLI using OAuth. Those sessions talk to Claude via the interactive CLI and share
                 the host&apos;s <code className="font-mono text-[10px]">~/.claude</code>{' '}
-                credentials. Orchestra agents run <strong>headless</strong> — no interactive
+                credentials. Orchestrador agents run <strong>headless</strong> — no interactive
                 prompt, no OAuth flow — via the Claude Agent SDK, which needs an Anthropic API
                 key from{' '}
                 <a href={KEYS_URL} target="_blank" rel="noreferrer" className="text-accent-400 hover:text-accent-200">console.anthropic.com</a>

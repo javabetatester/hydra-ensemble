@@ -103,7 +103,7 @@ export default function OrchestraHelp({ open, onClose }: Props) {
   ]
 
   const keyboardShortcuts: ReadonlyArray<ShortcutRow> = [
-    { keys: [fmtShortcut('A', { shift: true })], description: 'Toggle Orchestra view.' },
+    { keys: [fmtShortcut('A', { shift: true })], description: 'Toggle Orchestrador view.' },
     { keys: [fmtShortcut('K')], description: 'Command palette.' },
     { keys: [fmtShortcut('D')], description: 'Back to classic dashboard.' },
     { keys: ['?'], description: 'This help.' }
