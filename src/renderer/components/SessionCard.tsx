@@ -315,6 +315,14 @@ export default function SessionCard({
               <span className="truncate">{formatModel(session.model)}</span>
             </span>
           ) : null}
+          {session.provider && session.provider !== 'claude' ? (
+            <span
+              className="ml-1 shrink-0 rounded-sm bg-bg-1 px-1 py-0 text-[9px] uppercase tracking-wider text-text-3"
+              title={`agent: ${session.provider}`}
+            >
+              {session.provider}
+            </span>
+          ) : null}
         </div>
         {changedAt ? (
           <span

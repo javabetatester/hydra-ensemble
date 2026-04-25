@@ -26,6 +26,75 @@ export interface PtyExitEvent {
 }
 
 // =============================================================================
+// Providers — which CLI backs the session
+// =============================================================================
+
+/** Identifier of the agent CLI a session runs under. */
+export type Provider = 'claude' | 'codex' | 'copilot'
+
+export interface ProviderSpec {
+  id: Provider
+  label: string
+  /** Binary name as installed on PATH. */
+  binary: string
+  /** Env var the CLI honors for its config root. */
+  configDirEnv: string
+  /** Env var for API key, when the CLI supports key-based auth.
+   *  undefined when the provider only auths via its own flow (e.g. gh). */
+  apiKeyEnv?: string
+  /** When true, the dialog shows a model dropdown. */
+  hasModelPicker: boolean
+  /** Default model id (passed via `--model` flag) when hasModelPicker. */
+  defaultModel?: string
+  /** Curated model options for the dropdown (raw ids). */
+  models?: string[]
+  /** Friendly hint shown under the picker explaining auth/setup. */
+  authHint: string
+}
+
+export const PROVIDER_SPECS: Record<Provider, ProviderSpec> = {
+  claude: {
+    id: 'claude',
+    label: 'Claude Code',
+    binary: 'claude',
+    configDirEnv: 'CLAUDE_CONFIG_DIR',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    hasModelPicker: true,
+    defaultModel: 'claude-opus-4-7',
+    models: [
+      'claude-opus-4-7',
+      'claude-opus-4-7[1m]',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5'
+    ],
+    authHint:
+      'Auths via Claude CLI browser flow by default. Set an API key to override.'
+  },
+  codex: {
+    id: 'codex',
+    label: 'OpenAI Codex',
+    binary: 'codex',
+    configDirEnv: 'CODEX_HOME',
+    apiKeyEnv: 'OPENAI_API_KEY',
+    hasModelPicker: true,
+    defaultModel: 'gpt-5',
+    models: ['gpt-5', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o3-mini'],
+    authHint:
+      'Requires OPENAI_API_KEY (set per session below) or `codex login` in the CLI.'
+  },
+  copilot: {
+    id: 'copilot',
+    label: 'GitHub Copilot',
+    binary: 'copilot',
+    configDirEnv: 'GH_CONFIG_DIR',
+    apiKeyEnv: undefined,
+    hasModelPicker: false,
+    authHint:
+      'Uses GitHub CLI auth (`gh auth login`). Fresh mode requires re-auth in the new isolated config dir.'
+  }
+}
+
+// =============================================================================
 // Sessions
 // =============================================================================
 
@@ -37,6 +106,12 @@ export interface SessionMeta {
   cwd: string
   worktreePath?: string
   branch?: string
+  /** Absolute path of the isolated config directory for this session.
+   *  Despite the historical name, this is shared by every provider — it's
+   *  the dir exported via the provider's `configDirEnv` (CLAUDE_CONFIG_DIR
+   *  for claude, CODEX_HOME for codex, GH_CONFIG_DIR for copilot) when the
+   *  session runs in fresh-config mode. Host-shared sessions still resolve
+   *  this to the host's claude dir for backward compat with persisted data. */
   claudeConfigDir: string
   createdAt: string
   ptyId: string
@@ -63,9 +138,16 @@ export interface SessionMeta {
   latestAssistantText?: string
   /** 'cli' (xterm) or 'visual' (rendered chat transcript). Defaults to 'cli'. */
   viewMode?: SessionViewMode
-  /** True when this session runs under its own isolated CLAUDE_CONFIG_DIR
-   *  (separate login, separate MCP state). Default false = shares host. */
+  /** True when this session runs under its own isolated config directory
+   *  (separate login, separate state). Default false = shares host. */
   isFreshConfig?: boolean
+  /** Which CLI this session is running. Defaults to 'claude' for
+   *  backward compat with sessions created before the multi-provider
+   *  refactor. */
+  provider?: Provider
+  /** Model id passed via --model. Undefined for providers without a
+   *  model picker (Copilot). */
+  providerModel?: string
 }
 
 export interface SessionUpdate {
@@ -97,10 +179,19 @@ export interface SessionCreateOptions {
   accentColor?: string
   /** UI mode the session opens in. Default 'cli'. */
   viewMode?: SessionViewMode
-  /** When true, spin up a dedicated CLAUDE_CONFIG_DIR for this session
-   *  (empty, isolated) so Claude prompts for a brand-new login instead of
+  /** When true, spin up a dedicated isolated config dir for this session
+   *  (empty) so the provider CLI prompts for a brand-new login instead of
    *  inheriting the host account. Default false. */
   freshConfig?: boolean
+  /** Which CLI to launch. Defaults to 'claude'. */
+  provider?: Provider
+  /** Model id passed to the CLI via `--model`. Ignored when the provider
+   *  has no model picker (e.g. copilot). */
+  model?: string
+  /** Optional API key for this session. When set, exported into the
+   *  PTY env as the provider's apiKeyEnv var (if it has one). Never
+   *  persisted to disk; lives only in the spawned process env. */
+  apiKey?: string
 }
 
 export type SessionCreateResult =

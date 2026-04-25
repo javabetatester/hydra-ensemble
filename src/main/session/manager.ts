@@ -5,7 +5,7 @@ import type { BrowserWindow } from 'electron'
 import type { PtyManager } from '../pty/manager'
 import type { AnalyzerManager } from '../pty/analyzer-manager'
 import type { JsonlManager } from '../claude/jsonl-manager'
-import { resolveClaudePath } from '../claude/resolve'
+import { resolveBinaryPath } from '../claude/resolve'
 import { safeSend } from '../lib/safeSend'
 import {
   createIsolatedSession,
@@ -13,14 +13,28 @@ import {
   getHostClaudeDir,
   getSessionEnvOverrides,
   type IsolatedSession
-} from '../claude/config-isolation'
+} from './config-isolation'
 import { getStore, patchStore } from '../store'
-import type {
-  SessionCreateOptions,
-  SessionCreateResult,
-  SessionMeta,
-  SessionUpdate
+import {
+  PROVIDER_SPECS,
+  type Provider,
+  type SessionCreateOptions,
+  type SessionCreateResult,
+  type SessionMeta,
+  type SessionUpdate
 } from '../../shared/types'
+
+/**
+ * POSIX-safe single-quoted shell escape. Wraps the input in single quotes
+ * and escapes any embedded single quote with the standard `'\''` dance.
+ * Good enough for env-var values we're piping through `export FOO=...`
+ * inside the bash launch line. Not used on Windows (no PTY launch path
+ * for the new providers there yet — they fall back to the not-found
+ * branch).
+ */
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
+}
 
 export interface SessionManagerDeps {
   pty: PtyManager
@@ -95,6 +109,16 @@ export class SessionManager {
     const ptyId = id
     const cwd = opts.cwd ?? opts.worktreePath ?? homedir()
     const name = opts.name?.trim() || `session-${this.sessions.size + 1}`
+    const provider: Provider = opts.provider ?? 'claude'
+    const spec = PROVIDER_SPECS[provider]
+    // Validate the requested model against the provider spec; fall back
+    // to the spec default when the renderer sends a stale id.
+    const model =
+      spec.hasModelPicker
+        ? (opts.model && spec.models?.includes(opts.model)
+            ? opts.model
+            : spec.defaultModel)
+        : undefined
 
     let isolated: IsolatedSession
     try {
@@ -106,7 +130,7 @@ export class SessionManager {
           worktreePath: opts.worktreePath,
           branch: opts.branch
         },
-        { freshConfig: opts.freshConfig === true }
+        { freshConfig: opts.freshConfig === true, provider }
       )
     } catch (err) {
       return { ok: false, error: `failed to create isolated config: ${(err as Error).message}` }
@@ -125,13 +149,16 @@ export class SessionManager {
       avatar: opts.avatar,
       accentColor: opts.accentColor,
       viewMode: opts.viewMode ?? 'cli',
-      isFreshConfig: isolated.isFreshConfig
+      isFreshConfig: isolated.isFreshConfig,
+      provider,
+      providerModel: model
     }
 
     const spawn = this.spawnFor(meta, {
       cols: opts.cols,
       rows: opts.rows,
-      shellOnly: opts.shellOnly
+      shellOnly: opts.shellOnly,
+      apiKey: opts.apiKey
     })
     if (!spawn.ok) {
       await destroyIsolatedSession(id).catch(() => {})
@@ -258,15 +285,11 @@ export class SessionManager {
 
   private spawnFor(
     meta: SessionMeta,
-    opts: { cols: number; rows: number; shellOnly?: boolean }
+    opts: { cols: number; rows: number; shellOnly?: boolean; apiKey?: string }
   ): { ok: true } | { ok: false; error: string } {
     const ptyId = meta.id
     const env = getSessionEnvOverrides({
-      sessionId: meta.id,
-      rootDir: `${homedir()}/.hydra-ensemble/sessions/${meta.id}`,
-      configDir: meta.claudeConfigDir,
-      metaPath: `${homedir()}/.hydra-ensemble/sessions/${meta.id}/meta.json`,
-      isFreshConfig: meta.isFreshConfig === true
+      sessionId: meta.id
     })
 
     const result = this.deps.pty.spawn({
@@ -285,36 +308,58 @@ export class SessionManager {
     })
     this.unsubscribers.set(ptyId, offData)
 
-    this.deps.jsonl?.start({
-      id: ptyId,
-      claudeConfigDir: meta.claudeConfigDir,
-      cwd: meta.cwd,
-      createdAt: meta.createdAt
-    })
+    // The JSONL watcher only understands Claude's transcript format. For
+    // codex / copilot it's a no-op — those sessions still spawn fine,
+    // they just don't surface tokens/cost (em-dashes in SessionCard,
+    // which already handles that case).
+    const provider: Provider = meta.provider ?? 'claude'
+    if (provider === 'claude') {
+      this.deps.jsonl?.start({
+        id: ptyId,
+        claudeConfigDir: meta.claudeConfigDir,
+        cwd: meta.cwd,
+        createdAt: meta.createdAt
+      })
+    }
 
     if (!opts.shellOnly) {
-      const claudePath = resolveClaudePath()
-      // Host-shared sessions `unset CLAUDE_CONFIG_DIR` to defeat any
-      // re-export done by the user's .bashrc / .zshrc after the shell
-      // sources its rc files. Fresh-config sessions instead `export` the
-      // isolated dir so the shell's rc file can't silently yank them
-      // back to the host login.
-      // No `exec` on purpose: when claude exits (intended /quit, OAuth
-      // browser flow, crash) the bash stays alive, prints the prompt,
-      // and the user can either type `claude` to re-enter or use the
-      // restart overlay.
-      // Pin to Opus 4.7. Hydra is an orchestrator for deep-reasoning
-      // work, so spawning every session on Opus is the intended UX —
-      // the CLI's account default sometimes resolves to Sonnet/Opus 4.6
-      // depending on the profile, and we don't want that drift. Users
-      // can still flip mid-session via `/model` inside the chat.
-      const claudeEnvPrefix =
-        meta.isFreshConfig === true
-          ? `export CLAUDE_CONFIG_DIR="${meta.claudeConfigDir}"`
-          : `unset CLAUDE_CONFIG_DIR`
-      const launch = claudePath
-        ? `${claudeEnvPrefix}; clear && "${claudePath}" --model claude-opus-4-7\r`
-        : `clear && echo "[hydra] claude binary not found in PATH"\r`
+      const spec = PROVIDER_SPECS[provider]
+      const binPath = resolveBinaryPath(spec.binary)
+      // Host-shared sessions `unset` the provider's config-dir env var
+      // to defeat any re-export done by the user's .bashrc / .zshrc
+      // after the shell sources its rc files. Fresh-config sessions
+      // instead `export` the isolated dir so the shell's rc file can't
+      // silently yank them back to the host login.
+      //
+      // No `exec` on purpose: when the agent exits (intended /quit,
+      // OAuth browser flow, crash) the bash stays alive, prints the
+      // prompt, and the user can either re-enter or use the restart
+      // overlay.
+      const envParts: string[] = []
+      if (meta.isFreshConfig === true) {
+        envParts.push(`export ${spec.configDirEnv}="${meta.claudeConfigDir}"`)
+      } else {
+        envParts.push(`unset ${spec.configDirEnv}`)
+      }
+      // API key is plumbed through opts (not in meta) — it's set on the
+      // spawn only, never persisted. Quote-escape so embedded special
+      // characters can't break out of the export.
+      if (opts.apiKey && spec.apiKeyEnv) {
+        envParts.push(`export ${spec.apiKeyEnv}=${shellQuote(opts.apiKey)}`)
+      }
+      // Pin Claude to Opus 4.7 by default. Hydra is an orchestrator for
+      // deep-reasoning work, so spawning every claude session on Opus
+      // is the intended UX — the CLI's account default sometimes
+      // resolves to Sonnet/Opus 4.6 depending on the profile, and we
+      // don't want that drift. Users can still flip mid-session via
+      // `/model` inside the chat. For other providers, model resolves
+      // from the spec default.
+      const model = meta.providerModel ?? spec.defaultModel
+      const modelFlag =
+        spec.hasModelPicker && model ? ` --model ${shellQuote(model)}` : ''
+      const launch = binPath
+        ? `${envParts.join('; ')}; clear && "${binPath}"${modelFlag}\r`
+        : `clear && echo "[hydra] ${spec.binary} binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)
       }, 350)

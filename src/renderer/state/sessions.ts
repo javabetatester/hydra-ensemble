@@ -151,7 +151,12 @@ export const useSessions = create<SessionsState>((set, get) => ({
       worktreePath: source.worktreePath,
       branch: source.branch,
       avatar: pickRandom(NFT_AVATAR_URLS),
-      accentColor: pickRandom(AGENT_COLORS)
+      accentColor: pickRandom(AGENT_COLORS),
+      // Preserve the agent CLI + model so a clone behaves like its source.
+      // API key is intentionally NOT carried over — keys are spawn-time
+      // only and never persisted, so we can't replay them.
+      provider: source.provider,
+      model: source.providerModel
     })
     if (!res.ok) {
       // eslint-disable-next-line no-console

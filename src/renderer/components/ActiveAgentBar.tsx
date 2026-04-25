@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { GitBranch, Folder, Edit3, RotateCw } from 'lucide-react'
+import { GitBranch, Folder, Edit3, RotateCw, Bot, Sparkles } from 'lucide-react'
 import type { SessionMeta } from '../../shared/types'
 import AgentAvatar from './AgentAvatar'
 import SessionStatePill from './SessionStatePill'
@@ -52,7 +52,22 @@ export default function ActiveAgentBar({ session, onRestart }: Props) {
       >
         <AgentAvatar session={session} size={26} />
         <div className="flex min-w-0 flex-col text-left leading-tight">
-          <span className="truncate text-sm font-semibold text-text-1">{session.name}</span>
+          <span className="flex min-w-0 items-center gap-1.5">
+            {session.provider && session.provider !== 'claude' ? (
+              <span
+                className="shrink-0 rounded-sm bg-bg-3 p-0.5 text-text-3"
+                title={`agent: ${session.provider}`}
+                aria-label={`agent: ${session.provider}`}
+              >
+                {session.provider === 'copilot' ? (
+                  <Bot size={11} strokeWidth={1.75} />
+                ) : (
+                  <Sparkles size={11} strokeWidth={1.75} />
+                )}
+              </span>
+            ) : null}
+            <span className="truncate text-sm font-semibold text-text-1">{session.name}</span>
+          </span>
           {session.description ? (
             <span className="truncate text-[11px] italic text-text-3">{session.description}</span>
           ) : (

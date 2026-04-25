@@ -10,11 +10,42 @@ import {
   MessageSquare,
   TerminalSquare,
   UserPlus,
-  UserCheck
+  UserCheck,
+  Bot,
+  Eye,
+  EyeOff,
+  KeyRound
 } from 'lucide-react'
 import { useProjects } from '../state/projects'
 import { useSessions } from '../state/sessions'
-import type { SessionViewMode, Worktree } from '../../shared/types'
+import {
+  PROVIDER_SPECS,
+  type Provider,
+  type SessionViewMode,
+  type Worktree
+} from '../../shared/types'
+
+const LAST_PROVIDER_KEY = 'hydra.lastProvider'
+
+const PROVIDER_ORDER: Provider[] = ['claude', 'codex', 'copilot']
+
+function readLastProvider(): Provider {
+  try {
+    const v = localStorage.getItem(LAST_PROVIDER_KEY)
+    if (v === 'claude' || v === 'codex' || v === 'copilot') return v
+  } catch {
+    // localStorage may be unavailable in some embed contexts; fall through
+  }
+  return 'claude'
+}
+
+function persistLastProvider(p: Provider): void {
+  try {
+    localStorage.setItem(LAST_PROVIDER_KEY, p)
+  } catch {
+    /* noop */
+  }
+}
 
 interface Props {
   open: boolean
@@ -47,6 +78,14 @@ export default function NewSessionDialog({ open, onClose }: Props) {
   const [showExplainer, setShowExplainer] = useState(false)
   const [viewMode, setViewMode] = useState<SessionViewMode>('cli')
   const [freshConfig, setFreshConfig] = useState(false)
+  const [provider, setProvider] = useState<Provider>(() => readLastProvider())
+  const providerSpec = PROVIDER_SPECS[provider]
+  const [model, setModel] = useState<string>(
+    () => PROVIDER_SPECS[readLastProvider()].defaultModel ?? ''
+  )
+  const [useApiKey, setUseApiKey] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [showApiKey, setShowApiKey] = useState(false)
 
   // Sync picked project with current when dialog opens
   useEffect(() => {
@@ -59,7 +98,26 @@ export default function NewSessionDialog({ open, onClose }: Props) {
     setNewWtBranch('')
     setViewMode('cli')
     setFreshConfig(false)
+    const last = readLastProvider()
+    setProvider(last)
+    setModel(PROVIDER_SPECS[last].defaultModel ?? '')
+    setUseApiKey(false)
+    setApiKey('')
+    setShowApiKey(false)
   }, [open, currentPath])
+
+  // When the provider changes, snap the model to its default and persist
+  // the choice so the next open of the dialog reflects the user's pick.
+  useEffect(() => {
+    persistLastProvider(provider)
+    setModel(PROVIDER_SPECS[provider].defaultModel ?? '')
+    // The api-key toggle only applies to providers that support keys —
+    // dropping back to a keyless provider (copilot) clears it implicitly.
+    if (!PROVIDER_SPECS[provider].apiKeyEnv) {
+      setUseApiKey(false)
+      setApiKey('')
+    }
+  }, [provider])
 
   // Refresh worktrees when project changes
   useEffect(() => {
@@ -92,13 +150,19 @@ export default function NewSessionDialog({ open, onClose }: Props) {
       // Resolve the cwd: worktree path overrides project path.
       const cwd = pickedWorktree?.path ?? pickedProject
       const branch = pickedWorktree?.branch
+      const trimmedKey = apiKey.trim()
+      const keyToSend =
+        useApiKey && providerSpec.apiKeyEnv && trimmedKey ? trimmedKey : undefined
       await createSession({
         cwd,
         worktreePath: pickedWorktree && !pickedWorktree.isMain ? pickedWorktree.path : undefined,
         branch,
         name: name.trim() || undefined,
         viewMode,
-        freshConfig
+        freshConfig,
+        provider,
+        model: providerSpec.hasModelPicker ? model : undefined,
+        apiKey: keyToSend
       })
       onClose()
     } finally {
@@ -392,9 +456,125 @@ export default function NewSessionDialog({ open, onClose }: Props) {
             </div>
           </div>
 
-          {/* Claude account — share the host login (default) or run this
-              session under an isolated CLAUDE_CONFIG_DIR so claude prompts
-              for a brand-new login. */}
+          {/* Provider — pick the agent CLI this session runs. The
+              dropdown immediately below switches available models. */}
+          <div>
+            <label className="df-label mb-1.5 block">agent</label>
+            <div className="grid grid-cols-3 gap-2">
+              {PROVIDER_ORDER.map((p) => {
+                const spec = PROVIDER_SPECS[p]
+                const sel = provider === p
+                const Icon =
+                  p === 'copilot' ? Bot : p === 'codex' ? Sparkles : Sparkles
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setProvider(p)}
+                    className={`flex flex-col items-start gap-1 rounded-sm border px-2.5 py-2 text-left transition ${
+                      sel
+                        ? 'border-accent-500 bg-accent-500/10'
+                        : 'border-border-soft bg-bg-1 hover:border-border-mid hover:bg-bg-3'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <Icon
+                        size={12}
+                        strokeWidth={1.75}
+                        className={sel ? 'text-accent-400' : 'text-text-3'}
+                      />
+                      <span className="text-xs font-semibold text-text-1">
+                        {spec.label}
+                      </span>
+                    </span>
+                    <span className="font-mono text-[10px] text-text-4">
+                      {spec.binary}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-1.5 text-[11px] leading-snug text-text-3">
+              {providerSpec.authHint}
+            </div>
+          </div>
+
+          {/* Model — only providers with a curated list show this. */}
+          {providerSpec.hasModelPicker && providerSpec.models ? (
+            <div>
+              <label className="df-label mb-1.5 block">model</label>
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full rounded-sm border border-border-mid bg-bg-1 px-2.5 py-1.5 font-mono text-sm text-text-1 focus:border-accent-500 focus:outline-none"
+              >
+                {providerSpec.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          {/* API key (chavinha) — only providers with an apiKeyEnv. The
+              key is exported into the spawn's PTY env and never written
+              to disk. Toggling off blanks the field on close. */}
+          {providerSpec.apiKeyEnv ? (
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
+                <span className="df-label">api key</span>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-2">
+                  <span className="text-text-4">use api key for this session</span>
+                  <input
+                    type="checkbox"
+                    checked={useApiKey}
+                    onChange={(e) => setUseApiKey(e.target.checked)}
+                    className="h-3 w-3 accent-accent-500"
+                  />
+                </label>
+              </div>
+              {useApiKey ? (
+                <div className="relative">
+                  <KeyRound
+                    size={12}
+                    strokeWidth={1.75}
+                    className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-text-4"
+                  />
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={`exported as ${providerSpec.apiKeyEnv}`}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-sm border border-border-mid bg-bg-1 pl-7 pr-9 py-1.5 font-mono text-sm text-text-1 placeholder:text-text-4 focus:border-accent-500 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey((v) => !v)}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
+                    title={showApiKey ? 'hide key' : 'show key'}
+                    aria-label={showApiKey ? 'hide key' : 'show key'}
+                  >
+                    {showApiKey ? (
+                      <EyeOff size={12} strokeWidth={1.75} />
+                    ) : (
+                      <Eye size={12} strokeWidth={1.75} />
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-sm border border-dashed border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-4">
+                  agent will inherit ambient auth (no per-session key)
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* Account — share the host login (default) or run this
+              session under an isolated config dir so the agent CLI
+              prompts for a brand-new login. */}
           <div>
             <label className="df-label mb-1.5 block">account</label>
             <div className="grid grid-cols-2 gap-2">
@@ -415,7 +595,7 @@ export default function NewSessionDialog({ open, onClose }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-text-1">global login</div>
                   <div className="mt-0.5 text-[11px] leading-snug text-text-3">
-                    shares <code className="font-mono text-[10px]">~/.claude</code> — same account, history and MCP state as your other sessions.
+                    inherits the host&apos;s ambient auth — same account, history and state as your other sessions.
                   </div>
                 </div>
               </button>
@@ -436,7 +616,9 @@ export default function NewSessionDialog({ open, onClose }: Props) {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold text-text-1">fresh account</div>
                   <div className="mt-0.5 text-[11px] leading-snug text-text-3">
-                    dedicated <code className="font-mono text-[10px]">CLAUDE_CONFIG_DIR</code> — claude asks for a new login on first launch.
+                    dedicated{' '}
+                    <code className="font-mono text-[10px]">{providerSpec.configDirEnv}</code>{' '}
+                    — agent asks for a new login on first launch.
                   </div>
                 </div>
               </button>

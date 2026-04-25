@@ -19,21 +19,22 @@ function isExecutable(p: string): boolean {
 }
 
 /**
- * Cross-OS resolution of the `claude` CLI binary.
- * Mirrors SessionManager.resolveClaudePath from the legacy Swift app.
+ * Cross-OS resolution of an agent CLI binary by name.
+ * Tries PATH, common per-OS install locations, then a login-shell
+ * `command -v` fallback so PATH from .zprofile/.bashrc is picked up.
  */
-export function resolveClaudePath(): string | null {
+export function resolveBinaryPath(binary: string): string | null {
   const home = homedir()
   const path = process.env['PATH'] ?? ''
   const parts = path.split(PATH_SEP).filter(Boolean)
-  const binName = process.platform === 'win32' ? 'claude.exe' : 'claude'
+  const binName = process.platform === 'win32' ? `${binary}.exe` : binary
 
   // 1. PATH lookup (also try .cmd on Windows for npm-shim installs)
   for (const dir of parts) {
     const candidate = join(dir, binName)
     if (isExecutable(candidate)) return candidate
     if (process.platform === 'win32') {
-      const cmdShim = join(dir, 'claude.cmd')
+      const cmdShim = join(dir, `${binary}.cmd`)
       if (isExecutable(cmdShim)) return cmdShim
     }
   }
@@ -42,26 +43,26 @@ export function resolveClaudePath(): string | null {
   const common: string[] = []
   if (process.platform === 'darwin') {
     common.push(
-      '/opt/homebrew/bin/claude',
-      '/usr/local/bin/claude',
-      join(home, '.claude/local/claude'),
-      join(home, '.local/bin/claude')
+      `/opt/homebrew/bin/${binary}`,
+      `/usr/local/bin/${binary}`,
+      join(home, `.claude/local/${binary}`),
+      join(home, `.local/bin/${binary}`)
     )
   } else if (process.platform === 'linux') {
     common.push(
-      '/usr/local/bin/claude',
-      '/usr/bin/claude',
-      join(home, '.local/bin/claude'),
-      join(home, '.claude/local/claude')
+      `/usr/local/bin/${binary}`,
+      `/usr/bin/${binary}`,
+      join(home, `.local/bin/${binary}`),
+      join(home, `.claude/local/${binary}`)
     )
   } else if (process.platform === 'win32') {
     const localAppData = process.env['LOCALAPPDATA']
     const appData = process.env['APPDATA']
     if (localAppData) {
-      common.push(join(localAppData, 'Programs', 'claude', 'claude.exe'))
+      common.push(join(localAppData, 'Programs', binary, `${binary}.exe`))
     }
     if (appData) {
-      common.push(join(appData, 'npm', 'claude.cmd'))
+      common.push(join(appData, 'npm', `${binary}.cmd`))
     }
   }
   for (const c of common) {
@@ -72,7 +73,7 @@ export function resolveClaudePath(): string | null {
   if (process.platform !== 'win32') {
     const shell = process.env['SHELL'] ?? '/bin/bash'
     try {
-      const out = spawnSync(shell, ['-l', '-c', 'command -v claude'], {
+      const out = spawnSync(shell, ['-l', '-c', `command -v ${binary}`], {
         encoding: 'utf8',
         timeout: 3000
       })
@@ -84,4 +85,12 @@ export function resolveClaudePath(): string | null {
   }
 
   return null
+}
+
+/**
+ * Cross-OS resolution of the `claude` CLI binary.
+ * Mirrors SessionManager.resolveClaudePath from the legacy Swift app.
+ */
+export function resolveClaudePath(): string | null {
+  return resolveBinaryPath('claude')
 }
