@@ -605,16 +605,22 @@ export default function NewSessionDialog({ open, onClose }: Props) {
                    whether the entered key is persisted to the vault. */}
           {providerSpec.apiKeyEnv ? (
             <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="df-label">api key</span>
-                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-text-2">
-                  <span className="text-text-4">use api key for this session</span>
+              {/* Header row — title left, toggle right. `min-w-0` +
+                  `shrink-0` + `whitespace-nowrap` on the toggle pieces
+                  so the row can't wrap and shift when the user clicks
+                  it. Checkbox sits BEFORE the text (consistent reading
+                  direction with the other check rows) so the visible
+                  hit-target doesn't move when toggled. */}
+              <div className="mb-1.5 flex min-w-0 items-center justify-between gap-2">
+                <span className="df-label shrink-0">api key</span>
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[11px] text-text-2">
                   <input
                     type="checkbox"
                     checked={useApiKey}
                     onChange={(e) => setUseApiKey(e.target.checked)}
-                    className="h-3 w-3 accent-accent-500"
+                    className="h-3 w-3 shrink-0 accent-accent-500"
                   />
+                  <span className="text-text-4">use for this session</span>
                 </label>
               </div>
               {/* Form is ALWAYS rendered so the user sees what they'll
