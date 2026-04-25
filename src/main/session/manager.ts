@@ -303,18 +303,17 @@ export class SessionManager {
       // browser flow, crash) the bash stays alive, prints the prompt,
       // and the user can either type `claude` to re-enter or use the
       // restart overlay.
-      // No `--model` flag — let the Claude CLI resolve its own default
-      // (whatever the user's account/profile picks). This keeps Hydra
-      // honest about user intent: if someone has configured sonnet as
-      // their default, opening a session in Hydra shouldn't silently
-      // override that to opus. Users can still flip mid-session via
-      // `/model` inside the chat.
+      // Pin to Opus 4.7. Hydra is an orchestrator for deep-reasoning
+      // work, so spawning every session on Opus is the intended UX —
+      // the CLI's account default sometimes resolves to Sonnet/Opus 4.6
+      // depending on the profile, and we don't want that drift. Users
+      // can still flip mid-session via `/model` inside the chat.
       const claudeEnvPrefix =
         meta.isFreshConfig === true
           ? `export CLAUDE_CONFIG_DIR="${meta.claudeConfigDir}"`
           : `unset CLAUDE_CONFIG_DIR`
       const launch = claudePath
-        ? `${claudeEnvPrefix}; clear && "${claudePath}"\r`
+        ? `${claudeEnvPrefix}; clear && "${claudePath}" --model claude-opus-4-7\r`
         : `clear && echo "[hydra] claude binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)
