@@ -143,7 +143,10 @@ export const SESSIONS_TOUR: Tour = {
       body:
         'Derived from the PTY byte stream by an analyzer (xterm 256-color, bracketed-paste, tool banners). States: idle · thinking · generating · userInput · needsAttention. No polling — every frame is a state decision.',
       placement: 'left',
-      skipIf: () => !hasSessions()
+      // No skipIf — first-time users won't have sessions yet, but the
+      // step still teaches what they'll see once they create one.
+      // Anchor resolution gracefully falls back to a centered card
+      // when the data-tour-id element doesn't exist in the DOM.
     },
     {
       anchor: 'session-avatar',
@@ -151,7 +154,10 @@ export const SESSIONS_TOUR: Tour = {
       body:
         'Each session gets a deterministic avatar derived from its id, plus an accent colour you can override. The avatar ring mirrors the state pill colour so you can track status across cards at a glance.',
       placement: 'left',
-      skipIf: () => !hasSessions()
+      // No skipIf — first-time users won't have sessions yet, but the
+      // step still teaches what they'll see once they create one.
+      // Anchor resolution gracefully falls back to a centered card
+      // when the data-tour-id element doesn't exist in the DOM.
     },
     {
       anchor: 'session-cost-tokens',
@@ -159,7 +165,10 @@ export const SESSIONS_TOUR: Tour = {
       body:
         '$x.xx is total spend pulled from Claude\'s JSONL. ↓ in / ↑ out are cumulative input/output tokens across every turn in this session — useful for "how much did this whole conversation cost me".',
       placement: 'left',
-      skipIf: () => !hasSessions()
+      // No skipIf — first-time users won't have sessions yet, but the
+      // step still teaches what they'll see once they create one.
+      // Anchor resolution gracefully falls back to a centered card
+      // when the data-tour-id element doesn't exist in the DOM.
     },
     {
       anchor: 'session-context-meter',
@@ -167,7 +176,10 @@ export const SESSIONS_TOUR: Tour = {
       body:
         'Different from tokens-in: this is just the LATEST turn\'s input footprint, i.e. how full the model\'s current view is. Colour shifts amber at 50%, orange at 75%, red at 90%. Claude defaults are 200K; Opus 1m-beta bumps to 1M.',
       placement: 'left',
-      skipIf: () => !hasSessions()
+      // No skipIf — first-time users won't have sessions yet, but the
+      // step still teaches what they'll see once they create one.
+      // Anchor resolution gracefully falls back to a centered card
+      // when the data-tour-id element doesn't exist in the DOM.
     },
     {
       anchor: null,

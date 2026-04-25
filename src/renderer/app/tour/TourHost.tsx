@@ -237,14 +237,19 @@ export default function TourHost() {
     >
       {scrim}
 
-      {/* Card */}
+      {/* Card. Bound to a viewport-relative max height so a step with a
+          long body never pushes the footer (back / next / done) below
+          the visible fold — that was the "toolkit step is unresponsive"
+          bug: the buttons existed but lived past CARD_MAX_H + overflow-
+          hidden, so clicks landed nowhere. The body scrolls; the footer
+          stays anchored at the bottom of the card. */}
       <div
         style={{
           position: 'fixed',
           top: cardPos.top,
           left: cardPos.left,
           width: CARD_W,
-          maxHeight: CARD_MAX_H
+          maxHeight: `min(${CARD_MAX_H}px, calc(100vh - 24px))`
         }}
         className="df-fade-in flex flex-col overflow-hidden border border-accent-500/40 bg-bg-2 shadow-pop"
       >
@@ -278,11 +283,11 @@ export default function TourHost() {
             <X size={12} strokeWidth={1.75} />
           </button>
         </div>
-        <div className="px-4 pt-2 pb-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-3">
           <h3 className="mb-1 text-sm font-semibold text-text-1">{step.title}</h3>
           <p className="text-[12px] leading-relaxed text-text-2">{step.body}</p>
         </div>
-        <div className="mt-auto flex items-center justify-between border-t border-border-soft bg-bg-1 px-3 py-2">
+        <div className="flex shrink-0 items-center justify-between border-t border-border-soft bg-bg-1 px-3 py-2">
           <div className="flex items-center gap-1">
             {tour.steps.map((_, i) => (
               <span
