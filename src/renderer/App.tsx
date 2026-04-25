@@ -370,9 +370,15 @@ export default function App() {
               minWidth: activePanel && !chatMinimized ? `${PANEL_WIDTH_MIN}px` : 0,
               maxWidth:
                 activePanel && !chatMinimized ? `${PANEL_WIDTH_MAX}px` : undefined,
-              opacity: activePanel ? 1 : 0,
+              // Opacity stays at 1 — the width-clip via overflow-hidden
+              // is what hides the pane. A fade would finish before the
+              // width animation does (different durations + different
+              // perceptual weights) and make the close feel abrupt
+              // because the user sees the panel "disappear" via opacity
+              // long before the geometry is fully closed.
+              opacity: 1,
               transition:
-                'width 520ms cubic-bezier(0.4, 0, 0.2, 1), min-width 520ms cubic-bezier(0.4, 0, 0.2, 1), opacity 420ms cubic-bezier(0.4, 0, 0.2, 1)'
+                'width 520ms cubic-bezier(0.4, 0, 0.2, 1), min-width 520ms cubic-bezier(0.4, 0, 0.2, 1)'
             }}
             aria-hidden={!activePanel}
           >
