@@ -172,15 +172,15 @@ export default function SessionPane({ session, visible }: Props) {
     })
 
     // Resize observer: debounced PAST the longest panel-toggle animation
-    // (280ms slide for the slide-pane, 280ms width for Ctrl+Q sessions
-    // hide, 200ms width for Ctrl+T drawer) so the ResizeObserver doesn't
-    // fire mid-animation and trigger an xterm refit that visually
-    // "flicks" the terminal as it adjusts to intermediate sizes. With
-    // a 320ms debounce, repeated mid-animation ticks just reset the
-    // timer; the actual fit + PTY resize only happens once after the
-    // motion settles. Clamped so we never tell the PTY "cols=1" when
-    // the container is momentarily collapsed (which would make claude
-    // wrap one character per line).
+    // (editor/dashboard slide-pane is 520ms, Ctrl+Q sessions is 280ms,
+    // Ctrl+T drawer is 200ms) so the ResizeObserver doesn't fire
+    // mid-animation and trigger an xterm refit that visually "flicks"
+    // the terminal as it adjusts to intermediate sizes. With a 560ms
+    // debounce, repeated mid-animation ticks just reset the timer; the
+    // actual fit + PTY resize only happens once after the motion
+    // settles. Clamped so we never tell the PTY "cols=1" when the
+    // container is momentarily collapsed (which would make claude wrap
+    // one character per line).
     let resizeTimer: ReturnType<typeof setTimeout> | null = null
     const ro = new ResizeObserver(() => {
       const w = container.clientWidth
@@ -193,7 +193,7 @@ export default function SessionPane({ session, visible }: Props) {
         const cols = Math.max(20, term.cols)
         const rows = Math.max(5, term.rows)
         void window.api.pty.resize(ptyId, cols, rows)
-      }, 320)
+      }, 560)
     })
     ro.observe(container)
 
