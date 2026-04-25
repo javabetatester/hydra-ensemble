@@ -372,7 +372,7 @@ export default function App() {
                 activePanel && !chatMinimized ? `${PANEL_WIDTH_MAX}px` : undefined,
               opacity: activePanel ? 1 : 0,
               transition:
-                'width 520ms cubic-bezier(0.32, 0.72, 0, 1), min-width 520ms cubic-bezier(0.32, 0.72, 0, 1), opacity 380ms cubic-bezier(0.32, 0.72, 0, 1)'
+                'width 520ms cubic-bezier(0.4, 0, 0.2, 1), min-width 520ms cubic-bezier(0.4, 0, 0.2, 1), opacity 420ms cubic-bezier(0.4, 0, 0.2, 1)'
             }}
             aria-hidden={!activePanel}
           >
