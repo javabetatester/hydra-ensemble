@@ -50,8 +50,15 @@ function ensureBridgeWired(): void {
 /**
  * Register IPC handlers for the editor file-system bridge. Channel names
  * match the `api.editor` surface declared in `src/shared/types.ts`.
+ *
+ * `getExtraRoots` lets the editor escape the $HOME-only sandbox for folders
+ * the user opened explicitly via the OS dialog (their registered projects).
+ * It's resolved per-call so newly-added projects work without re-wiring.
  */
-export function registerEditorIpc(fs: EditorFs): void {
+export function registerEditorIpc(
+  fs: EditorFs,
+  getExtraRoots: () => readonly string[] = () => []
+): void {
   ipcMain.handle('editor:readFile', (_evt, path: string) => fs.readFile(path))
   ipcMain.handle('editor:listDir', (_evt, path: string) => fs.listDir(path))
   ipcMain.handle(
@@ -62,7 +69,10 @@ export function registerEditorIpc(fs: EditorFs): void {
   ipcMain.handle(
     'editor:findInFiles',
     (_evt, payload: { cwd: string; query: string; opts?: FindOptions }) =>
-      findInFiles(payload.cwd, payload.query, payload.opts ?? {})
+      findInFiles(payload.cwd, payload.query, {
+        ...(payload.opts ?? {}),
+        extraRoots: getExtraRoots()
+      })
   )
   ipcMain.handle(
     'editor:replaceInFiles',
@@ -74,7 +84,7 @@ export function registerEditorIpc(fs: EditorFs): void {
         payload.cwd,
         payload.query,
         payload.replacement,
-        payload.opts ?? {}
+        { ...(payload.opts ?? {}), extraRoots: getExtraRoots() }
       )
   )
   ipcMain.handle('editor:claudeDirs', (_evt, cwd: string | null) => fs.claudeDirs(cwd))

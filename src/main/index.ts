@@ -57,7 +57,12 @@ function setupServices(): void {
   projectService = new ProjectService()
   toolkitService = new ToolkitService()
   notificationService = new NotificationService()
-  editorFs = new EditorFs()
+  // Resolved per-call so projects added later are picked up without a
+  // service rewire. The editor sandbox accepts paths under $HOME plus
+  // these consented project roots.
+  editorFs = new EditorFs({
+    getExtraRoots: () => projectService.list().map((p) => p.path)
+  })
   keyVault = new KeyVault({
     filePath: defaultVaultPath(app.getPath('userData')),
     safeStorage
@@ -238,7 +243,7 @@ app.whenReady().then(async () => {
   registerProjectIpc(projectService)
   registerToolkitIpc(toolkitService)
   registerNotifyIpc(notificationService)
-  registerEditorIpc(editorFs)
+  registerEditorIpc(editorFs, () => projectService.list().map((p) => p.path))
   registerQuickTermIpc(quickTermService)
   registerKeysIpc(keyVault)
 
