@@ -1,69 +1,87 @@
 import { create } from 'zustand'
 import type { ClaudeSessionSummary } from '../../shared/types'
 
-interface ClaudeSessionsState {
-  /** Sessions for the project at `projectPath`. Empty when no project is
-   *  active or when the project has no prior Claude sessions on disk. */
+interface ProjectSessions {
   sessions: ClaudeSessionSummary[]
-  /** The path the current `sessions` list was loaded for. Used by the UI
-   *  to detect a stale list while a refresh is in flight after a project
-   *  switch. */
-  loadedFor: string | null
   loading: boolean
   error: string | null
-  /** Reload the list for `projectPath`. Pass null to clear. */
-  refresh: (projectPath: string | null) => Promise<void>
-  /** Spawn a new Hydra session that runs `claude --resume <sessionId>`.
-   *  Returns true on success so the UI can dismiss the row optimistically. */
+}
+
+interface ClaudeSessionsState {
+  /** Per-project session data, keyed by project path. */
+  byProject: Record<string, ProjectSessions>
+  /** Get sessions for a specific project (returns stable defaults if not loaded). */
+  forProject: (projectPath: string) => ProjectSessions
+  /** Load/reload the session list for a specific project. */
+  refresh: (projectPath: string) => Promise<void>
+  /** Resume a session from a specific project. */
   resume: (projectPath: string, sessionId: string) => Promise<boolean>
 }
 
-export const useClaudeSessions = create<ClaudeSessionsState>((set) => ({
-  sessions: [],
-  loadedFor: null,
-  loading: false,
-  error: null,
+const EMPTY: ProjectSessions = { sessions: [], loading: false, error: null }
+
+export const useClaudeSessions = create<ClaudeSessionsState>((set, get) => ({
+  byProject: {},
+
+  forProject: (projectPath) => {
+    return get().byProject[projectPath] ?? EMPTY
+  },
 
   refresh: async (projectPath) => {
-    if (!projectPath) {
-      set({ sessions: [], loadedFor: null, loading: false, error: null })
-      return
-    }
-    if (!window.api?.claudeSessions) {
-      set({ sessions: [], loadedFor: projectPath, loading: false, error: null })
-      return
-    }
-    set({ loading: true, error: null })
+    if (!projectPath) return
+    if (!window.api?.claudeSessions) return
+
+    set((prev) => ({
+      byProject: {
+        ...prev.byProject,
+        [projectPath]: {
+          ...(prev.byProject[projectPath] ?? EMPTY),
+          loading: true,
+          error: null
+        }
+      }
+    }))
+
     try {
       const sessions = await window.api.claudeSessions.list(projectPath)
-      set({ sessions, loadedFor: projectPath, loading: false })
+      set((prev) => ({
+        byProject: {
+          ...prev.byProject,
+          [projectPath]: { sessions, loading: false, error: null }
+        }
+      }))
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      set({ sessions: [], loadedFor: projectPath, loading: false, error: message })
+      set((prev) => ({
+        byProject: {
+          ...prev.byProject,
+          [projectPath]: { sessions: [], loading: false, error: message }
+        }
+      }))
     }
   },
 
   resume: async (projectPath, sessionId) => {
-    if (!window.api?.claudeSessions) {
-      set({ error: 'claudeSessions API not available' })
-      return false
-    }
+    if (!window.api?.claudeSessions) return false
     try {
       const result = await window.api.claudeSessions.resume(projectPath, sessionId)
-      if (!result.ok) {
-        set({ error: result.error })
-        return false
-      }
-      // Drop the resumed session from the list optimistically — it's
-      // now active, and the next refresh will confirm via the active-
-      // sessions filter.
-      set((prev) => ({
-        sessions: prev.sessions.filter((s) => s.sessionId !== sessionId)
-      }))
+      if (!result.ok) return false
+      // Drop the resumed session optimistically
+      set((prev) => {
+        const current = prev.byProject[projectPath]
+        if (!current) return prev
+        return {
+          byProject: {
+            ...prev.byProject,
+            [projectPath]: {
+              ...current,
+              sessions: current.sessions.filter((s) => s.sessionId !== sessionId)
+            }
+          }
+        }
+      })
       return true
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      set({ error: message })
+    } catch {
       return false
     }
   }

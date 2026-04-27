@@ -4,24 +4,12 @@ import { useClaudeSessions } from '../../state/claude-sessions'
 import { useSessions } from '../../state/sessions'
 import { relativeTime } from '../../lib/time'
 
-/**
- * Inline list of past Claude Code sessions for a project, rendered
- * inside the project row (not as a standalone sidebar section). Shows
- * title, relative time, branch, message count, and a Resume button.
- *
- * Renamed from "Claude Sessions" to "Agent Sessions" in the UI, but
- * the filename stays for import stability.
- */
-
 interface Props {
   projectPath: string
 }
 
 export default function AgentSessionsList({ projectPath }: Props): ReactNode {
-  const sessions = useClaudeSessions((s) => s.sessions)
-  const loading = useClaudeSessions((s) => s.loading)
-  const loadedFor = useClaudeSessions((s) => s.loadedFor)
-  const error = useClaudeSessions((s) => s.error)
+  const { sessions, loading, error } = useClaudeSessions((s) => s.forProject(projectPath))
   const refresh = useClaudeSessions((s) => s.refresh)
   const resume = useClaudeSessions((s) => s.resume)
 
@@ -29,16 +17,15 @@ export default function AgentSessionsList({ projectPath }: Props): ReactNode {
     (s) => s.sessions.filter((sess) => (sess.provider ?? 'claude') === 'claude').length
   )
 
+  // Load on mount and when projectPath changes
   useEffect(() => {
     void refresh(projectPath)
   }, [projectPath, refresh])
 
+  // Re-fetch when active claude session count changes (a session may have ended)
   useEffect(() => {
     void refresh(projectPath)
   }, [claudeSessionCount, projectPath, refresh])
-
-  const isStale = loadedFor !== projectPath && loading
-  const visible = isStale ? [] : sessions
 
   return (
     <div className="flex flex-col gap-0.5 pl-4">
@@ -68,16 +55,16 @@ export default function AgentSessionsList({ projectPath }: Props): ReactNode {
 
       {error ? (
         <div className="px-2 py-1 text-[10px] text-status-attention">{error}</div>
-      ) : loading && visible.length === 0 ? (
+      ) : loading && sessions.length === 0 ? (
         <div className="px-2 py-1 text-[10px] text-text-4">loading…</div>
-      ) : visible.length === 0 ? (
+      ) : sessions.length === 0 ? (
         <div className="px-2 py-1 text-[10px] text-text-4">no previous sessions</div>
       ) : (
         <div
           className="df-scroll overflow-y-auto"
           style={{ maxHeight: 5 * 40 }}
         >
-          {visible.map((session) => (
+          {sessions.map((session) => (
             <div
               key={session.sessionId}
               className="group flex items-start gap-1.5 rounded-sm px-2 py-1 text-left text-[11px] text-text-2 transition-colors hover:bg-bg-3"
