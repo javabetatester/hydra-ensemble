@@ -101,6 +101,7 @@ export default function Sidebar() {
   const activeSessionId = useSessions((s) => s.activeId)
   const setActiveSession = useSessions((s) => s.setActive)
   const createSession = useSessions((s) => s.createSession)
+  const lastActiveByProject = useSessions((s) => s.lastActiveByProject)
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
     [sessions, activeSessionId]
@@ -165,6 +166,13 @@ export default function Sidebar() {
   const toggleProjectExpanded = (path: string): void => {
     expandProject(expandedProject === path ? null : path)
   }
+
+  // When the active project changes (e.g. via Ctrl+Tab), sync the accordion.
+  useEffect(() => {
+    if (currentPath) {
+      expandProject(currentPath)
+    }
+  }, [currentPath, expandProject])
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -311,6 +319,16 @@ export default function Sidebar() {
                             onSelect={() => {
                               void setCurrent(p.path)
                               expandProject(p.path)
+                              // Restore last active session for this project
+                              const remembered = lastActiveByProject[p.path]
+                              if (remembered && sessions.some((s) => s.id === remembered)) {
+                                setActiveSession(remembered)
+                              } else {
+                                const fallback = [...sessions].reverse().find(
+                                  (s) => s.cwd === p.path || s.worktreePath === p.path
+                                )
+                                if (fallback) setActiveSession(fallback.id)
+                              }
                             }}
                             onRemove={() => void removeProject(p.path)}
                             onCopyPath={() => copyToClipboard(p.path)}

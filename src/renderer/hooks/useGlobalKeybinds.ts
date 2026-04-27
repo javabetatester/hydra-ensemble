@@ -21,7 +21,7 @@ export interface GlobalKeybindDeps {
   createSession: (opts: { cwd?: string }) => Promise<unknown>
   destroySession: (id: string) => Promise<void>
   activeId: string | null
-  sessions: ReadonlyArray<{ id: string }>
+  sessions: ReadonlyArray<{ id: string; cwd: string; worktreePath?: string }>
   setActive: (id: string) => void
   togglePanelFor: (id: PanelKind) => void
   setDrawerOpen: (next: (v: boolean) => boolean) => void
@@ -30,6 +30,11 @@ export interface GlobalKeybindDeps {
   contextCwd: string | null
   setPaletteOpen: (next: (v: boolean) => boolean) => void
   setHelpOpen: (next: (v: boolean) => boolean) => void
+  /** Project cycling */
+  projects: ReadonlyArray<{ path: string }>
+  currentProjectPath: string | null
+  setCurrentProject: (path: string) => Promise<void>
+  lastActiveByProject: Record<string, string>
 }
 
 export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
@@ -50,7 +55,11 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
     toggleTerminals,
     contextCwd,
     setPaletteOpen,
-    setHelpOpen
+    setHelpOpen,
+    projects,
+    currentProjectPath,
+    setCurrentProject,
+    lastActiveByProject
   } = deps
 
   const overrides = useKeybinds((s) => s.overrides)
@@ -58,6 +67,22 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
   const setBind = useKeybinds((s) => s.setBind)
 
   useEffect(() => {
+    /** Restore the last session the user interacted with in `projectPath`.
+     *  Falls back to the most recent session in the array if no memory exists. */
+    const switchToProjectSession = (projectPath: string): void => {
+      // 1. Check remembered session
+      const remembered = lastActiveByProject[projectPath]
+      if (remembered && sessions.some((s) => s.id === remembered)) {
+        setActive(remembered)
+        return
+      }
+      // 2. Fallback: last session in the list belonging to this project
+      const fallback = [...sessions].reverse().find(
+        (s) => s.cwd === projectPath || s.worktreePath === projectPath
+      )
+      if (fallback) setActive(fallback.id)
+    }
+
     const handlers: Record<string, () => void> = {
       'session.new': () => showSpawn(),
       'session.quickSpawn': () =>
@@ -76,6 +101,22 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
         const i = sessions.findIndex((s) => s.id === activeId)
         const prev = sessions[(i - 1 + sessions.length) % sessions.length]
         if (prev) setActive(prev.id)
+      },
+      'project.next': () => {
+        if (projects.length < 2) return
+        const i = projects.findIndex((p) => p.path === currentProjectPath)
+        const next = projects[(i + 1) % projects.length]
+        if (!next) return
+        void setCurrentProject(next.path)
+        switchToProjectSession(next.path)
+      },
+      'project.prev': () => {
+        if (projects.length < 2) return
+        const i = projects.findIndex((p) => p.path === currentProjectPath)
+        const prev = projects[(i - 1 + projects.length) % projects.length]
+        if (!prev) return
+        void setCurrentProject(prev.path)
+        switchToProjectSession(prev.path)
       },
       'panel.terminals': () => toggleTerminals(),
       'drawer.projects': () => setDrawerOpen((v) => !v),
@@ -218,6 +259,10 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
     toggleOrchestra,
     setDrawerOpen,
     setPaletteOpen,
-    setHelpOpen
+    setHelpOpen,
+    projects,
+    currentProjectPath,
+    setCurrentProject,
+    lastActiveByProject
   ])
 }

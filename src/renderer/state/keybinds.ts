@@ -24,6 +24,10 @@ export const ACTIONS: Action[] = [
   { id: 'session.next', label: 'Next session', group: 'Sessions', default: 'mod+]' },
   { id: 'session.prev', label: 'Previous session', group: 'Sessions', default: 'mod+[' },
 
+  // Projects
+  { id: 'project.next', label: 'Next project', group: 'Projects', default: 'mod+tab' },
+  { id: 'project.prev', label: 'Previous project', group: 'Projects', default: 'mod+shift+tab' },
+
   // Panels
   { id: 'panel.terminals', label: 'Terminals panel', group: 'Panels', default: 'mod+backquote' },
   { id: 'drawer.projects', label: 'Projects drawer', group: 'Panels', default: 'mod+t' },

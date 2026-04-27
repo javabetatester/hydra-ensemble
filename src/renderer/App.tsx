@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRight,
   Terminal as TerminalIcon
 } from 'lucide-react'
 import SessionPane from './components/SessionPane'
@@ -135,6 +136,7 @@ export default function App() {
   const rightColumnWidth = useRightColumnSize((s) => s.width)
   const setRightColumnWidth = useRightColumnSize((s) => s.setWidth)
   const rightPanelHidden = useRightPanel((s) => s.hidden)
+  const toggleRightPanel = useRightPanel((s) => s.toggle)
   const toolkitHeight = useToolkitSize((s) => s.height)
   const setToolkitHeight = useToolkitSize((s) => s.setHeight)
   const toolkitExpanded = useToolkitSize((s) => s.expanded)
@@ -174,6 +176,11 @@ export default function App() {
   // Global keybind dispatcher extracted to `hooks/useGlobalKeybinds`.
   // All the routing logic + capture-phase listener + xterm-textarea
   // bypass + session-jump lives there now.
+  const projectsList = useProjects((s) => s.projects)
+  const currentProjectPath = useProjects((s) => s.currentPath)
+  const setCurrentProject = useProjects((s) => s.setCurrent)
+  const lastActiveByProject = useSessions((s) => s.lastActiveByProject)
+
   useGlobalKeybinds({
     orchestraEnabled,
     toggleOrchestra,
@@ -191,7 +198,11 @@ export default function App() {
     toggleTerminals,
     contextCwd,
     setPaletteOpen,
-    setHelpOpen
+    setHelpOpen,
+    projects: projectsList,
+    currentProjectPath,
+    setCurrentProject,
+    lastActiveByProject
   })
 
   return (
@@ -315,6 +326,14 @@ export default function App() {
               active={terminalsVisible}
               onClick={toggleTerminals}
               dataTourId="header-terminals"
+            />
+            <HeaderButton
+              icon={<PanelRight size={13} strokeWidth={1.75} />}
+              label="sessions"
+              shortcut={fmtShortcut('Q')}
+              active={!rightPanelHidden}
+              onClick={toggleRightPanel}
+              dataTourId="header-sessions"
             />
             <HeaderButton
               icon={<HelpCircle size={13} strokeWidth={1.75} />}
