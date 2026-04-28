@@ -72,16 +72,16 @@ export class ProjectService {
     this.window = win
   }
 
-  /** All known projects, most recently opened first. */
+  /** All known projects, in stable insertion order (most recently added first). */
   list(): ProjectMeta[] {
-    return [...this.store.read()].sort((a, b) =>
-      b.lastOpenedAt.localeCompare(a.lastOpenedAt)
-    )
+    return [...this.store.read()]
   }
 
   /** The most recently opened project, or null when none are tracked. */
   current(): ProjectMeta | null {
-    return this.list()[0] ?? null
+    const all = this.store.read()
+    if (all.length === 0) return null
+    return [...all].sort((a, b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt))[0] ?? null
   }
 
   /**
@@ -118,10 +118,13 @@ export class ProjectService {
    * `project:changed` event to renderers. No-op if the path isn't known.
    */
   setCurrent(path: string): void {
-    const existing = this.store.read().find((p) => p.path === path)
-    if (!existing) return
-    const updated: ProjectMeta = { ...existing, lastOpenedAt: new Date().toISOString() }
-    const next = [updated, ...this.store.read().filter((p) => p.path !== path)]
+    const all = this.store.read()
+    const idx = all.findIndex((p) => p.path === path)
+    if (idx < 0) return
+    // Update timestamp in-place — don't reorder the array.
+    const next = all.map((p, i) =>
+      i === idx ? { ...p, lastOpenedAt: new Date().toISOString() } : p
+    )
     this.store.write(next)
     this.notifyChange()
   }

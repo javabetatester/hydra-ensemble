@@ -1,12 +1,14 @@
 import { readFile, realpath, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, sep } from 'node:path'
 import { findInFiles } from './find-in-files'
 
 export interface ReplaceOptions {
   caseSensitive?: boolean
   wholeWord?: boolean
   regex?: boolean
+  /** Project roots considered safe besides $HOME. See FindOptions. */
+  extraRoots?: readonly string[]
 }
 
 export interface ReplaceResult {
@@ -35,9 +37,9 @@ export async function replaceInFiles(
   if (query.length === 0) return { ok: false, error: 'empty query' }
   try {
     const resolvedCwd = await realpath(cwd)
-    const home = await realpath(homedir())
-    if (!resolvedCwd.startsWith(home)) {
-      return { ok: false, error: 'cwd outside home directory' }
+    const allowed = await isUnderAllowedRoot(resolvedCwd, opts.extraRoots ?? [])
+    if (!allowed) {
+      return { ok: false, error: 'cwd outside allowed roots' }
     }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
@@ -103,4 +105,34 @@ function buildRegex(query: string, opts: ReplaceOptions): RegExp | null {
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+async function isUnderAllowedRoot(
+  resolved: string,
+  extraRoots: readonly string[]
+): Promise<boolean> {
+  let home: string
+  try {
+    home = await realpath(homedir())
+  } catch {
+    home = homedir()
+  }
+  if (containsPath(home, resolved)) return true
+  for (const root of extraRoots) {
+    if (!isAbsolute(root)) continue
+    let canonical: string
+    try {
+      canonical = await realpath(root)
+    } catch {
+      canonical = root
+    }
+    if (containsPath(canonical, resolved)) return true
+  }
+  return false
+}
+
+function containsPath(root: string, candidate: string): boolean {
+  if (candidate === root) return true
+  const norm = root.endsWith(sep) ? root : root + sep
+  return candidate.startsWith(norm)
 }

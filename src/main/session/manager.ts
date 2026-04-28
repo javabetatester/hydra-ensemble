@@ -37,6 +37,12 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`
 }
 
+/** Defense-in-depth UUID check before splicing a session id into the
+ *  shell launch command. The IPC layer validates too, but anything
+ *  reaching `--resume` must be a plain uuid even if we add another
+ *  caller later. */
+const RESUME_UUID_RE = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
+
 export interface SessionManagerDeps {
   pty: PtyManager
   analyzer?: AnalyzerManager
@@ -175,7 +181,8 @@ export class SessionManager {
       cols: opts.cols,
       rows: opts.rows,
       shellOnly: opts.shellOnly,
-      apiKey: resolvedKey
+      apiKey: resolvedKey,
+      resumeId: opts.resumeId
     })
     if (!spawn.ok) {
       await destroyIsolatedSession(id).catch(() => {})
@@ -335,7 +342,16 @@ export class SessionManager {
 
   private spawnFor(
     meta: SessionMeta,
-    opts: { cols: number; rows: number; shellOnly?: boolean; apiKey?: string }
+    opts: {
+      cols: number
+      rows: number
+      shellOnly?: boolean
+      apiKey?: string
+      /** When set on a `claude` session, splice `--resume <id>` into the
+       *  launch command so the spawned CLI continues an existing
+       *  conversation instead of opening a new one. */
+      resumeId?: string
+    }
   ): { ok: true } | { ok: false; error: string } {
     const ptyId = meta.id
     const env = getSessionEnvOverrides({
@@ -408,8 +424,18 @@ export class SessionManager {
       // and Copilot omit it (they pick their default internally).
       const model = meta.providerModel ?? spec.defaultModel
       const modelFlag = model ? ` --model ${shellQuote(model)}` : ''
+      // --resume is Claude-only and requires a sane UUID. We re-validate
+      // here because this method is the last hop before the id reaches
+      // a shell command — any mistake upstream is contained.
+      let resumeFlag = ''
+      if (opts.resumeId && provider === 'claude') {
+        if (!RESUME_UUID_RE.test(opts.resumeId)) {
+          return { ok: false, error: `invalid resume session id: ${opts.resumeId}` }
+        }
+        resumeFlag = ` --resume ${shellQuote(opts.resumeId)}`
+      }
       const launch = binPath
-        ? `${envParts.join('; ')}; clear && "${binPath}"${modelFlag}\r`
+        ? `${envParts.join('; ')}; clear && "${binPath}"${resumeFlag}${modelFlag}\r`
         : `clear && echo "[hydra] ${spec.binary} binary not found in PATH"\r`
       setTimeout(() => {
         this.deps.pty.write(ptyId, launch)

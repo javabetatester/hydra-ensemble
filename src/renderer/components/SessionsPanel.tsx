@@ -1,4 +1,4 @@
-import { Plus, Activity, RefreshCw, Inbox } from 'lucide-react'
+import { Plus, Activity, RefreshCw, Inbox, Folder } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useSessions } from '../state/sessions'
 import { useSpawnDialog } from '../state/spawn'
@@ -180,21 +180,54 @@ export default function SessionsPanel() {
         </div>
       )
     }
+
+    // Group sessions by project (cwd)
+    const groups = new Map<string, SessionMeta[]>()
+    for (const s of filtered) {
+      const key = s.worktreePath ?? s.cwd
+      const bucket = groups.get(key)
+      if (bucket) bucket.push(s)
+      else groups.set(key, [s])
+    }
+    const groupEntries = Array.from(groups.entries())
+    const multipleGroups = groupEntries.length > 1
+
     return (
       <div className="flex flex-col gap-1.5">
-        {filtered.map((s) => {
-          const realIndex = sessions.findIndex((x) => x.id === s.id)
+        {groupEntries.map(([projectPath, items], gi) => {
+          const label = projectPath.split('/').filter(Boolean).pop() || projectPath
           return (
-            <SessionCard
-              key={s.id}
-              session={s}
-              index={realIndex + 1}
-              active={s.id === activeId}
-              onClick={() => setActive(s.id)}
-              onDestroy={() => destroy(s.id)}
-              onEdit={() => setEditing(s)}
-              onClone={() => void clone(s.id)}
-            />
+            <div key={projectPath} className="flex flex-col gap-1.5">
+              {multipleGroups && (
+                <>
+                  {gi > 0 && (
+                    <div className="my-1 border-t border-border-soft" />
+                  )}
+                  <div className="flex items-center gap-1.5 px-1 py-0.5">
+                    <Folder size={11} strokeWidth={1.75} className="shrink-0 text-text-4" />
+                    <span className="truncate text-[10px] font-medium text-text-3" title={projectPath}>
+                      {label}
+                    </span>
+                    <span className="shrink-0 font-mono text-[9px] text-text-4">{items.length}</span>
+                  </div>
+                </>
+              )}
+              {items.map((s) => {
+                const realIndex = sessions.findIndex((x) => x.id === s.id)
+                return (
+                  <SessionCard
+                    key={s.id}
+                    session={s}
+                    index={realIndex + 1}
+                    active={s.id === activeId}
+                    onClick={() => setActive(s.id)}
+                    onDestroy={() => destroy(s.id)}
+                    onEdit={() => setEditing(s)}
+                    onClone={() => void clone(s.id)}
+                  />
+                )
+              })}
+            </div>
           )
         })}
       </div>

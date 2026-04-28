@@ -23,6 +23,9 @@ interface SessionsState {
    *  are discarded — they came from a disposed analyzer generation and
    *  applying them would cross-contaminate the pill. */
   stateHighWater: Record<string, { generation: number; emittedAt: number }>
+  /** Maps project path → last session id the user interacted with in that
+   *  project. Used by Ctrl+Tab to restore the correct terminal. */
+  lastActiveByProject: Record<string, string>
   setSessions: (s: SessionMeta[]) => void
   setActive: (id: string | null) => void
   patchSession: (id: string, patch: Partial<SessionMeta>) => void
@@ -39,6 +42,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
   isCreating: false,
   unread: {},
   stateHighWater: {},
+  lastActiveByProject: {},
 
   setSessions: (sessions) => {
     // Defensive dedupe: if the backend stream or restore ever ships the
@@ -87,7 +91,14 @@ export const useSessions = create<SessionsState>((set, get) => ({
       if (!id) return { activeId: null }
       const nextUnread = { ...prev.unread }
       delete nextUnread[id]
-      return { activeId: id, unread: nextUnread }
+      // Track last active session per project so Ctrl+Tab can restore it
+      const session = prev.sessions.find((s) => s.id === id)
+      const nextMap = { ...prev.lastActiveByProject }
+      if (session) {
+        nextMap[session.cwd] = id
+        if (session.worktreePath) nextMap[session.worktreePath] = id
+      }
+      return { activeId: id, unread: nextUnread, lastActiveByProject: nextMap }
     })
   },
 

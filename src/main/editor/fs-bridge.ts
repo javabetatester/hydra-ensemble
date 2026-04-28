@@ -19,15 +19,18 @@ const MAX_FILE_BYTES = 5 * 1024 * 1024
 
 /**
  * Filesystem bridge for the in-app editor. All paths must be absolute and
- * must resolve (via realpath) to a location inside the user's home directory.
- * This keeps the editor scoped to user files in v1; later we may broaden the
- * allowlist for paths the user explicitly opens via a system dialog.
+ * must resolve (via realpath) to a location inside the user's home directory
+ * OR inside one of the project roots the user has explicitly registered via
+ * the OS open-directory dialog. The dialog is a consent boundary: if the
+ * user picked the folder themselves we trust them with it.
  */
 export class EditorFs {
   private readonly homeRoot: string
+  private readonly getExtraRoots: () => readonly string[]
 
-  constructor() {
+  constructor(opts: { getExtraRoots?: () => readonly string[] } = {}) {
     this.homeRoot = homedir()
+    this.getExtraRoots = opts.getExtraRoots ?? (() => [])
   }
 
   async readFile(path: string): Promise<FileContent> {
@@ -123,6 +126,17 @@ export class EditorFs {
     if (safe === this.homeRoot) {
       throw new Error('refusing to delete home root')
     }
+    for (const root of this.getExtraRoots()) {
+      let canonical: string
+      try {
+        canonical = await realpath(root)
+      } catch {
+        canonical = root
+      }
+      if (safe === canonical) {
+        throw new Error('refusing to delete a registered project root')
+      }
+    }
     await rm(safe, { recursive: true, force: true })
   }
 
@@ -172,8 +186,9 @@ export class EditorFs {
 
   /**
    * Validate that a path is absolute and resolves to a location inside the
-   * user's home directory. Returns the realpath (or the input if missing
-   * and `allowMissing` is true, since writeFile may create new files).
+   * user's home directory or one of the registered project roots. Returns
+   * the realpath (or the input if missing and `allowMissing` is true, since
+   * writeFile may create new files).
    */
   private async assertSafe(
     path: string,
@@ -192,11 +207,33 @@ export class EditorFs {
         throw err
       }
     }
-    const homeNorm = this.homeRoot.endsWith(sep) ? this.homeRoot : this.homeRoot + sep
-    if (resolved !== this.homeRoot && !resolved.startsWith(homeNorm)) {
-      throw new Error(`path is outside the user home: ${resolved}`)
+    if (await this.isUnderAllowedRoot(resolved)) {
+      return resolved
     }
-    return resolved
+    throw new Error(`path is outside the allowed roots: ${resolved}`)
+  }
+
+  private async isUnderAllowedRoot(resolved: string): Promise<boolean> {
+    if (this.containsPath(this.homeRoot, resolved)) return true
+    for (const root of this.getExtraRoots()) {
+      if (!isAbsolute(root)) continue
+      // Best-effort canonicalisation. A project on a now-missing mount
+      // shouldn't break safety checks for unrelated paths.
+      let canonical: string
+      try {
+        canonical = await realpath(root)
+      } catch {
+        canonical = root
+      }
+      if (this.containsPath(canonical, resolved)) return true
+    }
+    return false
+  }
+
+  private containsPath(root: string, candidate: string): boolean {
+    if (candidate === root) return true
+    const norm = root.endsWith(sep) ? root : root + sep
+    return candidate.startsWith(norm)
   }
 
   /**

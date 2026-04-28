@@ -11,6 +11,7 @@ import { ToolkitService } from './toolkit/manager'
 import { NotificationService } from './notifications/manager'
 import { EditorFs } from './editor/fs-bridge'
 import { QuickTermService } from './quickTerm/manager'
+import { ClaudeSessionsReader } from './claude-sessions'
 import { registerPtyIpc } from './ipc/pty'
 import { registerClaudeIpc } from './ipc/claude'
 import { registerSessionIpc } from './ipc/session'
@@ -21,6 +22,7 @@ import { registerNotifyIpc } from './ipc/notify'
 import { registerEditorIpc } from './ipc/editor'
 import { registerQuickTermIpc } from './ipc/quickTerm'
 import { registerKeysIpc } from './ipc/keys'
+import { registerClaudeSessionsIpc } from './ipc/claude-sessions'
 import { KeyVault, defaultVaultPath } from './keys/vault'
 import { OrchestraCore } from './orchestra'
 import { registerOrchestraIpc, broadcastOrchestraEvent } from './ipc/orchestra'
@@ -46,6 +48,7 @@ let notificationService!: NotificationService
 let editorFs!: EditorFs
 let quickTermService!: QuickTermService
 let keyVault!: KeyVault
+let claudeSessionsReader!: ClaudeSessionsReader
 let orchestraCore!: OrchestraCore
 
 function setupServices(): void {
@@ -57,7 +60,12 @@ function setupServices(): void {
   projectService = new ProjectService()
   toolkitService = new ToolkitService()
   notificationService = new NotificationService()
-  editorFs = new EditorFs()
+  // Resolved per-call so projects added later are picked up without a
+  // service rewire. The editor sandbox accepts paths under $HOME plus
+  // these consented project roots.
+  editorFs = new EditorFs({
+    getExtraRoots: () => projectService.list().map((p) => p.path)
+  })
   keyVault = new KeyVault({
     filePath: defaultVaultPath(app.getPath('userData')),
     safeStorage
@@ -69,6 +77,8 @@ function setupServices(): void {
     jsonl: jsonlManager,
     keyVault
   })
+
+  claudeSessionsReader = new ClaudeSessionsReader()
 
   quickTermService = new QuickTermService(ptyManager)
 
@@ -238,9 +248,10 @@ app.whenReady().then(async () => {
   registerProjectIpc(projectService)
   registerToolkitIpc(toolkitService)
   registerNotifyIpc(notificationService)
-  registerEditorIpc(editorFs)
+  registerEditorIpc(editorFs, () => projectService.list().map((p) => p.path))
   registerQuickTermIpc(quickTermService)
   registerKeysIpc(keyVault)
+  registerClaudeSessionsIpc(claudeSessionsReader, sessionManager)
 
   const win = createWindow()
   initUpdater(win)

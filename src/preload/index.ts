@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   ChangedFile,
   ClaudeCommandsPayload,
+  ClaudeSessionSummary,
   DirEntry,
   HydraEnsembleApi,
   FileChangedEvent,
@@ -154,6 +155,12 @@ const api: HydraEnsembleApi = {
     setCurrent: (path: string) => ipcRenderer.invoke('project:setCurrent', path),
     current: () => ipcRenderer.invoke('project:current'),
     onChange: (handler) => on<ProjectMeta[]>('project:changed', handler)
+  },
+  claudeSessions: {
+    list: (projectPath: string): Promise<ClaudeSessionSummary[]> =>
+      ipcRenderer.invoke('claudeSessions:list', { projectPath }),
+    resume: (projectPath: string, sessionId: string) =>
+      ipcRenderer.invoke('claudeSessions:resume', { projectPath, sessionId })
   },
   toolkit: {
     list: (): Promise<ToolkitItem[]> => ipcRenderer.invoke('toolkit:list'),

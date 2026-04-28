@@ -1,12 +1,18 @@
 import { spawn, type SpawnOptions } from 'node:child_process'
 import { homedir } from 'node:os'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, sep } from 'node:path'
 import { realpath } from 'node:fs/promises'
 
 export interface FindOptions {
   caseSensitive?: boolean
   wholeWord?: boolean
   regex?: boolean
+  /**
+   * Additional roots that are considered safe (besides the user's home).
+   * Populated from the registered project list — a folder the user picked
+   * via the OS dialog is treated as consented territory.
+   */
+  extraRoots?: readonly string[]
 }
 
 export interface FindMatch {
@@ -45,12 +51,13 @@ export async function findInFiles(
   opts: FindOptions = {}
 ): Promise<{ ok: true; value: FindResult } | { ok: false; error: string }> {
   if (!isAbsolute(cwd)) return { ok: false, error: 'cwd must be absolute' }
-  // Safety — keep searches within the user's home, same policy as the
-  // editor fs bridge.
+  // Safety — keep searches within the user's home or any project root
+  // they explicitly registered. Same policy as the editor fs bridge.
   try {
     const resolved = await realpath(cwd)
-    if (!resolved.startsWith(homedir())) {
-      return { ok: false, error: 'cwd outside of home' }
+    const allowed = await isUnderAllowedRoot(resolved, opts.extraRoots ?? [])
+    if (!allowed) {
+      return { ok: false, error: 'cwd outside of allowed roots' }
     }
   } catch (err) {
     return { ok: false, error: (err as Error).message }
@@ -241,4 +248,28 @@ function joinCwd(cwd: string, rel: string): string {
   // also does. Handles the two forms grep emits.
   if (rel.startsWith('./')) rel = rel.slice(2)
   return cwd.endsWith('/') ? cwd + rel : cwd + '/' + rel
+}
+
+async function isUnderAllowedRoot(
+  resolved: string,
+  extraRoots: readonly string[]
+): Promise<boolean> {
+  if (containsPath(homedir(), resolved)) return true
+  for (const root of extraRoots) {
+    if (!isAbsolute(root)) continue
+    let canonical: string
+    try {
+      canonical = await realpath(root)
+    } catch {
+      canonical = root
+    }
+    if (containsPath(canonical, resolved)) return true
+  }
+  return false
+}
+
+function containsPath(root: string, candidate: string): boolean {
+  if (candidate === root) return true
+  const norm = root.endsWith(sep) ? root : root + sep
+  return candidate.startsWith(norm)
 }

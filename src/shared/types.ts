@@ -191,6 +191,11 @@ export interface SessionCreateOptions {
    *  Mutually exclusive with `apiKey` (which carries an ad-hoc key for
    *  this session that doesn't get saved). */
   apiKeyId?: string
+  /** Resume an existing Claude Code session by uuid. Adds `--resume <id>`
+   *  to the launch command. Only meaningful for `provider === 'claude'`;
+   *  ignored otherwise. The id MUST be a plain UUID — the spawn validates
+   *  it again before splicing into the shell command. */
+  resumeId?: string
 }
 
 // =============================================================================
@@ -378,6 +383,27 @@ export interface ProjectMeta {
   name: string
   lastOpenedAt: string
   repoRoot?: string
+}
+
+// =============================================================================
+// Claude session history (read from ~/.claude/projects/<encoded>/<uuid>.jsonl)
+// =============================================================================
+
+/** A previously-recorded Claude Code session for a project, suitable for
+ *  resuming via `claude --resume <id>`. The fields here are derived purely
+ *  from disk — Hydra doesn't persist its own copy. */
+export interface ClaudeSessionSummary {
+  /** UUID — both the filename of the JSONL and the value passed to --resume. */
+  sessionId: string
+  /** Truncated first user message, or empty string if none was found. */
+  title: string
+  /** mtime as ISO string; used to sort recency. */
+  mtime: string
+  /** Branch name read from the first user message's `gitBranch` field. */
+  gitBranch?: string
+  /** Number of user/assistant turns in the JSONL — useful for "1 message" vs.
+   *  "long conversation" hints. */
+  messageCount: number
 }
 
 // =============================================================================
@@ -573,6 +599,13 @@ export interface HydraEnsembleApi {
     setCurrent: (path: string) => Promise<void>
     current: () => Promise<ProjectMeta | null>
     onChange: (handler: (projects: ProjectMeta[]) => void) => () => void
+  }
+  claudeSessions: {
+    /** List all Claude Code sessions for a project, sorted recency-first. */
+    list: (projectPath: string) => Promise<ClaudeSessionSummary[]>
+    /** Spawn a new Hydra session that runs `claude --resume <sessionId>`
+     *  inside `projectPath`. Returns the new Hydra session's id. */
+    resume: (projectPath: string, sessionId: string) => Promise<SessionCreateResult>
   }
   toolkit: {
     list: () => Promise<ToolkitItem[]>

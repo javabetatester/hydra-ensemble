@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Plus,
   ChevronDown,
   ChevronRight,
+  Folder,
   GitBranch,
   Terminal,
   FolderPlus,
@@ -20,6 +21,8 @@ import { useOrchestra } from '../../orchestra/state/orchestra'
 import { getActiveView } from '../editor/CodeMirrorView'
 import WorktreeItem from './WorktreeItem'
 import CreateWorktreeDialog from './CreateWorktreeDialog'
+import AgentSessionsList from './ClaudeSessionsSection'
+import ProjectItem from './ProjectItem'
 import SessionStatePill from '../SessionStatePill'
 import AgentAvatar from '../AgentAvatar'
 import FileTree from '../editor/FileTree'
@@ -89,6 +92,8 @@ export default function Sidebar() {
   const loadingWorktrees = useProjects((s) => s.loadingWorktrees)
   const error = useProjects((s) => s.error)
   const addProject = useProjects((s) => s.addProject)
+  const setCurrent = useProjects((s) => s.setCurrent)
+  const removeProject = useProjects((s) => s.removeProject)
   const createWorktree = useProjects((s) => s.createWorktree)
   const removeWorktree = useProjects((s) => s.removeWorktree)
 
@@ -96,6 +101,7 @@ export default function Sidebar() {
   const activeSessionId = useSessions((s) => s.activeId)
   const setActiveSession = useSessions((s) => s.setActive)
   const createSession = useSessions((s) => s.createSession)
+  const lastActiveByProject = useSessions((s) => s.lastActiveByProject)
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeSessionId) ?? null,
     [sessions, activeSessionId]
@@ -126,6 +132,54 @@ export default function Sidebar() {
   const setOrchestraActiveTeam = useOrchestra((s) => s.setActiveTeam)
 
   const [showCreate, setShowCreate] = useState(false)
+  const [projectsOpen, setProjectsOpen] = useState(true)
+  /** Accordion: only one project expanded at a time. Null = all collapsed.
+   *  Switching uses a sequential animation: close current (250ms) → open new. */
+  const [expandedProject, setExpandedProject] = useState<string | null>(currentPath)
+  const pendingExpand = useRef<string | null>(null)
+  const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const expandProject = useCallback((path: string | null): void => {
+    // Clear any pending transition
+    if (expandTimer.current) {
+      clearTimeout(expandTimer.current)
+      expandTimer.current = null
+    }
+
+    if (path === expandedProject) return
+
+    if (expandedProject && path) {
+      // Sequential: close current first, then open new after animation
+      setExpandedProject(null)
+      pendingExpand.current = path
+      expandTimer.current = setTimeout(() => {
+        setExpandedProject(pendingExpand.current)
+        pendingExpand.current = null
+        expandTimer.current = null
+      }, 260)
+    } else {
+      // Simple open or close
+      setExpandedProject(path)
+    }
+  }, [expandedProject])
+
+  const toggleProjectExpanded = (path: string): void => {
+    expandProject(expandedProject === path ? null : path)
+  }
+
+  // When the active project changes (e.g. via Ctrl+Tab), sync the accordion.
+  useEffect(() => {
+    if (currentPath) {
+      expandProject(currentPath)
+    }
+  }, [currentPath, expandProject])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (expandTimer.current) clearTimeout(expandTimer.current)
+    }
+  }, [])
   const [worktreesOpen, setWorktreesOpen] = useState(true)
   const [filesOpen, setFilesOpen] = useState(true)
   // Orchestrador starts COLLAPSED on every app launch — same pattern
@@ -223,6 +277,75 @@ export default function Sidebar() {
           </div>
         ) : (
           <>
+            {/* PROJECTS — switcher between known projects */}
+            <SectionHeader
+              open={projectsOpen}
+              onToggle={() => setProjectsOpen((v) => !v)}
+              icon={<Folder size={11} strokeWidth={1.75} className="text-text-4" />}
+              label="Projects"
+              action={
+                <button
+                  type="button"
+                  onClick={() => void addProject()}
+                  className="flex h-5 w-5 items-center justify-center rounded text-text-4 transition-colors hover:bg-bg-3 hover:text-text-1"
+                  title="add project"
+                  aria-label="add project"
+                >
+                  <Plus size={12} strokeWidth={1.75} />
+                </button>
+              }
+            />
+            {projectsOpen && (
+              <div className="mb-3 flex flex-col gap-0.5 px-1">
+                {projects.map((p) => {
+                  const isActive = p.path === currentPath
+                  const isExpanded = expandedProject === p.path
+                  const ChevronIcon = isExpanded ? ChevronDown : ChevronRight
+                  return (
+                    <div key={p.path} className="flex flex-col">
+                      <div className="ml-2 flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => toggleProjectExpanded(p.path)}
+                          className="flex h-6 w-4 shrink-0 items-center justify-center text-text-4 transition-transform duration-200 hover:text-text-2"
+                          aria-label={isExpanded ? 'collapse project' : 'expand project'}
+                        >
+                          <ChevronIcon size={10} strokeWidth={1.75} />
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <ProjectItem
+                            project={p}
+                            active={isActive}
+                            onSelect={() => {
+                              void setCurrent(p.path)
+                              expandProject(p.path)
+                              // Restore last active session for this project
+                              const remembered = lastActiveByProject[p.path]
+                              if (remembered && sessions.some((s) => s.id === remembered)) {
+                                setActiveSession(remembered)
+                              } else {
+                                const fallback = [...sessions].reverse().find(
+                                  (s) => s.cwd === p.path || s.worktreePath === p.path
+                                )
+                                if (fallback) setActiveSession(fallback.id)
+                              }
+                            }}
+                            onRemove={() => void removeProject(p.path)}
+                            onCopyPath={() => copyToClipboard(p.path)}
+                          />
+                        </div>
+                      </div>
+                      <div className={`df-collapse ml-4 ${isExpanded ? 'df-collapse-open' : ''}`}>
+                        <div className="df-collapse-inner">
+                          <AgentSessionsList projectPath={p.path} />
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
             {/* ACTIVE AGENTS — sessions grouped by worktree/cwd */}
             <SectionHeader
               open={agentsOpen}
