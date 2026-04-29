@@ -57,8 +57,10 @@ import { Router, type RouterDeps } from './router'
 import { MessageLogStore } from './message-log'
 import { AgentHost, type DelegateRequestPayload } from './agent-host'
 import { getStore, patchStore } from '../store'
+import { generateTeamFromPrompt as runGenerator } from './team-generator'
 import type {
   Agent,
+  GenerateTeamInput,
   MessageLog,
   NewAgentInput,
   NewEdgeInput,
@@ -73,6 +75,7 @@ import type {
   SubmitTaskInput,
   Task,
   Team,
+  TeamExportV1,
   Trigger,
   UUID,
   UpdateAgentInput
@@ -492,6 +495,189 @@ export class OrchestraCore {
     await secretsClearApiKey()
     this.apiKey = null
     this.emit({ kind: 'apiKey.changed' })
+  }
+
+  // -------------------------------------------------------------- export/import
+
+  /**
+   * Build a self-contained JSON snapshot of a team: metadata, agents (with
+   * inlined soul/skills/triggers), edges, and the team CLAUDE.md. IDs are
+   * stripped — the importer generates fresh ones.
+   */
+  async exportTeam(teamId: UUID): Promise<TeamExportV1> {
+    const team = this.registry.getTeam(teamId)
+    if (!team) throw new Error('team not found')
+
+    const agents = this.registry.listAgents(teamId)
+    const edges = this.registry.listEdges(teamId)
+
+    let claudeMd = ''
+    try { claudeMd = await readTeamClaudeMd(team.slug) } catch { /* missing */ }
+
+    const exportAgents = await Promise.all(
+      agents.map(async (a) => {
+        let soul = ''
+        let skills: Skill[] = []
+        let triggers: Trigger[] = []
+        try { soul = await readSoul(team.slug, a.slug) } catch { /* missing */ }
+        try { skills = await readSkills(team.slug, a.slug) } catch { /* missing */ }
+        try { triggers = await readTriggers(team.slug, a.slug) } catch { /* missing */ }
+        return {
+          slug: a.slug,
+          name: a.name,
+          role: a.role,
+          description: a.description,
+          position: a.position,
+          color: a.color,
+          model: a.model,
+          maxTokens: a.maxTokens,
+          provider: a.provider,
+          isMain: a.id === team.mainAgentId,
+          soul,
+          skills,
+          // Strip trigger IDs — fresh UUIDs are generated on import.
+          triggers: triggers.map(({ id: _id, ...rest }) => rest)
+        }
+      })
+    )
+
+    // Resolve edge agent IDs → slugs for portability.
+    const idToSlug = new Map(agents.map((a) => [a.id, a.slug]))
+    const exportEdges = edges
+      .filter((e) => idToSlug.has(e.parentAgentId) && idToSlug.has(e.childAgentId))
+      .map((e) => ({
+        parentSlug: idToSlug.get(e.parentAgentId)!,
+        childSlug: idToSlug.get(e.childAgentId)!,
+        delegationMode: e.delegationMode
+      }))
+
+    return {
+      formatVersion: 1,
+      exportedAt: new Date().toISOString(),
+      team: {
+        name: team.name,
+        safeMode: team.safeMode,
+        defaultModel: team.defaultModel,
+        claudeMd,
+        canvas: team.canvas
+      },
+      agents: exportAgents,
+      edges: exportEdges
+    }
+  }
+
+  /**
+   * Provision a full team from an exported JSON snapshot. Creates team,
+   * agents, edges, and writes all config files. The caller must supply a
+   * `worktreePath` — it is never carried over from the export.
+   *
+   * Returns the newly created Team.
+   */
+  async importTeam(data: TeamExportV1, worktreePath: string): Promise<Team> {
+    if (data.formatVersion !== 1) {
+      throw new Error(`unsupported export version: ${data.formatVersion}`)
+    }
+    if (!Array.isArray(data.agents) || data.agents.length === 0) {
+      throw new Error('export contains no agents')
+    }
+
+    const team = await this.createTeam({
+      name: data.team.name,
+      worktreePath,
+      safeMode: data.team.safeMode,
+      defaultModel: data.team.defaultModel
+    })
+
+    // Write team-level CLAUDE.md if present.
+    if (data.team.claudeMd) {
+      await this.writeTeamClaudeMd(team.id, data.team.claudeMd)
+    }
+
+    // Sequential agent creation — mirrors TeamTemplatesDialog provisioning.
+    const slugToId = new Map<string, UUID>()
+    let mainAgentId: UUID | null = null
+
+    for (const agentDef of data.agents) {
+      const agent = await this.createAgent({
+        teamId: team.id,
+        position: agentDef.position,
+        name: agentDef.name,
+        role: agentDef.role,
+        description: agentDef.description,
+        model: agentDef.model,
+        color: agentDef.color,
+        preset: 'blank'
+      })
+
+      // Overwrite the blank preset files with the exported content.
+      await this.writeAgentSoul(agent.id, agentDef.soul)
+      if (agentDef.skills.length > 0) {
+        await this.writeAgentSkills(agent.id, agentDef.skills)
+      }
+      if (agentDef.triggers.length > 0) {
+        const withIds = agentDef.triggers.map((t) => ({
+          ...t,
+          id: randomUUID()
+        }))
+        await this.writeAgentTriggers(agent.id, withIds)
+      }
+
+      // Update optional fields not covered by createAgent.
+      if (agentDef.maxTokens !== 8192 || agentDef.provider) {
+        await this.updateAgent({
+          id: agent.id,
+          patch: {
+            ...(agentDef.maxTokens !== 8192 ? { maxTokens: agentDef.maxTokens } : {}),
+            ...(agentDef.provider ? { provider: agentDef.provider } : {})
+          }
+        })
+      }
+
+      slugToId.set(agentDef.slug, agent.id)
+      if (agentDef.isMain) mainAgentId = agent.id
+    }
+
+    // Create edges — silently skip unresolvable slugs.
+    for (const edgeDef of data.edges) {
+      const parentId = slugToId.get(edgeDef.parentSlug)
+      const childId = slugToId.get(edgeDef.childSlug)
+      if (!parentId || !childId) continue
+      try {
+        await this.createEdge({
+          teamId: team.id,
+          parentAgentId: parentId,
+          childAgentId: childId,
+          delegationMode: edgeDef.delegationMode
+        })
+      } catch { /* skip invalid edges (e.g. cycle) */ }
+    }
+
+    // Promote the designated main agent if it differs from the auto-promoted first agent.
+    if (mainAgentId) {
+      const current = this.registry.getTeam(team.id)
+      if (current && current.mainAgentId !== mainAgentId) {
+        await this.promoteMain(mainAgentId)
+      }
+    }
+
+    return this.registry.getTeam(team.id) ?? team
+  }
+
+  /**
+   * Ask Claude to design a team from a free-text user description. Returns
+   * a `TeamExportV1` proposal — does NOT persist anything. The caller is
+   * expected to feed the result into `importTeam()` if the user accepts it.
+   */
+  async generateTeamFromPrompt(input: GenerateTeamInput): Promise<TeamExportV1> {
+    if (!this.apiKey) {
+      throw new Error(
+        'ANTHROPIC_API_KEY required — open Providers to set one up'
+      )
+    }
+    return runGenerator(input.prompt, this.apiKey, {
+      maxAgents: input.maxAgents,
+      modelId: input.modelId
+    })
   }
 
   // ---------------------------------------------------------------- internals

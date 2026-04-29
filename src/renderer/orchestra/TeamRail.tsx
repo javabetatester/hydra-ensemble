@@ -6,7 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from 'react'
-import { Activity, ChevronRight, HelpCircle, Plus, Search, Settings, Trash2, Users } from 'lucide-react'
+import { Activity, ChevronRight, Download, HelpCircle, Plus, Search, Settings, Sparkles, Trash2, Upload, Users } from 'lucide-react'
 import type { SafeMode, Team, UUID } from '../../shared/orchestra'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import { useEditor } from '../state/editor'
@@ -95,6 +95,19 @@ export default function TeamRail() {
         { label: 'Rename', onSelect: () => beginRename(team) },
         sm('strict'), sm('prompt'), sm('yolo'),
         { label: 'Open team CLAUDE.md', onSelect: openClaudeMd },
+        {
+          label: 'Export team\u2026',
+          icon: <Download size={14} strokeWidth={1.75} />,
+          onSelect: () => {
+            void window.api.orchestra?.team.export(team.id).then((r) => {
+              if (r?.ok && r.value) {
+                window.dispatchEvent(
+                  new CustomEvent('orchestra:toast', { detail: `Exported to ${r.value}` })
+                )
+              }
+            })
+          }
+        },
         {
           label: 'Delete team',
           danger: true,
@@ -227,6 +240,16 @@ export default function TeamRail() {
           onClick={() => window.dispatchEvent(new CustomEvent('orchestra:new-team'))}
           className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs text-text-3 transition-colors hover:bg-bg-3 hover:text-accent-400">
           <Plus size={12} strokeWidth={1.75} /><span>New Team</span>
+        </button>
+        <button type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('orchestra:import-team'))}
+          className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs text-text-3 transition-colors hover:bg-bg-3 hover:text-accent-400">
+          <Upload size={12} strokeWidth={1.75} /><span>Import Team</span>
+        </button>
+        <button type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('orchestra:generate-team'))}
+          className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-left text-xs text-text-3 transition-colors hover:bg-bg-3 hover:text-accent-400">
+          <Sparkles size={12} strokeWidth={1.75} /><span>Generate from prompt</span>
         </button>
         <div className="mt-1 border-t border-border-soft pt-1">
           <button type="button"

@@ -28,14 +28,17 @@ import type {
   Worktree
 } from '../shared/types'
 import type {
+  GenerateTeamInput,
   NewAgentInput,
   NewEdgeInput,
   NewTeamInput,
   OrchestraEvent,
+  OrchestraResult,
   OrchestraSettings,
   SafeMode,
   SecretStorage,
   SubmitTaskInput,
+  TeamExportV1,
   UpdateAgentInput,
   UUID
 } from '../shared/orchestra'
@@ -92,6 +95,8 @@ const api: HydraEnsembleApi = {
     write: (sessionId, data) => ipcRenderer.invoke('pty:write', { sessionId, data }),
     resize: (sessionId, cols, rows) =>
       ipcRenderer.invoke('pty:resize', { sessionId, cols, rows }),
+    saveClipboardImage: (base64: string, mimeType: string): Promise<string> =>
+      ipcRenderer.invoke('pty:saveClipboardImage', { base64, mimeType }),
     onData: (handler) => on<PtyDataEvent>('pty:data', handler),
     onExit: (handler) => on<PtyExitEvent>('pty:exit', handler)
   },
@@ -242,7 +247,20 @@ const api: HydraEnsembleApi = {
       delete: (id: UUID) => ipcRenderer.invoke('orchestra:team.delete', { id }),
       readClaudeMd: (id: UUID) => ipcRenderer.invoke('orchestra:team.readClaudeMd', { id }),
       writeClaudeMd: (id: UUID, text: string) =>
-        ipcRenderer.invoke('orchestra:team.writeClaudeMd', { id, text })
+        ipcRenderer.invoke('orchestra:team.writeClaudeMd', { id, text }),
+      export: (id: UUID): Promise<OrchestraResult<string | null>> =>
+        ipcRenderer.invoke('orchestra:team.export', { id }),
+      importPick: (): Promise<OrchestraResult<TeamExportV1 | null>> =>
+        ipcRenderer.invoke('orchestra:team.importPick'),
+      importProvision: (
+        data: TeamExportV1,
+        worktreePath: string
+      ): Promise<OrchestraResult<unknown>> =>
+        ipcRenderer.invoke('orchestra:team.importProvision', { data, worktreePath }),
+      generateFromPrompt: (
+        input: GenerateTeamInput
+      ): Promise<OrchestraResult<TeamExportV1>> =>
+        ipcRenderer.invoke('orchestra:team.generateFromPrompt', input)
     },
     agent: {
       list: (teamId: UUID) => unwrapList('orchestra:agent.list', { teamId }),

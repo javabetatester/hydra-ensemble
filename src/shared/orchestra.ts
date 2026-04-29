@@ -247,6 +247,69 @@ export interface SubmitTaskInput {
 }
 
 // ---------------------------------------------------------------------------
+// Team generation from prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for the prompt-to-team generator. The output is a `TeamExportV1`
+ * that the renderer hands to `importProvision` if the user accepts it.
+ */
+export interface GenerateTeamInput {
+  /** Free-text description of the team the user wants. */
+  prompt: string
+  /** Cap on agents in the generated team. Default 6. */
+  maxAgents?: number
+  /** Model used to generate. Default `claude-sonnet-4-6`. */
+  modelId?: string
+}
+
+// ---------------------------------------------------------------------------
+// Team export / import
+// ---------------------------------------------------------------------------
+
+export interface TeamExportAgent {
+  slug: string
+  name: string
+  role: string
+  description: string
+  position: { x: number; y: number }
+  color?: string
+  model: string
+  maxTokens: number
+  provider?: AgentProvider
+  /** True when this agent was the team's mainAgent at export time. */
+  isMain: boolean
+  soul: string
+  skills: Skill[]
+  triggers: Array<Omit<Trigger, 'id'>>
+}
+
+export interface TeamExportEdge {
+  parentSlug: string
+  childSlug: string
+  delegationMode: DelegationMode
+}
+
+/**
+ * Self-contained snapshot of a team — agents, edges, and all config files
+ * inlined. Importable on any Hydra instance; IDs are regenerated, the user
+ * picks a new worktreePath.
+ */
+export interface TeamExportV1 {
+  formatVersion: 1
+  exportedAt: ISO
+  team: {
+    name: string
+    safeMode: SafeMode
+    defaultModel: string
+    claudeMd: string
+    canvas: { zoom: number; panX: number; panY: number }
+  }
+  agents: TeamExportAgent[]
+  edges: TeamExportEdge[]
+}
+
+// ---------------------------------------------------------------------------
 // Consistent result envelope — matches existing Hydra conventions
 // ---------------------------------------------------------------------------
 
