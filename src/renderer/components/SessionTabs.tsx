@@ -53,7 +53,7 @@ export default function SessionTabs() {
             <button
               type="button"
               onClick={() => destroy(s.id)}
-              className="flex h-4 w-4 items-center justify-center rounded text-text-4 opacity-0 transition hover:bg-bg-3 hover:text-status-attention group-hover:opacity-100"
+              className="df-hover-reveal flex h-4 w-4 items-center justify-center rounded text-text-4 hover:bg-bg-3 hover:text-status-attention group-hover:opacity-100"
               title="close session"
               aria-label="close session"
             >

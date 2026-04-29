@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Code2,
+  Eye,
+  EyeOff,
   FolderTree,
   HelpCircle,
   LayoutDashboard,
@@ -79,6 +81,7 @@ import HeaderButton from './app/HeaderButton'
 import Welcome from './app/Welcome'
 import TourHost from './app/tour/TourHost'
 import TourLauncher from './app/tour/TourLauncher'
+import { useUIPreferences } from './state/uiPreferences'
 // Side-effect import — the module registers built-in tours on load.
 import './app/tour/tours'
 
@@ -111,6 +114,15 @@ export default function App() {
 
   const chatMinimized = useSessionsUi((s) => s.chatMinimized)
   const toggleChatMinimized = useSessionsUi((s) => s.toggleChatMinimized)
+
+  // Zen-mode mirror: keep `<html data-zen-mode="...">` in sync with the
+  // persisted preference so `.df-hover-reveal` (globals.css) reads the
+  // right `--hover-reveal-base` token.
+  const zenMode = useUIPreferences((s) => s.zenMode)
+  const toggleZenMode = useUIPreferences((s) => s.toggleZenMode)
+  useEffect(() => {
+    document.documentElement.dataset.zenMode = zenMode ? 'true' : 'false'
+  }, [zenMode])
 
   const activePanel = useSlidePanel((s) => s.current)
   // Only ONE panel body should be in the DOM at a time — both CodeEditor
@@ -342,6 +354,29 @@ export default function App() {
               onClick={() => setHelpOpen(true)}
               dataTourId="header-help"
             />
+            <button
+              type="button"
+              onClick={toggleZenMode}
+              title={
+                zenMode
+                  ? 'zen mode on — secondary buttons hidden until hover. click to disable.'
+                  : 'zen mode off — secondary buttons always visible. click to enable.'
+              }
+              aria-label={zenMode ? 'disable zen mode' : 'enable zen mode'}
+              aria-pressed={zenMode}
+              className={`group flex items-center gap-1.5 rounded-sm border px-2 py-1 text-xs transition ${
+                zenMode
+                  ? 'border-accent-500/40 bg-accent-500/10 text-accent-200'
+                  : 'border-transparent text-text-3 hover:border-border-soft hover:bg-bg-3 hover:text-text-1'
+              }`}
+            >
+              {zenMode ? (
+                <EyeOff size={13} strokeWidth={1.75} />
+              ) : (
+                <Eye size={13} strokeWidth={1.75} />
+              )}
+              <span className="hidden font-mono lg:inline">zen</span>
+            </button>
             <TourLauncher />
             <div className="ml-2 flex items-center gap-1.5 border-l border-border-soft pl-3 font-mono text-[10px]">
               <span className="text-text-4">os</span>

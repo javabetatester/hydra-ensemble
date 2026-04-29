@@ -1024,7 +1024,7 @@ function Section({
           }}
           title={action.title}
           aria-label={action.title}
-          className="shrink-0 rounded-sm p-0.5 text-text-3 opacity-0 transition-opacity hover:bg-bg-3 hover:text-text-1 group-hover:opacity-100"
+          className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-3 hover:bg-bg-3 hover:text-text-1 group-hover:opacity-100"
         >
           {action.icon}
         </button>
@@ -1113,7 +1113,7 @@ function FileRow({
             e.stopPropagation()
             void onEdit(file)
           }}
-          className="shrink-0 rounded-sm p-0.5 text-text-3 opacity-0 transition-opacity hover:bg-bg-4 hover:text-accent-300 group-hover:opacity-100"
+          className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-3 hover:bg-bg-4 hover:text-accent-300 group-hover:opacity-100"
           title="Edit in editor"
           aria-label={`Edit ${file.path}`}
         >

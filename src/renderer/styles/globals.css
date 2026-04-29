@@ -283,6 +283,34 @@ select:focus-visible {
 }
 .df-lift:hover { transform: translateY(-1px); }
 
+/* ============================================================
+ * Hover-reveal affordance — secondary action buttons that sit
+ * inside a `.group`/row and shouldn't dominate the static UI.
+ *
+ * Default (`zen-mode` off): rendered at 60% opacity so they're
+ * always visible — important on machines with broken GPU/compositing
+ * where Tailwind hover transitions don't reliably paint. Hover (own
+ * or via `group-hover:opacity-100` on the parent) brings them to 100%.
+ *
+ * `zen-mode` on: `--hover-reveal-base` flips to 0, so the same
+ * components disappear until hovered, matching the dense original
+ * aesthetic. State is owned by useUIPreferences and mirrored to
+ * `<html data-zen-mode="true">` by an effect in App.tsx.
+ * ============================================================ */
+:root {
+  --hover-reveal-base: 0.6;
+}
+html[data-zen-mode="true"] {
+  --hover-reveal-base: 0;
+}
+.df-hover-reveal {
+  opacity: var(--hover-reveal-base);
+  transition: opacity 150ms ease;
+}
+.df-hover-reveal:hover {
+  opacity: 1;
+}
+
 /* Active card glow — coral accent ring */
 .df-glow-accent {
   box-shadow:

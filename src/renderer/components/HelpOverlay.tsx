@@ -122,7 +122,7 @@ export default function HelpOverlay({ open, onClose }: Props) {
                             type="button"
                             onClick={() => resetBind(action.id)}
                             disabled={!isOverridden && action.id in overrides === false}
-                            className="rounded-sm p-1 text-text-4 opacity-0 transition hover:bg-bg-4 hover:text-text-1 group-hover:opacity-100 disabled:opacity-0"
+                            className="df-hover-reveal rounded-sm p-1 text-text-4 hover:bg-bg-4 hover:text-text-1 group-hover:opacity-100 disabled:opacity-0"
                             title={`reset to default (${formatCombo(action.default)})`}
                           >
                             <RotateCcw size={10} strokeWidth={1.75} />
@@ -130,7 +130,7 @@ export default function HelpOverlay({ open, onClose }: Props) {
                           <button
                             type="button"
                             onClick={() => clearBind(action.id)}
-                            className="rounded-sm p-1 text-text-4 opacity-0 transition hover:bg-bg-4 hover:text-status-attention group-hover:opacity-100"
+                            className="df-hover-reveal rounded-sm p-1 text-text-4 hover:bg-bg-4 hover:text-status-attention group-hover:opacity-100"
                             title="clear binding"
                           >
                             <Trash2 size={10} strokeWidth={1.75} />

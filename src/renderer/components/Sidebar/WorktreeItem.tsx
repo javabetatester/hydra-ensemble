@@ -113,7 +113,7 @@ export default function WorktreeItem({
         <button
           type="button"
           onClick={onOpenSession}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-4 opacity-0 transition hover:bg-bg-4 hover:text-accent-400 group-hover:opacity-100"
+          className="df-hover-reveal flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-4 hover:bg-bg-4 hover:text-accent-400 group-hover:opacity-100"
           title={hasSession ? 'switch to session' : 'open session'}
           aria-label={hasSession ? 'switch to session' : 'open session'}
         >

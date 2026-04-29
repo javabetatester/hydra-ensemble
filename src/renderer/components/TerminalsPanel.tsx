@@ -284,7 +284,7 @@ export default function TerminalsPanel({ open, onClose }: Props) {
                 type="button"
                 onClick={() => void destroy(sh.id)}
                 className={`rounded-sm p-0.5 text-text-4 hover:bg-bg-4 hover:text-status-attention ${
-                  active ? '' : 'opacity-0 group-hover:opacity-100'
+                  active ? '' : 'df-hover-reveal group-hover:opacity-100'
                 }`}
                 aria-label="close shell"
               >

@@ -221,7 +221,7 @@ export function ToolResultBlock({
         <button
           type="button"
           onClick={copy}
-          className="shrink-0 rounded-sm p-1 text-text-4 opacity-0 transition hover:bg-bg-3 hover:text-text-1 group-hover/result:opacity-100"
+          className="df-hover-reveal shrink-0 rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1 group-hover/result:opacity-100"
           title={copied ? 'copied' : 'copy result'}
         >
           {copied ? (

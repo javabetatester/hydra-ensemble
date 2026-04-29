@@ -747,7 +747,7 @@ function ToolkitButton({
             e.stopPropagation()
             setShowOutput((v) => !v)
           }}
-          className="absolute -bottom-1 right-1 rounded-sm bg-bg-1/90 p-0.5 text-text-4 opacity-0 transition group-hover:opacity-100 hover:text-text-1"
+          className="df-hover-reveal absolute -bottom-1 right-1 rounded-sm bg-bg-1/90 p-0.5 text-text-4 group-hover:opacity-100 hover:text-text-1"
           title="show output"
           aria-label="show output"
         >
