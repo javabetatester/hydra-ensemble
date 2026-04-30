@@ -91,7 +91,29 @@ const LOG_CAP = 2000
  *  any future routing quirk that could produce a self-referencing
  *  delegation loop (the symptom that motivated #12 follow-up bcc6d2d).
  *  8 covers PM→Architect→Dev→QA→sub-QA with comfortable slack. */
-const MAX_DELEGATION_DEPTH = 8
+export const MAX_DELEGATION_DEPTH = 8
+
+/** Length of the parent-task chain ending at `taskId`. The hard
+ *  ceiling at 32 turns is a paranoia cap so a malformed parent graph
+ *  (cycle in the data, not in the routing) can't loop the
+ *  loop-detector. Real chains are 1–4 in practice.
+ *
+ *  Exported as a pure function so tests can exercise it without
+ *  spinning up a full OrchestraCore. */
+export function delegationDepth(
+  tasks: Pick<Task, 'id' | 'parentTaskId'>[],
+  taskId: Task['id'] | null | undefined
+): number {
+  let depth = 0
+  let cursor: Task['id'] | null | undefined = taskId
+  while (cursor && depth < 32) {
+    const t = tasks.find((x) => x.id === cursor)
+    if (!t) break
+    depth++
+    cursor = t.parentTaskId
+  }
+  return depth
+}
 
 export interface OrchestraCoreOptions {
   store?: OrchestraStore
@@ -1003,7 +1025,10 @@ export class OrchestraCore {
     if (!validation.ok) return { ok: false, error: validation.error }
 
     const parent = this.mostRecentActiveTaskFor(fromId)
-    if (parent && this.delegationDepth(parent.id) >= MAX_DELEGATION_DEPTH) {
+    if (
+      parent &&
+      delegationDepth(getStore().orchestra.tasks, parent.id) >= MAX_DELEGATION_DEPTH
+    ) {
       return {
         ok: false,
         error: `delegation depth exceeded (max ${MAX_DELEGATION_DEPTH})`
@@ -1097,23 +1122,6 @@ export class OrchestraCore {
     })
     this.emit({ kind: 'task.changed', task: failed })
     return failed
-  }
-
-  /** Length of the parent-task chain ending at `taskId`. The hard
-   *  ceiling at 32 turns is a paranoia cap so a malformed parent
-   *  graph (cycle in the data, not in the routing) can't loop the
-   *  loop-detector. Real chains are 1–4 in practice. */
-  private delegationDepth(taskId: UUID | null): number {
-    let depth = 0
-    let cursor: UUID | null = taskId
-    const slice = getStore().orchestra
-    while (cursor && depth < 32) {
-      const t = slice.tasks.find((x) => x.id === cursor)
-      if (!t) break
-      depth++
-      cursor = t.parentTaskId
-    }
-    return depth
   }
 
   private mostRecentActiveTaskFor(agentId: UUID): Task | undefined {
