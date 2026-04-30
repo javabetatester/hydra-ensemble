@@ -53,14 +53,12 @@ export interface Team {
  * Reusable, project-agnostic definition of a team — the "how" of running
  * a kind of task. Carries metadata and provisioning defaults but **no**
  * project-specific runtime state (worktree, runtime mutations, message
- * log, telemetry — those belong on `TeamInstance`, introduced in phase 1).
+ * log, telemetry — those belong on `TeamInstance`).
  *
- * Today's `Team` collapses template + instance into a single object.
- * This type is introduced ahead of the full split so subsequent phases
- * can rebind `Agent`, `Task`, `MessageLog`, etc. against it without a
- * single oversized commit. Nothing in the codebase consumes it yet — see
- * `researchs/proposals/team-template-instance-split.md` and issue #12
- * for the migration plan.
+ * Today's `Team` still exists alongside this for backwards compatibility
+ * during the template/instance split (see issue #12 and
+ * `researchs/proposals/team-template-instance-split.md`). Phase 5 of the
+ * plan removes `Team` once all consumers move to template + instance.
  */
 export interface TeamTemplate {
   id: UUID
@@ -78,6 +76,32 @@ export interface TeamTemplate {
   canvas: { zoom: number; panX: number; panY: number }
   createdAt: ISO
   updatedAt: ISO
+}
+
+/**
+ * A `TeamTemplate` applied to a specific project — the unit that owns
+ * project-bound runtime state (worktree, future memory/telemetry/logs).
+ *
+ * One template may produce many instances (one per project it's applied
+ * to); a project may host several instances. Per-project context
+ * isolation is a structural property of the instance — see
+ * `researchs/techniques/dual-memory-architecture.md` for the underlying
+ * requirement.
+ *
+ * `id` is preserved across the v1→v2 migration so existing foreign keys
+ * on `Agent.teamId`, `Task.teamId`, `ReportingEdge.teamId`,
+ * `MessageLog.teamId` keep resolving without rewrites. Subsequent
+ * phases rename those fields to `instanceId`.
+ */
+export interface TeamInstance {
+  id: UUID
+  templateId: UUID
+  /** Project root the instance belongs to. Same as `worktreePath` for
+   *  most instances; may diverge when the instance runs in a separate
+   *  git worktree from the project root. */
+  projectPath: string
+  worktreePath: string
+  createdAt: ISO
 }
 
 /** Which backend the runner should use for this agent.
@@ -175,17 +199,24 @@ export interface MessageLog {
   at: ISO
 }
 
-/** Shape of `store.orchestra` in the JSON store. */
+/** Shape of `store.orchestra` in the JSON store.
+ *
+ *  Schema v2 adds `templates` and `instances` alongside the legacy
+ *  `teams[]`. The legacy field is kept in sync by the registry during
+ *  the template/instance split (see issue #12) and dropped in phase 5.
+ *  Snapshots from v1 are migrated by `migrateV1ToV2` in
+ *  `src/main/orchestra/migration.ts`. */
 export interface OrchestraStoreSlice {
   settings: OrchestraSettings
   teams: Team[]
+  templates: TeamTemplate[]
+  instances: TeamInstance[]
   agents: Agent[]
   edges: ReportingEdge[]
   tasks: Task[]
   routes: Route[]
   messageLog: MessageLog[]
-  /** Reserved for future forward-compat. */
-  schemaVersion: 1
+  schemaVersion: 2
 }
 
 export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
@@ -195,12 +226,14 @@ export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
     onboardingDismissed: false
   },
   teams: [],
+  templates: [],
+  instances: [],
   agents: [],
   edges: [],
   tasks: [],
   routes: [],
   messageLog: [],
-  schemaVersion: 1
+  schemaVersion: 2
 }
 
 // ---------------------------------------------------------------------------
