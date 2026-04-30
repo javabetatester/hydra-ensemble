@@ -94,6 +94,11 @@ interface OrchestraState extends PersistedView {
   // task
   submitTask: (input: SubmitTaskInput) => Promise<Task | null>
   cancelTask: (id: UUID) => Promise<void>
+  /** Clone a task and submit the copy. Title gets a `Re-run:`
+   *  prefix (idempotent — no double prefix on re-run-of-re-run);
+   *  priority, body, tags, and assignedAgentId are preserved.
+   *  Returns null if the source task isn't in the store. */
+  rerunTask: (id: UUID) => Promise<Task | null>
 
   // templates / instances (phase 3 of issue #12)
   applyTemplate: (input: {
@@ -347,6 +352,26 @@ export const useOrchestra = create<OrchestraState>()(
         if (!o) return
         const res = await o.task.cancel(id)
         if (!res.ok) toastError('Cancel task failed', res.error)
+      },
+
+      rerunTask: async (id) => {
+        const task = get().tasks.find((t) => t.id === id)
+        if (!task) return null
+        const RE_RUN_PREFIX = 'Re-run: '
+        const title = task.title.startsWith(RE_RUN_PREFIX)
+          ? task.title
+          : `${RE_RUN_PREFIX}${task.title}`
+        const tags = task.tags.includes('re-run')
+          ? task.tags
+          : [...task.tags, 're-run']
+        return get().submitTask({
+          instanceId: task.instanceId ?? task.teamId,
+          title,
+          body: task.body,
+          priority: task.priority,
+          tags,
+          assignedAgentId: task.assignedAgentId ?? undefined
+        })
       },
 
       applyTemplate: async (input) => {
