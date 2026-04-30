@@ -85,14 +85,22 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
 
   // View dropdown — backed by `useOrchestraPanels` so the keybinds
   // (Ctrl+Shift+L/P/J) and the menu manipulate the same flags.
+  // Each flag is selected individually: returning a fresh object
+  // literal from a zustand selector triggers an infinite re-render
+  // loop because identity changes every render.
   const [viewOpen, setViewOpen] = useState<boolean>(false)
-  const panelFlags = useOrchestraPanels((s) => ({
-    templates: s.templates,
-    projects: s.projects,
-    tasksPanel: s.tasksPanel,
-    minimap: s.minimap,
-    toolbar: s.toolbar
-  }))
+  const flagTemplates = useOrchestraPanels((s) => s.templates)
+  const flagProjects = useOrchestraPanels((s) => s.projects)
+  const flagTasksPanel = useOrchestraPanels((s) => s.tasksPanel)
+  const flagMinimap = useOrchestraPanels((s) => s.minimap)
+  const flagToolbar = useOrchestraPanels((s) => s.toolbar)
+  const panelFlags: Record<ViewKey, boolean> = {
+    templates: flagTemplates,
+    projects: flagProjects,
+    tasksPanel: flagTasksPanel,
+    minimap: flagMinimap,
+    toolbar: flagToolbar
+  }
   const togglePanel = (key: ViewKey): void => {
     const st = useOrchestraPanels.getState()
     switch (key) {
