@@ -288,12 +288,14 @@ export default function NewTaskDialog() {
                 team in this project
               </label>
               {availableInstances.length === 0 ? (
-                <div className="flex items-center justify-between gap-2 rounded-sm border border-status-attention/40 bg-status-attention/5 px-2.5 py-2 text-[11px] leading-relaxed text-text-2">
-                  <span>
-                    No team applied to{' '}
-                    <span className="font-mono text-text-1">{context.projectPath}</span>{' '}
-                    yet.
-                  </span>
+                <div className="flex flex-col gap-1.5 rounded-sm border border-status-attention/40 bg-status-attention/5 px-2.5 py-2 text-[11px] leading-relaxed text-text-2">
+                  <div>No team applied to this project yet.</div>
+                  <div
+                    className="truncate font-mono text-[10px] text-text-3"
+                    title={context.projectPath}
+                  >
+                    {context.projectPath}
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -301,13 +303,19 @@ export default function NewTaskDialog() {
                       onClose()
                       showApplyTemplate({ projectPath: project })
                     }}
-                    className="shrink-0 rounded-sm border border-border-soft bg-bg-1 px-2 py-0.5 font-mono text-[10px] text-text-2 hover:border-border-mid hover:text-text-1"
+                    className="self-end shrink-0 rounded-sm border border-border-soft bg-bg-1 px-2 py-0.5 font-mono text-[10px] text-text-2 hover:border-border-mid hover:text-text-1"
                   >
                     Apply template
                   </button>
                 </div>
               ) : availableInstances.length === 1 ? (
-                <div className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2">
+                <div
+                  className="truncate rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2"
+                  title={
+                    teams.find((t) => t.id === availableInstances[0]!.id)
+                      ?.name ?? availableInstances[0]!.id
+                  }
+                >
                   {teams.find((t) => t.id === availableInstances[0]!.id)?.name ??
                     availableInstances[0]!.id}
                 </div>
@@ -345,7 +353,10 @@ export default function NewTaskDialog() {
             <div>
               <label className="df-label mb-1.5 block">team</label>
               {selectedInstanceId && activeTeam ? (
-                <div className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2">
+                <div
+                  className="truncate rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2"
+                  title={activeTeam.name}
+                >
                   {activeTeam.name}
                 </div>
               ) : (
