@@ -276,11 +276,12 @@ export default function NewTaskDialog() {
         </header>
 
         <div className="flex flex-col gap-3 p-3">
-          {/* Target — visible only when invoked with a project context.
-               When the picker resolved a single instance (or the FAB
-               flow used activeTeamId), we hide this row and rely on
-               the header to keep the modal visually focused on the
-               task itself. */}
+          {/* Target row — always visible so the dialog looks the same
+               regardless of how it was opened. The label and inner
+               control adapt to the source: a project-scoped open shows
+               instances bound to that project, a context-less open
+               (FAB inside OrchestraView) shows the active team
+               read-only. */}
           {context.projectPath ? (
             <div>
               <label className="df-label mb-1.5 block" htmlFor="new-task-instance">
@@ -335,7 +336,25 @@ export default function NewTaskDialog() {
                 </div>
               )}
             </div>
-          ) : null}
+          ) : (
+            // Context-less open (FAB inside OrchestraView, '/' on the
+            // canvas, AgentCard "assign task" without a project hint).
+            // Show the resolved team read-only so the user always knows
+            // where the task is going, and the dialog has a consistent
+            // top section across surfaces.
+            <div>
+              <label className="df-label mb-1.5 block">team</label>
+              {selectedInstanceId && activeTeam ? (
+                <div className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2">
+                  {activeTeam.name}
+                </div>
+              ) : (
+                <div className="rounded-sm border border-status-attention/40 bg-status-attention/5 px-2.5 py-2 text-[11px] leading-relaxed text-text-2">
+                  No active team. Select one in the Orchestrator first.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Title */}
           <div>
