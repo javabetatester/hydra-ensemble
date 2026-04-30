@@ -1060,6 +1060,31 @@ export class OrchestraCore {
     try { await host.stop('SIGTERM') } catch { /* already dead */ }
   }
 
+  /** Append an `error` MessageLog entry surfacing a refused
+   *  delegation. Without this the agent runner just sees a
+   *  `{ok:false}` envelope and the user never finds out — the Activity
+   *  tab and the parent task's drawer stay silent. */
+  private logDelegationRefusal(
+    fromId: UUID,
+    teamId: UUID,
+    parentTaskId: UUID | null,
+    reason: string
+  ): void {
+    try {
+      this.log.append({
+        instanceId: teamId,
+        teamId,
+        taskId: parentTaskId,
+        fromAgentId: 'system',
+        toAgentId: fromId,
+        kind: 'error',
+        content: `Delegation refused: ${reason}`
+      })
+    } catch {
+      // log is best-effort — never break the delegation path.
+    }
+  }
+
   private async handleDelegate(
     fromId: UUID,
     req: DelegateRequestPayload
@@ -1068,17 +1093,19 @@ export class OrchestraCore {
     if (!from) return { ok: false, error: 'source agent not found' }
 
     const validation = this.router.validateDelegation(fromId, req.toAgentId)
-    if (!validation.ok) return { ok: false, error: validation.error }
+    if (!validation.ok) {
+      this.logDelegationRefusal(fromId, from.teamId, null, validation.error)
+      return { ok: false, error: validation.error }
+    }
 
     const parent = this.mostRecentActiveTaskFor(fromId)
     if (
       parent &&
       delegationDepth(getStore().orchestra.tasks, parent.id) >= MAX_DELEGATION_DEPTH
     ) {
-      return {
-        ok: false,
-        error: `delegation depth exceeded (max ${MAX_DELEGATION_DEPTH})`
-      }
+      const reason = `delegation depth exceeded (max ${MAX_DELEGATION_DEPTH})`
+      this.logDelegationRefusal(fromId, from.teamId, parent.id, reason)
+      return { ok: false, error: reason }
     }
     const sub: SubmitInput = {
       teamId: from.teamId,
