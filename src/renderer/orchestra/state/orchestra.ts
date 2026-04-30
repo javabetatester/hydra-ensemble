@@ -15,6 +15,7 @@ import type {
   Task,
   Team,
   TeamInstance,
+  TeamTemplate,
   UpdateAgentInput,
   UUID
 } from '../../../shared/orchestra'
@@ -40,6 +41,14 @@ interface OrchestraState extends PersistedView {
   // mirrored from main via IPC events
   settings: OrchestraSettings
   teams: Team[]
+  /** Reusable team blueprints (no project binding). Phase 4 of issue
+   *  #12 introduced these; they're now exposed at the renderer state
+   *  so the Templates Library panel can browse them without each
+   *  consumer re-fetching via IPC. */
+  templates: TeamTemplate[]
+  /** Templates applied to specific projects. Each `Team` has a
+   *  matching instance during the split (instance.id === team.id). */
+  instances: TeamInstance[]
   agents: Agent[]
   edges: ReportingEdge[]
   tasks: Task[]
@@ -138,6 +147,8 @@ export const useOrchestra = create<OrchestraState>()(
     (set, get) => ({
       settings: DEFAULT_SETTINGS,
       teams: [],
+      templates: [],
+      instances: [],
       agents: [],
       edges: [],
       tasks: [],
@@ -166,6 +177,13 @@ export const useOrchestra = create<OrchestraState>()(
 
             const settings = await o.settings.get()
             const teams = await o.team.list()
+            // Templates and instances are sibling reads; load them in
+            // parallel with the per-team agent/edge fetches below to
+            // keep init latency flat as the catalog grows.
+            const [templates, instances] = await Promise.all([
+              o.template.list(),
+              o.instance.list()
+            ])
             const perTeam = await Promise.all(
               teams.map(async (t) => {
                 const [agents, edges] = await Promise.all([
@@ -187,6 +205,8 @@ export const useOrchestra = create<OrchestraState>()(
             set({
               settings,
               teams,
+              templates,
+              instances,
               agents,
               edges,
               activeTeamId,
@@ -379,10 +399,29 @@ export const useOrchestra = create<OrchestraState>()(
 type SetFn = StoreApi<OrchestraState>['setState']
 type GetFn = StoreApi<OrchestraState>['getState']
 
+/** Re-pull templates and instances from main. Called on team
+ *  create/delete because the backend mints/retires them in step with
+ *  team lifecycle (Phase 1 of issue #12 keeps a 1:1 pairing). Once
+ *  the main process emits granular template/instance events this
+ *  helper can be retired. */
+function refetchTemplatesAndInstances(set: SetFn): void {
+  const o = window.api?.orchestra
+  if (!o) return
+  void Promise.all([o.template.list(), o.instance.list()])
+    .then(([templates, instances]) => {
+      set({ templates, instances })
+    })
+    .catch(() => {
+      // Stale state is recoverable on next event; logging would be
+      // noise.
+    })
+}
+
 function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
   switch (evt.kind) {
     case 'team.changed':
       set((s) => ({ teams: upsert(s.teams, evt.team) }))
+      refetchTemplatesAndInstances(set)
       return
     case 'team.deleted':
       set((s) => {
@@ -399,6 +438,7 @@ function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
           selectedAgentIds: wasActive ? [] : s.selectedAgentIds
         }
       })
+      refetchTemplatesAndInstances(set)
       return
     case 'agent.changed':
       set((s) => ({ agents: upsert(s.agents, evt.agent) }))
