@@ -12,7 +12,12 @@ import {
   DEFAULT_ORCHESTRA_STATE,
   type OrchestraStoreSlice
 } from '../shared/orchestra'
-import { isV1Snapshot, migrateV1ToV2 } from './orchestra/migration'
+import {
+  isV1Snapshot,
+  isV2Snapshot,
+  migrateV1ToV2,
+  migrateV2ToV3
+} from './orchestra/migration'
 
 export type { ToolkitItem } from '../shared/types'
 
@@ -41,17 +46,25 @@ let cache: StoreShape = DEFAULTS
 
 function loadOrchestra(parsed: unknown): {
   slice: OrchestraStoreSlice
-  migrated: boolean
+  /** Highest schema version migrated *from* (1, 2 or null). Used to
+   *  pick the right one-shot backup file name. */
+  migratedFrom: 1 | 2 | null
 } {
   if (parsed == null || typeof parsed !== 'object') {
-    return { slice: DEFAULT_ORCHESTRA_STATE, migrated: false }
+    return { slice: DEFAULT_ORCHESTRA_STATE, migratedFrom: null }
   }
+  // v1 → v3 in one step (migrateV1ToV2 already produces a v3 slice
+  // since phase 5 of issue #12 — the function name is kept for
+  // historical reasons).
   if (isV1Snapshot(parsed)) {
-    return { slice: migrateV1ToV2(parsed), migrated: true }
+    return { slice: migrateV1ToV2(parsed), migratedFrom: 1 }
+  }
+  if (isV2Snapshot(parsed)) {
+    return { slice: migrateV2ToV3(parsed), migratedFrom: 2 }
   }
   return {
     slice: { ...DEFAULT_ORCHESTRA_STATE, ...(parsed as OrchestraStoreSlice) },
-    migrated: false
+    migratedFrom: null
   }
 }
 
@@ -64,11 +77,11 @@ export function initStore(): void {
       const raw = readFileSync(cachePath, 'utf8')
       const parsed = JSON.parse(raw) as Partial<StoreShape>
       const orchestra = loadOrchestra(parsed.orchestra)
-      // Preserve a one-shot v1 snapshot before the first v2 write so a
-      // botched migration is recoverable. Skip if a backup already
-      // exists — never overwrite the original.
-      if (orchestra.migrated) {
-        const backup = join(dir, 'store.json.bak.v1')
+      // Preserve a one-shot snapshot per migration source so a
+      // botched migration is recoverable. Skip if the per-version
+      // backup already exists — never overwrite the original.
+      if (orchestra.migratedFrom !== null) {
+        const backup = join(dir, `store.json.bak.v${orchestra.migratedFrom}`)
         if (!existsSync(backup)) {
           try {
             copyFileSync(cachePath, backup)
@@ -84,7 +97,7 @@ export function initStore(): void {
         toolkit: parsed.toolkit ?? [],
         orchestra: orchestra.slice
       }
-      if (orchestra.migrated) flush()
+      if (orchestra.migratedFrom !== null) flush()
     } catch {
       cache = { ...DEFAULTS }
     }

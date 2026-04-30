@@ -15,6 +15,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
   const id = overrides.id ?? 'a1'
   return {
     id,
+    instanceId: 'team-1',
     teamId: 'team-1',
     slug: id,
     name: id,

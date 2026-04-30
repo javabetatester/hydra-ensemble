@@ -115,6 +115,10 @@ export type AgentProvider = 'inherit' | 'claude-cli' | 'anthropic-api'
 
 export interface Agent {
   id: UUID
+  /** Owning team-instance. During the template/instance split,
+   *  `instanceId === teamId` (see issue #12). Phase 5 added this
+   *  field; a follow-up PR removes `teamId`. */
+  instanceId: UUID
   teamId: UUID
   slug: string
   name: string
@@ -155,6 +159,8 @@ export interface Trigger {
 
 export interface ReportingEdge {
   id: UUID
+  /** Owning team-instance. During the split, `instanceId === teamId`. */
+  instanceId: UUID
   teamId: UUID
   parentAgentId: UUID
   childAgentId: UUID
@@ -194,6 +200,8 @@ export interface Route {
 
 export interface MessageLog {
   id: UUID
+  /** Owning team-instance. During the split, `instanceId === teamId`. */
+  instanceId: UUID
   teamId: UUID
   taskId: UUID | null
   fromAgentId: UUID | 'system' | 'user'
@@ -205,10 +213,12 @@ export interface MessageLog {
 
 /** Shape of `store.orchestra` in the JSON store.
  *
- *  Schema v2 adds `templates` and `instances` alongside the legacy
- *  `teams[]`. The legacy field is kept in sync by the registry during
- *  the template/instance split (see issue #12) and dropped in phase 5.
- *  Snapshots from v1 are migrated by `migrateV1ToV2` in
+ *  Schema v2 introduced `templates` and `instances` alongside the
+ *  legacy `teams[]`. Schema v3 (phase 5 of issue #12) adds the
+ *  `instanceId` field to `Agent`, `ReportingEdge`, and `MessageLog`
+ *  as the canonical owning-instance pointer; `teamId` stays as an
+ *  alias until a follow-up PR removes it across all call sites.
+ *  Snapshots are migrated through the chain `v1 → v2 → v3` by
  *  `src/main/orchestra/migration.ts`. */
 export interface OrchestraStoreSlice {
   settings: OrchestraSettings
@@ -220,7 +230,7 @@ export interface OrchestraStoreSlice {
   tasks: Task[]
   routes: Route[]
   messageLog: MessageLog[]
-  schemaVersion: 2
+  schemaVersion: 3
 }
 
 export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
@@ -237,7 +247,7 @@ export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
   tasks: [],
   routes: [],
   messageLog: [],
-  schemaVersion: 2
+  schemaVersion: 3
 }
 
 // ---------------------------------------------------------------------------

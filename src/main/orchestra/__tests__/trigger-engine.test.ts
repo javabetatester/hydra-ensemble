@@ -15,6 +15,7 @@ import type { Agent, Skill, Task, Trigger } from '../../../shared/orchestra'
 function makeAgent(patch: Partial<Agent> = {}): Agent {
   return {
     id: 'agent-1',
+    instanceId: 'team-1',
     teamId: 'team-1',
     slug: 'alpha',
     name: 'Alpha',

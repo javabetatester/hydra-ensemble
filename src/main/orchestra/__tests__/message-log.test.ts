@@ -31,6 +31,7 @@ function payload(overrides: Partial<Omit<MessageLog, 'id' | 'at'>> = {}): Omit<
   'id' | 'at'
 > {
   return {
+    instanceId: TEAM_ID,
     teamId: TEAM_ID,
     taskId: 'task-1',
     fromAgentId: 'agent-1',

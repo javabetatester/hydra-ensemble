@@ -301,6 +301,7 @@ export class OrchestraRegistry {
     const now = new Date().toISOString()
     const agent: Agent = {
       id: randomUUID(),
+      instanceId: input.teamId,
       teamId: input.teamId,
       slug,
       name,
@@ -447,6 +448,7 @@ export class OrchestraRegistry {
 
     const edge: ReportingEdge = {
       id: randomUUID(),
+      instanceId: input.teamId,
       teamId: input.teamId,
       parentAgentId: input.parentAgentId,
       childAgentId: input.childAgentId,
