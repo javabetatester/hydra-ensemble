@@ -12,6 +12,9 @@ import { create } from 'zustand'
 export interface ApplyTemplateContext {
   /** Pre-filled project root. The dialog still lets the user change it. */
   projectPath?: string
+  /** Pre-selected template (e.g. when the user clicks "Apply" on a
+   *  Templates Library card). The dialog still lets the user change it. */
+  templateId?: string
 }
 
 interface ApplyTemplateDialogState {

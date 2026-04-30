@@ -42,7 +42,15 @@ export default function ApplyTemplateDialog() {
       .then((list) => {
         if (cancelled) return
         setTemplates(list)
-        setTemplateId(list[0]?.id ?? '')
+        // Honour pre-selection from context (e.g. Templates Library
+        // "Apply" click). Fall back to the first template if the
+        // requested id no longer exists.
+        const preferred = context.templateId
+        if (preferred && list.some((t) => t.id === preferred)) {
+          setTemplateId(preferred)
+        } else {
+          setTemplateId(list[0]?.id ?? '')
+        }
       })
       .catch(() => {
         if (cancelled) return
@@ -51,7 +59,7 @@ export default function ApplyTemplateDialog() {
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, context.templateId])
 
   // Seed projectPath from context, falling back to currentPath, falling
   // back to the first known project. Reset name so a previous draft

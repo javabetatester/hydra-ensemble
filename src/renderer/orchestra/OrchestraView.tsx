@@ -41,6 +41,7 @@ import ImportTeamDialog from './ImportTeamDialog'
 import GenerateTeamDialog from './GenerateTeamDialog'
 import TeamSwitcher from './TeamSwitcher'
 import ProjectChip from './ProjectChip'
+import TemplatesPanel from './TemplatesPanel'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
 import ProvidersDialog from './ProvidersDialog'
@@ -416,8 +417,11 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           plus the grouped TeamRail cover the same selector role
           without a third surface. */}
 
-      {/* Main 3-column body */}
+      {/* Main multi-panel body. Templates Library is the leftmost
+          panel when toggled on (Ctrl+Shift+L), then the
+          Projects/Teams rail, then the canvas, then the right dock. */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
+        <TemplatesPanel />
         <aside className="flex w-[220px] shrink-0 flex-col border-r border-border-soft bg-bg-2">
           <TeamRail />
         </aside>
