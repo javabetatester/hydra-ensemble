@@ -49,7 +49,7 @@ import type {
 } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
 import { useToasts } from '../state/toasts'
-import NewTaskDialog from './modals/NewTaskDialog'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 import { relativeTime as relativeTimeShared } from '../lib/time'
 
 /** Tabs double as filters. "all" is the default; `blocked` + `done` are
@@ -373,7 +373,7 @@ export default function IssuesPanel(_props: Props) {
   const pushToast = useToasts((s) => s.push)
 
   const [tab, setTab] = useState<TabKey>('all')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const showNewTaskDialog = useNewTaskDialog((s) => s.show)
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   /** Id of the task currently hovered under a drag — drives the highlight
    *  and the tooltip so the user sees what the drop would target. */
@@ -590,7 +590,7 @@ export default function IssuesPanel(_props: Props) {
         </div>
         <button
           type="button"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => showNewTaskDialog()}
           disabled={!canCreateTask}
           title={createDisabledReason}
           aria-label="New issue"
@@ -650,7 +650,7 @@ export default function IssuesPanel(_props: Props) {
               tab === 'all' && canCreateTask
                 ? {
                     label: 'New issue',
-                    onClick: () => setDialogOpen(true)
+                    onClick: () => showNewTaskDialog()
                   }
                 : undefined
             }
@@ -690,9 +690,8 @@ export default function IssuesPanel(_props: Props) {
         </span>
       </footer>
 
-      {/* Creation modal — rendered inline so the panel drops into any host
-          without requiring a portal root. */}
-      <NewTaskDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      {/* Creation modal lives globally in App.tsx (phase 4 of issue
+          #12); opening flows through `useNewTaskDialog.show()`. */}
 
       {menu && menuTask ? (
         <RowContextMenu

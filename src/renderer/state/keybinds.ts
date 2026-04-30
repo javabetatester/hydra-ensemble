@@ -28,12 +28,18 @@ export const ACTIONS: Action[] = [
   { id: 'project.next', label: 'Next project', group: 'Projects', default: 'mod+tab' },
   { id: 'project.prev', label: 'Previous project', group: 'Projects', default: 'mod+shift+tab' },
 
+  // Orchestrator
+  { id: 'orchestra.newTaskInProject', label: 'Open Orchestrator · New task in current project', group: 'Orchestrator', default: 'mod+shift+o' },
+  { id: 'orchestra.panel.templates', label: 'Toggle Templates Library', group: 'Orchestrator', default: 'mod+shift+l' },
+  { id: 'orchestra.panel.projects', label: 'Toggle Projects & Teams panel', group: 'Orchestrator', default: 'mod+shift+p' },
+  { id: 'orchestra.panel.dock', label: 'Toggle right dock (Tasks / Inspector)', group: 'Orchestrator', default: 'mod+shift+j' },
+
   // Panels
   { id: 'panel.terminals', label: 'Terminals panel', group: 'Panels', default: 'mod+backquote' },
   { id: 'drawer.projects', label: 'Projects drawer', group: 'Panels', default: 'mod+t' },
   { id: 'panel.dashboard', label: 'Dashboard', group: 'Panels', default: 'mod+d' },
   { id: 'panel.editor', label: 'Code editor', group: 'Panels', default: 'mod+e' },
-  { id: 'panel.sessions', label: 'Hide sessions/activity panel', group: 'Panels', default: 'mod+q' },
+  { id: 'panel.sessions', label: 'Toggle sessions panel · Exit Orchestrator', group: 'Panels', default: 'mod+q' },
   { id: 'palette.open', label: 'Command palette', group: 'Panels', default: 'mod+k' },
   { id: 'help.open', label: 'Help overlay', group: 'Panels', default: '?' },
 

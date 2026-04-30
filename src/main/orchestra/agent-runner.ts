@@ -168,6 +168,10 @@ function logMessage(
   emit({
     kind: 'message',
     entry: {
+      // Phase 5 of issue #12: instanceId is the canonical owner;
+      // teamId is kept as an alias until the rename completes across
+      // every consumer (a follow-up PR).
+      instanceId: ctx.team.id,
       teamId: ctx.team.id,
       taskId: task?.id ?? null,
       fromAgentId: ctx.agent.id,

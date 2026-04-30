@@ -14,6 +14,8 @@ import type {
   SubmitTaskInput,
   Task,
   Team,
+  TeamInstance,
+  TeamTemplate,
   UpdateAgentInput,
   UUID
 } from '../../../shared/orchestra'
@@ -39,6 +41,14 @@ interface OrchestraState extends PersistedView {
   // mirrored from main via IPC events
   settings: OrchestraSettings
   teams: Team[]
+  /** Reusable team blueprints (no project binding). Phase 4 of issue
+   *  #12 introduced these; they're now exposed at the renderer state
+   *  so the Templates Library panel can browse them without each
+   *  consumer re-fetching via IPC. */
+  templates: TeamTemplate[]
+  /** Templates applied to specific projects. Each `Team` has a
+   *  matching instance during the split (instance.id === team.id). */
+  instances: TeamInstance[]
   agents: Agent[]
   edges: ReportingEdge[]
   tasks: Task[]
@@ -84,6 +94,22 @@ interface OrchestraState extends PersistedView {
   // task
   submitTask: (input: SubmitTaskInput) => Promise<Task | null>
   cancelTask: (id: UUID) => Promise<void>
+  /** Hard-delete a terminal (done/failed) task. Cancel first if
+   *  still active. Returns silently if the task isn't in the store. */
+  deleteTask: (id: UUID) => Promise<void>
+  /** Clone a task and submit the copy. Title gets a `Re-run:`
+   *  prefix (idempotent — no double prefix on re-run-of-re-run);
+   *  priority, body, tags, and assignedAgentId are preserved.
+   *  Returns null if the source task isn't in the store. */
+  rerunTask: (id: UUID) => Promise<Task | null>
+
+  // templates / instances (phase 3 of issue #12)
+  applyTemplate: (input: {
+    templateId: UUID
+    worktreePath: string
+    name?: string
+    projectPath?: string
+  }) => Promise<TeamInstance | null>
 }
 
 const DEFAULT_SETTINGS: OrchestraSettings = {
@@ -129,6 +155,8 @@ export const useOrchestra = create<OrchestraState>()(
     (set, get) => ({
       settings: DEFAULT_SETTINGS,
       teams: [],
+      templates: [],
+      instances: [],
       agents: [],
       edges: [],
       tasks: [],
@@ -157,17 +185,30 @@ export const useOrchestra = create<OrchestraState>()(
 
             const settings = await o.settings.get()
             const teams = await o.team.list()
+            // Templates and instances are sibling reads; load them in
+            // parallel with the per-team agent/edge fetches below to
+            // keep init latency flat as the catalog grows.
+            const [templates, instances] = await Promise.all([
+              o.template.list(),
+              o.instance.list()
+            ])
             const perTeam = await Promise.all(
               teams.map(async (t) => {
-                const [agents, edges] = await Promise.all([
+                const [agents, edges, tasks] = await Promise.all([
                   o.agent.list(t.id),
-                  o.edge.list(t.id)
+                  o.edge.list(t.id),
+                  o.task.list(t.id)
                 ])
-                return { agents, edges }
+                return { agents, edges, tasks }
               })
             )
             const agents = perTeam.flatMap((p) => p.agents)
             const edges = perTeam.flatMap((p) => p.edges)
+            // Without this, tasks were only ever populated through
+            // live `task.changed` events — so anything submitted in a
+            // previous session vanished from the right-dock and the
+            // History tab even though it was still on disk.
+            const tasks = perTeam.flatMap((p) => p.tasks)
 
             const prevActive = get().activeTeamId
             const activeTeamId =
@@ -178,6 +219,9 @@ export const useOrchestra = create<OrchestraState>()(
             set({
               settings,
               teams,
+              templates,
+              instances,
+              tasks,
               agents,
               edges,
               activeTeamId,
@@ -320,6 +364,47 @@ export const useOrchestra = create<OrchestraState>()(
         if (!res.ok) toastError('Cancel task failed', res.error)
       },
 
+      deleteTask: async (id) => {
+        const o = api()
+        if (!o) return
+        const res = await o.task.delete(id)
+        if (!res.ok) toastError('Delete task failed', res.error)
+      },
+
+      rerunTask: async (id) => {
+        const task = get().tasks.find((t) => t.id === id)
+        if (!task) return null
+        const RE_RUN_PREFIX = 'Re-run: '
+        const title = task.title.startsWith(RE_RUN_PREFIX)
+          ? task.title
+          : `${RE_RUN_PREFIX}${task.title}`
+        const tags = task.tags.includes('re-run')
+          ? task.tags
+          : [...task.tags, 're-run']
+        return get().submitTask({
+          instanceId: task.instanceId ?? task.teamId,
+          title,
+          body: task.body,
+          priority: task.priority,
+          tags,
+          assignedAgentId: task.assignedAgentId ?? undefined
+        })
+      },
+
+      applyTemplate: async (input) => {
+        const o = api()
+        if (!o) return null
+        const res = await o.instance.apply(input)
+        if (!res.ok) {
+          toastError('Apply template failed', res.error)
+          return null
+        }
+        // The team.changed event from main will land shortly and update
+        // `teams[]`; no need to mirror the result into a local instances
+        // slice yet — phase 4 wires the UI surfaces that need it.
+        return res.value
+      },
+
       setSettings: async (patch) => {
         const o = api()
         set((s) => ({ settings: { ...s.settings, ...patch } }))
@@ -356,10 +441,29 @@ export const useOrchestra = create<OrchestraState>()(
 type SetFn = StoreApi<OrchestraState>['setState']
 type GetFn = StoreApi<OrchestraState>['getState']
 
+/** Re-pull templates and instances from main. Called on team
+ *  create/delete because the backend mints/retires them in step with
+ *  team lifecycle (Phase 1 of issue #12 keeps a 1:1 pairing). Once
+ *  the main process emits granular template/instance events this
+ *  helper can be retired. */
+function refetchTemplatesAndInstances(set: SetFn): void {
+  const o = window.api?.orchestra
+  if (!o) return
+  void Promise.all([o.template.list(), o.instance.list()])
+    .then(([templates, instances]) => {
+      set({ templates, instances })
+    })
+    .catch(() => {
+      // Stale state is recoverable on next event; logging would be
+      // noise.
+    })
+}
+
 function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
   switch (evt.kind) {
     case 'team.changed':
       set((s) => ({ teams: upsert(s.teams, evt.team) }))
+      refetchTemplatesAndInstances(set)
       return
     case 'team.deleted':
       set((s) => {
@@ -376,6 +480,7 @@ function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
           selectedAgentIds: wasActive ? [] : s.selectedAgentIds
         }
       })
+      refetchTemplatesAndInstances(set)
       return
     case 'agent.changed':
       set((s) => ({ agents: upsert(s.agents, evt.agent) }))
@@ -394,6 +499,15 @@ function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
       return
     case 'task.changed':
       set((s) => ({ tasks: upsert(s.tasks, evt.task) }))
+      return
+    case 'task.deleted':
+      set((s) => ({
+        tasks: removeById(s.tasks, evt.taskId),
+        routes: s.routes.filter((r) => r.taskId !== evt.taskId),
+        // Drawer closes if it was pointing at the now-gone task.
+        taskDrawerTaskId:
+          s.taskDrawerTaskId === evt.taskId ? null : s.taskDrawerTaskId
+      }))
       return
     case 'route.added':
       set((s) => ({ routes: [...s.routes, evt.route] }))

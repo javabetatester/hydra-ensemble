@@ -76,6 +76,7 @@ import type {
   Task,
   Team,
   TeamExportV1,
+  TeamInstance,
   Trigger,
   UUID,
   UpdateAgentInput
@@ -85,6 +86,40 @@ const NO_API_KEY_REASON = 'no_api_key'
 const TASKS_CAP = 500
 const ROUTES_CAP = 500
 const LOG_CAP = 2000
+/** Maximum depth of a `parentTaskId` chain. Once a delegation would
+ *  push the chain past this, we refuse — defense-in-depth against
+ *  any future routing quirk that could produce a self-referencing
+ *  delegation loop (the symptom that motivated #12 follow-up bcc6d2d).
+ *  8 covers PM→Architect→Dev→QA→sub-QA with comfortable slack. */
+export const MAX_DELEGATION_DEPTH = 8
+
+/** Minimum gap between two submissions of the same title to the same
+ *  target. Lets a user fire off a new task with the same name a few
+ *  seconds later (intentional re-run via the UI) but blocks a
+ *  runaway agent that would otherwise spam identical submits. */
+export const SUBMIT_DEDUPE_WINDOW_MS = 5_000
+
+/** Length of the parent-task chain ending at `taskId`. The hard
+ *  ceiling at 32 turns is a paranoia cap so a malformed parent graph
+ *  (cycle in the data, not in the routing) can't loop the
+ *  loop-detector. Real chains are 1–4 in practice.
+ *
+ *  Exported as a pure function so tests can exercise it without
+ *  spinning up a full OrchestraCore. */
+export function delegationDepth(
+  tasks: Pick<Task, 'id' | 'parentTaskId'>[],
+  taskId: Task['id'] | null | undefined
+): number {
+  let depth = 0
+  let cursor: Task['id'] | null | undefined = taskId
+  while (cursor && depth < 32) {
+    const t = tasks.find((x) => x.id === cursor)
+    if (!t) break
+    depth++
+    cursor = t.parentTaskId
+  }
+  return depth
+}
 
 export interface OrchestraCoreOptions {
   store?: OrchestraStore
@@ -162,6 +197,20 @@ export class OrchestraCore {
   // -------------------------------------------------------------------- teams
 
   listTeams(): Team[] { return this.registry.listTeams() }
+
+  // ---------------------------------------------------- templates / instances
+  // Phase 3 of issue #12 — public read surface for template/instance.
+  // `listInstances` accepts an optional projectPath filter so the
+  // renderer can derive "team(s) available for this project" without
+  // pulling the full slice.
+
+  listTemplates() {
+    return this.registry.listTemplates()
+  }
+
+  listInstances(filter: { projectPath?: string } = {}) {
+    return this.registry.listInstances(filter)
+  }
 
   async createTeam(input: NewTeamInput): Promise<Team> {
     const team = this.registry.createTeam(input)
@@ -283,13 +332,37 @@ export class OrchestraCore {
   }
 
   async submitTask(input: SubmitTaskInput): Promise<Task> {
-    const team = this.registry.getTeam(input.teamId)
+    // Phase 2 of issue #12: prefer `instanceId`, fall back to legacy
+    // `teamId`. While the split is in flight `instance.id === team.id`
+    // so the two paths converge on the same target.
+    const targetId = input.instanceId ?? input.teamId
+    if (!targetId) throw new Error('instanceId or teamId required')
+    const team = this.registry.getTeam(targetId)
     if (!team) throw new Error('team not found')
+
+    // Dedupe near-duplicate submissions: if there's already a
+    // non-terminal task with the same title/target/assignee created
+    // in the last SUBMIT_DEDUPE_WINDOW_MS, return that one instead of
+    // minting a fresh duplicate. Catches the kind of agent runaway
+    // that produced 6 identical tasks in the issue #12 followup.
+    const dedupeCutoff = Date.now() - SUBMIT_DEDUPE_WINDOW_MS
+    const dupe = getStore().orchestra.tasks.find((t) => {
+      if (t.teamId !== targetId) return false
+      if (t.title !== input.title) return false
+      if (t.status === 'done' || t.status === 'failed') return false
+      if (Date.parse(t.createdAt) < dedupeCutoff) return false
+      // Same intended assignee (or both unassigned at submit time).
+      const wantsAgent = input.assignedAgentId ?? null
+      const hasAgent = t.assignedAgentId
+      return wantsAgent === hasAgent || wantsAgent === null
+    })
+    if (dupe) return dupe
 
     const now = new Date().toISOString()
     const task: Task = {
       id: randomUUID(),
-      teamId: input.teamId,
+      instanceId: targetId,
+      teamId: targetId,
       title: input.title,
       body: input.body,
       priority: input.priority ?? 'P2',
@@ -415,6 +488,28 @@ export class OrchestraCore {
       finishedAt: new Date().toISOString()
     })
     this.emit({ kind: 'task.changed', task: cancelled })
+  }
+
+  /**
+   * Hard-remove a task (and its orphaned routes/messageLog entries).
+   * Refuses when the task is still active — callers should cancel
+   * first. Surfaces the deletion via `task.deleted` event so the
+   * renderer can drop the row from any list.
+   */
+  async deleteTask(id: UUID): Promise<void> {
+    const task = this.findTask(id)
+    if (!task) return
+    if (task.status !== 'done' && task.status !== 'failed') {
+      throw new Error('cancel the task before deleting')
+    }
+    const slice = getStore().orchestra
+    this.writeSlice({
+      ...slice,
+      tasks: slice.tasks.filter((t) => t.id !== id),
+      routes: slice.routes.filter((r) => r.taskId !== id),
+      messageLog: slice.messageLog.filter((m) => m.taskId !== id)
+    })
+    this.emit({ kind: 'task.deleted', taskId: id })
   }
 
   messageLogForTask(taskId: UUID): MessageLog[] {
@@ -664,6 +759,124 @@ export class OrchestraCore {
   }
 
   /**
+   * Apply an existing `TeamTemplate` to a project — provisions a new
+   * team-instance in `worktreePath` bound to `templateId`, with agents
+   * and edges cloned from a source instance that already uses the same
+   * template (if any).
+   *
+   * Phase 3 of issue #12. Differs from `importTeam` in two ways:
+   *
+   * 1. The template id is preserved — multiple instances can share one
+   *    template (n:m between templates and projects). `importTeam`
+   *    always mints a fresh template.
+   * 2. The agent/edge content is read from a sibling instance instead
+   *    of an external `TeamExportV1`.
+   */
+  async applyTemplate(input: {
+    templateId: UUID
+    name?: string
+    worktreePath: string
+    projectPath?: string
+  }): Promise<TeamInstance> {
+    const template = this.registry.getTemplate(input.templateId)
+    if (!template) throw new Error('template not found')
+
+    // Pick any sibling instance to clone agents/edges from. There's
+    // always at least one until phase 5 retires the paired-on-create
+    // behaviour, since `createTeam` mints a sibling alongside its
+    // template.
+    const sibling = this.registry
+      .listInstances()
+      .find((inst) => inst.templateId === template.id)
+
+    const exported = sibling
+      ? await this.exportTeam(sibling.id)
+      : null
+
+    const name = input.name?.trim() || template.name
+
+    const { team } = this.registry.createTeamWithTemplate({
+      name,
+      worktreePath: input.worktreePath,
+      templateId: template.id,
+      projectPath: input.projectPath ?? input.worktreePath
+    })
+
+    if (!existsSync(teamDir(team.slug))) {
+      try { await createTeamFolder(team.slug) } catch { /* best-effort */ }
+    }
+
+    if (exported) {
+      if (exported.team.claudeMd) {
+        await this.writeTeamClaudeMd(team.id, exported.team.claudeMd)
+      }
+
+      const slugToId = new Map<string, UUID>()
+      let mainAgentId: UUID | null = null
+
+      for (const agentDef of exported.agents) {
+        const agent = await this.createAgent({
+          teamId: team.id,
+          position: agentDef.position,
+          name: agentDef.name,
+          role: agentDef.role,
+          description: agentDef.description,
+          model: agentDef.model,
+          color: agentDef.color,
+          preset: 'blank'
+        })
+
+        await this.writeAgentSoul(agent.id, agentDef.soul)
+        if (agentDef.skills.length > 0) {
+          await this.writeAgentSkills(agent.id, agentDef.skills)
+        }
+        if (agentDef.triggers.length > 0) {
+          const withIds = agentDef.triggers.map((t) => ({ ...t, id: randomUUID() }))
+          await this.writeAgentTriggers(agent.id, withIds)
+        }
+
+        if (agentDef.maxTokens !== 8192 || agentDef.provider) {
+          await this.updateAgent({
+            id: agent.id,
+            patch: {
+              ...(agentDef.maxTokens !== 8192 ? { maxTokens: agentDef.maxTokens } : {}),
+              ...(agentDef.provider ? { provider: agentDef.provider } : {})
+            }
+          })
+        }
+
+        slugToId.set(agentDef.slug, agent.id)
+        if (agentDef.isMain) mainAgentId = agent.id
+      }
+
+      for (const edgeDef of exported.edges) {
+        const parentId = slugToId.get(edgeDef.parentSlug)
+        const childId = slugToId.get(edgeDef.childSlug)
+        if (!parentId || !childId) continue
+        try {
+          await this.createEdge({
+            teamId: team.id,
+            parentAgentId: parentId,
+            childAgentId: childId,
+            delegationMode: edgeDef.delegationMode
+          })
+        } catch { /* skip cycles, etc. */ }
+      }
+
+      if (mainAgentId) {
+        const current = this.registry.getTeam(team.id)
+        if (current && current.mainAgentId !== mainAgentId) {
+          await this.promoteMain(mainAgentId)
+        }
+      }
+    }
+
+    const instance = this.registry.getInstance(team.id)
+    if (!instance) throw new Error('instance not found after apply')
+    return instance
+  }
+
+  /**
    * Ask Claude to design a team from a free-text user description. Returns
    * a `TeamExportV1` proposal — does NOT persist anything. The caller is
    * expected to feed the result into `importTeam()` if the user accepts it.
@@ -847,6 +1060,31 @@ export class OrchestraCore {
     try { await host.stop('SIGTERM') } catch { /* already dead */ }
   }
 
+  /** Append an `error` MessageLog entry surfacing a refused
+   *  delegation. Without this the agent runner just sees a
+   *  `{ok:false}` envelope and the user never finds out — the Activity
+   *  tab and the parent task's drawer stay silent. */
+  private logDelegationRefusal(
+    fromId: UUID,
+    teamId: UUID,
+    parentTaskId: UUID | null,
+    reason: string
+  ): void {
+    try {
+      this.log.append({
+        instanceId: teamId,
+        teamId,
+        taskId: parentTaskId,
+        fromAgentId: 'system',
+        toAgentId: fromId,
+        kind: 'error',
+        content: `Delegation refused: ${reason}`
+      })
+    } catch {
+      // log is best-effort — never break the delegation path.
+    }
+  }
+
   private async handleDelegate(
     fromId: UUID,
     req: DelegateRequestPayload
@@ -855,11 +1093,29 @@ export class OrchestraCore {
     if (!from) return { ok: false, error: 'source agent not found' }
 
     const validation = this.router.validateDelegation(fromId, req.toAgentId)
-    if (!validation.ok) return { ok: false, error: validation.error }
+    if (!validation.ok) {
+      this.logDelegationRefusal(fromId, from.teamId, null, validation.error)
+      return { ok: false, error: validation.error }
+    }
 
     const parent = this.mostRecentActiveTaskFor(fromId)
+    if (
+      parent &&
+      delegationDepth(getStore().orchestra.tasks, parent.id) >= MAX_DELEGATION_DEPTH
+    ) {
+      const reason = `delegation depth exceeded (max ${MAX_DELEGATION_DEPTH})`
+      this.logDelegationRefusal(fromId, from.teamId, parent.id, reason)
+      return { ok: false, error: reason }
+    }
     const sub: SubmitInput = {
       teamId: from.teamId,
+      // Honour the agent's chosen target. Without this, submitTask
+      // falls into Router.pickAgent, which re-routes; when no trigger
+      // matches positively the router falls back to the team's main
+      // agent — and the main delegates again, looping forever.
+      // validateDelegation already proved toAgentId is a valid
+      // descendant in the DAG, so trusting it here is safe.
+      assignedAgentId: req.toAgentId,
       title: req.sub.title,
       body: req.sub.body,
       priority: req.sub.priority,

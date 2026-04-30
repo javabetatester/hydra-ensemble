@@ -147,14 +147,7 @@ export default function TasksHistoryPanel() {
   const hasAnyHistory = teamHistory.length > 0
 
   const handleReopen = async (task: Task): Promise<void> => {
-    const cloned = await useOrchestra.getState().submitTask({
-      teamId: task.teamId,
-      title: `Re-run: ${task.title}`,
-      body: task.body,
-      priority: task.priority,
-      tags: [...task.tags, 're-run'],
-      assignedAgentId: task.assignedAgentId ?? undefined
-    })
+    const cloned = await useOrchestra.getState().rerunTask(task.id)
     if (cloned) {
       useToasts.getState().push({
         kind: 'success',

@@ -14,7 +14,7 @@ import { Plus } from 'lucide-react'
 import type { Task, TaskStatus, UUID } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
 import TaskRow from './TaskRow'
-import NewTaskDialog from './modals/NewTaskDialog'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 
 type FilterKey = 'all' | 'active' | 'done' | 'failed'
 
@@ -55,9 +55,12 @@ export default function TasksPanel() {
   const tasks = useOrchestra((s) => s.tasks)
   const agents = useOrchestra((s) => s.agents)
   const setTaskDrawer = useOrchestra((s) => s.setTaskDrawer)
+  const cancelTask = useOrchestra((s) => s.cancelTask)
+  const rerunTask = useOrchestra((s) => s.rerunTask)
+  const deleteTask = useOrchestra((s) => s.deleteTask)
 
   const [filter, setFilter] = useState<FilterKey>('all')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const showNewTaskDialog = useNewTaskDialog((s) => s.show)
 
   // Narrow to the active team's tasks and sort newest-first. Memoised so
   // typing a filter change doesn't re-walk the tasks array.
@@ -142,7 +145,7 @@ export default function TasksPanel() {
       <div className="flex flex-col gap-1 border-b border-border-soft bg-bg-1 px-3 pb-2 pt-2">
         <button
           type="button"
-          onClick={() => setDialogOpen(true)}
+          onClick={() => showNewTaskDialog()}
           disabled={!canCreateTask}
           title={createDisabledReason}
           aria-label="New task"
@@ -191,7 +194,7 @@ export default function TasksPanel() {
             subtitle="Submit one to dispatch agents."
             cta={{
               label: 'New Task',
-              onClick: () => setDialogOpen(true)
+              onClick: () => showNewTaskDialog()
             }}
           />
         ) : filteredTasks.length === 0 ? (
@@ -207,6 +210,9 @@ export default function TasksPanel() {
                   task={t}
                   assigneeName={resolveAssigneeName(t)}
                   onClick={() => setTaskDrawer(t.id)}
+                  onStop={(task) => void cancelTask(task.id)}
+                  onRerun={(task) => void rerunTask(task.id)}
+                  onDelete={(task) => void deleteTask(task.id)}
                 />
               </li>
             ))}
@@ -222,9 +228,9 @@ export default function TasksPanel() {
         <span>{runningCount} running</span>
       </footer>
 
-      {/* Creation modal — rendered inline so callers don't need to mount a
-          portal host in OrchestraView before this panel works. */}
-      <NewTaskDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      {/* Creation modal lives globally in App.tsx — opening flows
+          through useNewTaskDialog so context (project, instance) is
+          honoured uniformly across surfaces. */}
     </div>
   )
 }

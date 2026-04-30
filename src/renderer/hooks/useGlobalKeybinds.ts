@@ -3,6 +3,7 @@ import { useKeybinds, resolveBind } from '../state/keybinds'
 import { comboFromEvent, matchesCombo } from '../lib/keybind'
 import { hasMod } from '../lib/platform'
 import { useRightPanel, type PanelKind } from '../state/panels'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 
 /**
  * Global keybind dispatcher previously embedded in App.tsx.
@@ -14,6 +15,10 @@ import { useRightPanel, type PanelKind } from '../state/panels'
  */
 export interface GlobalKeybindDeps {
   orchestraEnabled: boolean
+  /** Whether the Orchestrator overlay is currently mounted (vs just
+   *  enabled). Used to make `Ctrl+Q` and `Ctrl+Shift+O` context-aware
+   *  switches between the orchestrator and classic layouts. */
+  orchestraOpen: boolean
   toggleOrchestra: () => void
   setOrchestraOpen: (v: boolean) => void
   setOrchestraSettings: (patch: { enabled: boolean }) => Promise<void>
@@ -35,11 +40,14 @@ export interface GlobalKeybindDeps {
   currentProjectPath: string | null
   setCurrentProject: (path: string) => Promise<void>
   lastActiveByProject: Record<string, string>
+  /** Orchestrator: open the New-Task dialog scoped to a project. */
+  showNewOrchestraTask: (ctx?: { projectPath?: string }) => void
 }
 
 export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
   const {
     orchestraEnabled,
+    orchestraOpen,
     toggleOrchestra,
     setOrchestraOpen,
     setOrchestraSettings,
@@ -59,7 +67,8 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
     projects,
     currentProjectPath,
     setCurrentProject,
-    lastActiveByProject
+    lastActiveByProject,
+    showNewOrchestraTask
   } = deps
 
   const overrides = useKeybinds((s) => s.overrides)
@@ -122,9 +131,51 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
       'drawer.projects': () => setDrawerOpen((v) => !v),
       'panel.dashboard': () => togglePanelFor('dashboard'),
       'panel.editor': () => togglePanelFor('editor'),
-      'panel.sessions': () => useRightPanel.getState().toggle(),
+      // panel.sessions is the classic-layout toggle; when the
+      // orchestrator overlay is up, the same key acts as "exit
+      // orchestrator" so users can mirror the open shortcut below.
+      'panel.sessions': () => {
+        if (orchestraOpen) {
+          setOrchestraOpen(false)
+          return
+        }
+        useRightPanel.getState().toggle()
+      },
       'palette.open': () => setPaletteOpen((v) => !v),
-      'help.open': () => setHelpOpen((v) => !v)
+      'help.open': () => setHelpOpen((v) => !v),
+      // orchestra.newTaskInProject is dual-purpose:
+      //   - In classic layout: open the orchestrator overlay (no
+      //     modal). This is the symmetric counterpart to panel.sessions
+      //     above, so Ctrl+Q exits and Ctrl+Shift+O enters.
+      //   - In the orchestrator: open NewTaskDialog with the current
+      //     project as initial context.
+      'orchestra.newTaskInProject': () => {
+        if (!orchestraOpen) {
+          if (!orchestraEnabled) {
+            void setOrchestraSettings({ enabled: true })
+          }
+          setOrchestraOpen(true)
+          return
+        }
+        showNewOrchestraTask(
+          currentProjectPath ? { projectPath: currentProjectPath } : {}
+        )
+      },
+      // Orchestrator panel toggles. No-op outside the orchestrator
+      // overlay so they don't intercept Ctrl+Shift+L/P/J in the
+      // classic layout (where they'd be jarring no-ops).
+      'orchestra.panel.templates': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleTemplates()
+      },
+      'orchestra.panel.projects': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleProjects()
+      },
+      'orchestra.panel.dock': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleTasksPanel()
+      }
     }
 
     const onKey = (e: KeyboardEvent): void => {

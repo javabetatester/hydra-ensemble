@@ -9,10 +9,18 @@ import {
   type ReportingEdge,
   type SafeMode,
   type Team,
+  type TeamInstance,
+  type TeamTemplate,
   type UUID,
   type UpdateAgentInput
 } from '../../shared/orchestra'
 import { getStore, patchStore } from '../store'
+
+/** Deterministic id of the dedicated template paired with a legacy team
+ *  during the template/instance split. Phase 5 retires this scheme. */
+function templateIdFor(teamId: UUID): UUID {
+  return `${teamId}-tpl`
+}
 
 /**
  * Storage surface the registry needs. Matches `project/manager.ts` so tests
@@ -82,6 +90,28 @@ export class OrchestraRegistry {
     return this.read().teams.find((t) => t.id === id)
   }
 
+  // template / instance — phase 2 readers. Mirror the legacy team
+  // surface so callers can migrate gradually. Phase 5 makes these the
+  // primary surface and removes the team-keyed methods above.
+
+  getTemplate(id: UUID): TeamTemplate | undefined {
+    return this.read().templates.find((t) => t.id === id)
+  }
+
+  listTemplates(): TeamTemplate[] {
+    return [...this.read().templates]
+  }
+
+  getInstance(id: UUID): TeamInstance | undefined {
+    return this.read().instances.find((i) => i.id === id)
+  }
+
+  listInstances(filter: { projectPath?: string } = {}): TeamInstance[] {
+    const { instances } = this.read()
+    if (filter.projectPath === undefined) return [...instances]
+    return instances.filter((i) => i.projectPath === filter.projectPath)
+  }
+
   createTeam(input: NewTeamInput): Team {
     const name = input.name?.trim() ?? ''
     if (name.length === 0) throw new Error('empty name')
@@ -102,7 +132,31 @@ export class OrchestraRegistry {
       createdAt: now,
       updatedAt: now
     }
-    this.write({ ...state, teams: [...state.teams, team] })
+    const template: TeamTemplate = {
+      id: templateIdFor(team.id),
+      slug,
+      name,
+      safeMode: team.safeMode,
+      defaultModel: team.defaultModel,
+      apiKeyRef: team.apiKeyRef,
+      mainAgentSlug: null,
+      canvas: { ...team.canvas },
+      createdAt: now,
+      updatedAt: now
+    }
+    const instance: TeamInstance = {
+      id: team.id,
+      templateId: template.id,
+      projectPath: team.worktreePath,
+      worktreePath: team.worktreePath,
+      createdAt: now
+    }
+    this.write({
+      ...state,
+      teams: [...state.teams, team],
+      templates: [...state.templates, template],
+      instances: [...state.instances, instance]
+    })
     return { ...team }
   }
 
@@ -112,14 +166,15 @@ export class OrchestraRegistry {
     const state = this.read()
     const team = state.teams.find((t) => t.id === id)
     if (!team) throw new Error('team not found')
-    const updated: Team = {
-      ...team,
-      name: trimmed,
-      updatedAt: new Date().toISOString()
-    }
+    const now = new Date().toISOString()
+    const updated: Team = { ...team, name: trimmed, updatedAt: now }
+    const tplId = templateIdFor(id)
     this.write({
       ...state,
-      teams: state.teams.map((t) => (t.id === id ? updated : t))
+      teams: state.teams.map((t) => (t.id === id ? updated : t)),
+      templates: state.templates.map((tpl) =>
+        tpl.id === tplId ? { ...tpl, name: trimmed, updatedAt: now } : tpl
+      )
     })
     return { ...updated }
   }
@@ -128,10 +183,15 @@ export class OrchestraRegistry {
     const state = this.read()
     const team = state.teams.find((t) => t.id === id)
     if (!team) throw new Error('team not found')
-    const updated: Team = { ...team, safeMode, updatedAt: new Date().toISOString() }
+    const now = new Date().toISOString()
+    const updated: Team = { ...team, safeMode, updatedAt: now }
+    const tplId = templateIdFor(id)
     this.write({
       ...state,
-      teams: state.teams.map((t) => (t.id === id ? updated : t))
+      teams: state.teams.map((t) => (t.id === id ? updated : t)),
+      templates: state.templates.map((tpl) =>
+        tpl.id === tplId ? { ...tpl, safeMode, updatedAt: now } : tpl
+      )
     })
     return { ...updated }
   }
@@ -139,9 +199,24 @@ export class OrchestraRegistry {
   deleteTeam(id: UUID): void {
     const state = this.read()
     if (!state.teams.some((t) => t.id === id)) return
+    const removed = state.instances.find((inst) => inst.id === id)
+    const remainingInstances = state.instances.filter((inst) => inst.id !== id)
+    // Drop the template only if no other instance still references it.
+    // Once `applyTemplate` lands (phase 3), one template can back several
+    // instances across projects — deleting one instance must not
+    // invalidate the others.
+    const orphanTemplateId =
+      removed &&
+      !remainingInstances.some((inst) => inst.templateId === removed.templateId)
+        ? removed.templateId
+        : null
     this.write({
       ...state,
       teams: state.teams.filter((t) => t.id !== id),
+      templates: orphanTemplateId
+        ? state.templates.filter((tpl) => tpl.id !== orphanTemplateId)
+        : state.templates,
+      instances: remainingInstances,
       agents: state.agents.filter((a) => a.teamId !== id),
       edges: state.edges.filter((e) => e.teamId !== id),
       tasks: state.tasks.filter((t) => t.teamId !== id),
@@ -151,6 +226,56 @@ export class OrchestraRegistry {
       }),
       messageLog: state.messageLog.filter((m) => m.teamId !== id)
     })
+  }
+
+  /**
+   * Phase-3 entry point: create a fresh team-instance bound to an
+   * **existing** template instead of minting a new one alongside the
+   * team. Used by `applyTemplate` to apply the same template to a
+   * different project. Phase 5 will fold this into a single `createInstance`
+   * once the legacy `Team` shape is gone.
+   */
+  createTeamWithTemplate(input: {
+    name: string
+    worktreePath: string
+    templateId: UUID
+    projectPath?: string
+  }): { team: Team; instance: TeamInstance } {
+    const name = input.name?.trim() ?? ''
+    if (name.length === 0) throw new Error('empty name')
+
+    const state = this.read()
+    const template = state.templates.find((t) => t.id === input.templateId)
+    if (!template) throw new Error('template not found')
+
+    const slug = slugify(name, state.teams.map((t) => t.slug))
+    const now = new Date().toISOString()
+    const team: Team = {
+      id: randomUUID(),
+      slug,
+      name,
+      worktreePath: input.worktreePath,
+      safeMode: template.safeMode,
+      defaultModel: template.defaultModel,
+      apiKeyRef: template.apiKeyRef,
+      mainAgentId: null,
+      canvas: { ...template.canvas },
+      createdAt: now,
+      updatedAt: now
+    }
+    const instance: TeamInstance = {
+      id: team.id,
+      templateId: template.id,
+      projectPath: input.projectPath ?? input.worktreePath,
+      worktreePath: input.worktreePath,
+      createdAt: now
+    }
+    this.write({
+      ...state,
+      teams: [...state.teams, team],
+      instances: [...state.instances, instance]
+    })
+    return { team: { ...team }, instance: { ...instance } }
   }
 
   // agents
@@ -176,6 +301,7 @@ export class OrchestraRegistry {
     const now = new Date().toISOString()
     const agent: Agent = {
       id: randomUUID(),
+      instanceId: input.teamId,
       teamId: input.teamId,
       slug,
       name,
@@ -197,12 +323,20 @@ export class OrchestraRegistry {
       ? { ...team, mainAgentId: agent.id, updatedAt: now }
       : team
 
+    const tplId = templateIdFor(team.id)
     this.write({
       ...state,
       agents: [...state.agents, agent],
       teams: isFirstAgent
         ? state.teams.map((t) => (t.id === team.id ? updatedTeam : t))
-        : state.teams
+        : state.teams,
+      templates: isFirstAgent
+        ? state.templates.map((tpl) =>
+            tpl.id === tplId
+              ? { ...tpl, mainAgentSlug: agent.slug, updatedAt: now }
+              : tpl
+          )
+        : state.templates
     })
     return { ...agent }
   }
@@ -231,25 +365,34 @@ export class OrchestraRegistry {
 
     const team = state.teams.find((t) => t.id === agent.teamId)
     let teams = state.teams
+    let templates = state.templates
     if (team && team.mainAgentId === id) {
       // Reassign to the next-oldest surviving agent in the team, or null.
       const candidates = remainingAgents
         .filter((a) => a.teamId === team.id)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      const nextMain = candidates[0]?.id ?? null
+      const nextMain = candidates[0] ?? null
+      const now = new Date().toISOString()
       const updatedTeam: Team = {
         ...team,
-        mainAgentId: nextMain,
-        updatedAt: new Date().toISOString()
+        mainAgentId: nextMain?.id ?? null,
+        updatedAt: now
       }
       teams = state.teams.map((t) => (t.id === team.id ? updatedTeam : t))
+      const tplId = templateIdFor(team.id)
+      templates = state.templates.map((tpl) =>
+        tpl.id === tplId
+          ? { ...tpl, mainAgentSlug: nextMain?.slug ?? null, updatedAt: now }
+          : tpl
+      )
     }
 
     this.write({
       ...state,
       agents: remainingAgents,
       edges: remainingEdges,
-      teams
+      teams,
+      templates
     })
   }
 
@@ -259,14 +402,17 @@ export class OrchestraRegistry {
     if (!agent) throw new Error('agent not found')
     const team = state.teams.find((t) => t.id === agent.teamId)
     if (!team) throw new Error('team not found')
-    const updated: Team = {
-      ...team,
-      mainAgentId: agentId,
-      updatedAt: new Date().toISOString()
-    }
+    const now = new Date().toISOString()
+    const updated: Team = { ...team, mainAgentId: agentId, updatedAt: now }
+    const tplId = templateIdFor(team.id)
     this.write({
       ...state,
-      teams: state.teams.map((t) => (t.id === team.id ? updated : t))
+      teams: state.teams.map((t) => (t.id === team.id ? updated : t)),
+      templates: state.templates.map((tpl) =>
+        tpl.id === tplId
+          ? { ...tpl, mainAgentSlug: agent.slug, updatedAt: now }
+          : tpl
+      )
     })
     return { ...updated }
   }
@@ -302,6 +448,7 @@ export class OrchestraRegistry {
 
     const edge: ReportingEdge = {
       id: randomUUID(),
+      instanceId: input.teamId,
       teamId: input.teamId,
       parentAgentId: input.parentAgentId,
       childAgentId: input.childAgentId,

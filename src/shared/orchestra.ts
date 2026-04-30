@@ -49,6 +49,61 @@ export interface Team {
   updatedAt: ISO
 }
 
+/**
+ * Reusable, project-agnostic definition of a team — the "how" of running
+ * a kind of task. Carries metadata and provisioning defaults but **no**
+ * project-specific runtime state (worktree, runtime mutations, message
+ * log, telemetry — those belong on `TeamInstance`).
+ *
+ * Today's `Team` still exists alongside this for backwards compatibility
+ * during the template/instance split (see issue #12 and
+ * `researchs/proposals/team-template-instance-split.md`). Phase 5 of the
+ * plan removes `Team` once all consumers move to template + instance.
+ */
+export interface TeamTemplate {
+  id: UUID
+  slug: string
+  name: string
+  safeMode: SafeMode
+  defaultModel: string
+  apiKeyRef: string
+  /** Slug of the entry-point agent. We key by slug (stable across
+   *  instances) instead of agent id, since agent ids only exist once
+   *  the template is applied to a project. */
+  mainAgentSlug: string | null
+  /** Default canvas layout to seed each new instance. Each instance
+   *  gets its own copy on creation and mutates independently. */
+  canvas: { zoom: number; panX: number; panY: number }
+  createdAt: ISO
+  updatedAt: ISO
+}
+
+/**
+ * A `TeamTemplate` applied to a specific project — the unit that owns
+ * project-bound runtime state (worktree, future memory/telemetry/logs).
+ *
+ * One template may produce many instances (one per project it's applied
+ * to); a project may host several instances. Per-project context
+ * isolation is a structural property of the instance — see
+ * `researchs/techniques/dual-memory-architecture.md` for the underlying
+ * requirement.
+ *
+ * `id` is preserved across the v1→v2 migration so existing foreign keys
+ * on `Agent.teamId`, `Task.teamId`, `ReportingEdge.teamId`,
+ * `MessageLog.teamId` keep resolving without rewrites. Subsequent
+ * phases rename those fields to `instanceId`.
+ */
+export interface TeamInstance {
+  id: UUID
+  templateId: UUID
+  /** Project root the instance belongs to. Same as `worktreePath` for
+   *  most instances; may diverge when the instance runs in a separate
+   *  git worktree from the project root. */
+  projectPath: string
+  worktreePath: string
+  createdAt: ISO
+}
+
 /** Which backend the runner should use for this agent.
  *  - `claude-cli`   — spawn `claude -p` and reuse the OAuth login in ~/.claude
  *  - `anthropic-api` — call Anthropic SDK with ANTHROPIC_API_KEY
@@ -60,6 +115,10 @@ export type AgentProvider = 'inherit' | 'claude-cli' | 'anthropic-api'
 
 export interface Agent {
   id: UUID
+  /** Owning team-instance. During the template/instance split,
+   *  `instanceId === teamId` (see issue #12). Phase 5 added this
+   *  field; a follow-up PR removes `teamId`. */
+  instanceId: UUID
   teamId: UUID
   slug: string
   name: string
@@ -100,6 +159,8 @@ export interface Trigger {
 
 export interface ReportingEdge {
   id: UUID
+  /** Owning team-instance. During the split, `instanceId === teamId`. */
+  instanceId: UUID
   teamId: UUID
   parentAgentId: UUID
   childAgentId: UUID
@@ -108,6 +169,10 @@ export interface ReportingEdge {
 
 export interface Task {
   id: UUID
+  /** Owning team-instance. During the template/instance split,
+   *  `instanceId === teamId` (see issue #12, phase 2). Phase 5 retires
+   *  `teamId`. */
+  instanceId: UUID
   teamId: UUID
   title: string
   body: string
@@ -135,6 +200,8 @@ export interface Route {
 
 export interface MessageLog {
   id: UUID
+  /** Owning team-instance. During the split, `instanceId === teamId`. */
+  instanceId: UUID
   teamId: UUID
   taskId: UUID | null
   fromAgentId: UUID | 'system' | 'user'
@@ -144,17 +211,26 @@ export interface MessageLog {
   at: ISO
 }
 
-/** Shape of `store.orchestra` in the JSON store. */
+/** Shape of `store.orchestra` in the JSON store.
+ *
+ *  Schema v2 introduced `templates` and `instances` alongside the
+ *  legacy `teams[]`. Schema v3 (phase 5 of issue #12) adds the
+ *  `instanceId` field to `Agent`, `ReportingEdge`, and `MessageLog`
+ *  as the canonical owning-instance pointer; `teamId` stays as an
+ *  alias until a follow-up PR removes it across all call sites.
+ *  Snapshots are migrated through the chain `v1 → v2 → v3` by
+ *  `src/main/orchestra/migration.ts`. */
 export interface OrchestraStoreSlice {
   settings: OrchestraSettings
   teams: Team[]
+  templates: TeamTemplate[]
+  instances: TeamInstance[]
   agents: Agent[]
   edges: ReportingEdge[]
   tasks: Task[]
   routes: Route[]
   messageLog: MessageLog[]
-  /** Reserved for future forward-compat. */
-  schemaVersion: 1
+  schemaVersion: 3
 }
 
 export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
@@ -164,12 +240,14 @@ export const DEFAULT_ORCHESTRA_STATE: OrchestraStoreSlice = {
     onboardingDismissed: false
   },
   teams: [],
+  templates: [],
+  instances: [],
   agents: [],
   edges: [],
   tasks: [],
   routes: [],
   messageLog: [],
-  schemaVersion: 1
+  schemaVersion: 3
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +262,7 @@ export type OrchestraEvent =
   | { kind: 'edge.changed'; edge: ReportingEdge }
   | { kind: 'edge.deleted'; edgeId: UUID }
   | { kind: 'task.changed'; task: Task }
+  | { kind: 'task.deleted'; taskId: UUID }
   | { kind: 'route.added'; route: Route }
   | { kind: 'messageLog.appended'; entry: MessageLog }
   | { kind: 'apiKey.changed' }
@@ -236,7 +315,13 @@ export interface NewEdgeInput {
 }
 
 export interface SubmitTaskInput {
-  teamId: UUID
+  /** Target team-instance for the task. Preferred over `teamId`. While
+   *  the template/instance split is in flight, `instance.id === legacy
+   *  team.id` so either field resolves to the same target. Phase 5
+   *  retires `teamId` here too. */
+  instanceId?: UUID
+  /** Legacy alias for `instanceId`. At least one of the two must be set. */
+  teamId?: UUID
   title: string
   body: string
   priority?: Priority

@@ -4,10 +4,15 @@ import {
   FolderOpen,
   ArrowRightLeft,
   Copy,
+  Network,
+  Plus,
   Trash2
 } from 'lucide-react'
 import type { ProjectMeta } from '../../../shared/types'
 import ContextMenu, { type ContextMenuItem } from '../ContextMenu'
+import { useNewTaskDialog } from '../../state/newTaskDialog'
+import { useApplyTemplateDialog } from '../../state/applyTemplateDialog'
+import { useOrchestra } from '../../orchestra/state/orchestra'
 
 interface ProjectItemProps {
   project: ProjectMeta
@@ -25,6 +30,10 @@ export default function ProjectItem({
   onCopyPath
 }: ProjectItemProps) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  // Hide the orchestrator entries until the user has opted into the
+  // feature — the project sidebar shouldn't surface knobs for a mode
+  // they haven't enabled yet.
+  const orchestraEnabled = useOrchestra((s) => s.settings.enabled)
 
   const items: ContextMenuItem[] = [
     {
@@ -32,6 +41,26 @@ export default function ProjectItem({
       onSelect,
       icon: <ArrowRightLeft size={14} strokeWidth={1.75} />
     },
+    ...(orchestraEnabled
+      ? [
+          {
+            label: 'New orchestrator task here',
+            onSelect: () => {
+              useNewTaskDialog.getState().show({ projectPath: project.path })
+            },
+            icon: <Plus size={14} strokeWidth={1.75} />
+          },
+          {
+            label: 'Apply team template here…',
+            onSelect: () => {
+              useApplyTemplateDialog
+                .getState()
+                .show({ projectPath: project.path })
+            },
+            icon: <Network size={14} strokeWidth={1.75} />
+          }
+        ]
+      : []),
     {
       label: 'Copy path',
       onSelect: onCopyPath,

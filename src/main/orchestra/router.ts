@@ -74,12 +74,17 @@ export class Router {
 
   /**
    * Pure routing decision, no side effects. Reads triggers + skills for each
-   * non-paused agent in the team, scores them via `deps.scoreForAgent`, and
-   * picks the winner. Falls back to the team's main agent if nobody scored.
+   * non-paused agent in the team-instance, scores them via
+   * `deps.scoreForAgent`, and picks the winner. Falls back to the instance's
+   * main agent if nobody scored.
    */
   async pickAgent(task: Task): Promise<PickResult> {
+    // Phase 2 of issue #12: prefer `instanceId`, fall back to `teamId`
+    // for tasks created before the field was populated. While the
+    // template/instance split is in flight the two are equal.
+    const targetId = task.instanceId ?? task.teamId
     const activeAgents = this.deps
-      .listAgents(task.teamId)
+      .listAgents(targetId)
       .filter((a) => a.state !== 'paused')
 
     const scored = await Promise.all(
@@ -100,7 +105,7 @@ export class Router {
     const positive = scored.filter((c) => c.score > 0)
 
     if (positive.length === 0) {
-      const main = this.deps.mainAgentOf(task.teamId)
+      const main = this.deps.mainAgentOf(targetId)
       if (!main) throw new Error('no main agent set')
       return {
         chosen: main,

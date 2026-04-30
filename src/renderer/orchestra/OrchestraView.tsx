@@ -21,7 +21,6 @@ import {
 import { useOrchestra } from './state/orchestra'
 import TeamRail from './TeamRail'
 import Canvas from './Canvas'
-import Inspector from './Inspector'
 import SidePanels from './SidePanels'
 import TeamOverview from './TeamOverview'
 import CanvasFabs from './CanvasFabs'
@@ -35,18 +34,20 @@ import OrchestraSearch from './OrchestraSearch'
 import NotificationsBell from './NotificationsBell'
 import TeamHealthPanel from './TeamHealthPanel'
 import AgentWizard from './modals/AgentWizard'
-import NewTaskDialog from './modals/NewTaskDialog'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 import NewTeamDialog from './modals/NewTeamDialog'
 import TeamTemplatesDialog from './TeamTemplatesDialog'
 import ImportTeamDialog from './ImportTeamDialog'
 import GenerateTeamDialog from './GenerateTeamDialog'
 import TeamSwitcher from './TeamSwitcher'
+import ProjectChip from './ProjectChip'
+import TemplatesPanel from './TemplatesPanel'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
 import ProvidersDialog from './ProvidersDialog'
 import ShortcutHud from './ShortcutHud'
 import AgentPresence from './AgentPresence'
-import TeamTabsStrip from './TeamTabsStrip'
 import BudgetWarning from './BudgetWarning'
 import OrchestraBreadcrumb from './OrchestraBreadcrumb'
 import {
@@ -108,6 +109,10 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const agents = useOrchestra((s) => s.agents)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
   const inspectorOpen = useOrchestra((s) => s.inspectorOpen)
+  const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
+  const projectsPanelOpen = useOrchestraPanels((s) => s.projects)
+  const dockPanelOpen = useOrchestraPanels((s) => s.tasksPanel)
+  const showCanvasToolbar = useOrchestraPanels((s) => s.toolbar)
   const init = useOrchestra((s) => s.init)
   const createTeam = useOrchestra((s) => s.createTeam)
 
@@ -126,7 +131,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [healthOpen, setHealthOpen] = useState<boolean>(false)
   const [wizardOpen, setWizardOpen] = useState<boolean>(false)
-  const [newTaskOpen, setNewTaskOpen] = useState<boolean>(false)
+  const showNewTaskDialog = useNewTaskDialog((s) => s.show)
   const [templatesOpen, setTemplatesOpen] = useState<boolean>(false)
   const [providersOpen, setProvidersOpen] = useState<boolean>(false)
   const [sidePanelsHidden, setSidePanelsHidden] = useState<boolean>(false)
@@ -149,7 +154,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       onOrchestraEvent(ORCHESTRA_EVENTS.help, () => setHelpOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.search, () => setSearchOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.settings, () => setSettingsOpen((v) => !v)),
-      onOrchestraEvent(ORCHESTRA_EVENTS.newTask, () => setNewTaskOpen(true)),
+      onOrchestraEvent(ORCHESTRA_EVENTS.newTask, () => showNewTaskDialog()),
       onOrchestraEvent(ORCHESTRA_EVENTS.newAgentWizard, () => setWizardOpen(true)),
       onOrchestraEvent(ORCHESTRA_EVENTS.healthToggle, () => setHealthOpen((v) => !v)),
       // Rail footer / empty-state / template buttons dispatch these;
@@ -203,6 +208,14 @@ export default function OrchestraView({ onBackToClassic }: Props) {
     () => (activeTeam ? agents.filter((a) => a.teamId === activeTeam.id) : []),
     [agents, activeTeam]
   )
+  /** Tasks scoped to the active team — surfaced in the header counter
+   *  next to the agent count so the breadcrumb's pill can be retired. */
+  const activeTeamTaskCount = useMemo(() => {
+    if (!activeTeam) return 0
+    let n = 0
+    for (const t of tasks) if (t.teamId === activeTeam.id) n++
+    return n
+  }, [tasks, activeTeam])
   /** Count of tasks in the active team that failed in the last 24h —
    *  surfaces as a red dot on the Health button. */
   const recentFailureCount = useMemo(() => {
@@ -271,11 +284,12 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           · surface still shifting, expect rough edges
         </span>
       </div>
-      {/* Top header strip — 48px, two logical groups separated by a visible
-          divider on the right. See PRD.md §11. */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-4">
-        {/* Left group: navigation + brand + team picker */}
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Top header strip — 40px (was 48), two logical groups separated
+          by a visible divider on the right. Trimmed in phase-1 of the
+          orchestrator UI proposal so the canvas gains vertical room. */}
+      <header className="flex h-10 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-4">
+        {/* Left group: navigation + brand + project + team picker */}
+        <div className="flex min-w-0 items-center gap-2.5">
           <button
             type="button"
             onClick={onBackToClassic}
@@ -295,6 +309,10 @@ export default function OrchestraView({ onBackToClassic }: Props) {
                 className="h-5 w-px bg-border-soft"
                 aria-hidden
               />
+              {/* Project chip — first thing after the brand so the
+                   "where am I" answer is unmissable. Followed by the
+                   team picker. */}
+              <ProjectChip />
               <div className="flex items-center gap-1.5">
                 <TeamSwitcher />
                 {activeTeam?.mainAgentId ? (
@@ -307,8 +325,16 @@ export default function OrchestraView({ onBackToClassic }: Props) {
                   </span>
                 ) : null}
                 {activeAgents.length > 0 ? (
-                  <span className="font-mono text-[10px] text-text-4">
+                  <span
+                    className="font-mono text-[10px] text-text-4"
+                    title="Agents · tasks in the active team"
+                  >
                     {activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'}
+                    {activeTeamTaskCount > 0
+                      ? ` · ${activeTeamTaskCount} ${
+                          activeTeamTaskCount === 1 ? 'task' : 'tasks'
+                        }`
+                      : ''}
                   </span>
                 ) : null}
               </div>
@@ -391,14 +417,18 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       {/* Secondary header strip: breadcrumb path renders below the main header. */}
       <OrchestraBreadcrumb />
 
-      {/* Team tabs — only shown when there is more than one team to switch between. */}
-      {teams.length >= 2 ? <TeamTabsStrip /> : null}
+      {/* TeamTabsStrip retired in phase-5: TeamSwitcher in the header
+          plus the grouped TeamRail cover the same selector role
+          without a third surface. */}
 
-      {/* Main 3-column body */}
+      {/* Main multi-panel body. Templates Library is the leftmost
+          panel when toggled on (Ctrl+Shift+L), then the
+          Projects/Teams rail (Ctrl+Shift+P), then the canvas, then
+          the right dock (Ctrl+Shift+J). Each panel is independently
+          collapsible — see useOrchestraPanels. */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex w-[220px] shrink-0 flex-col border-r border-border-soft bg-bg-2">
-          <TeamRail />
-        </aside>
+        <TemplatesPanel />
+        {projectsPanelOpen ? <TeamRail /> : null}
 
         <main className="relative flex min-w-0 flex-1 flex-col bg-bg-1">
           {/* Subtle accent stripe along the top edge when any task is
@@ -430,8 +460,9 @@ export default function OrchestraView({ onBackToClassic }: Props) {
               <BudgetWarning />
               {/* Live counters + active-task chips pinned to the top. */}
               <TeamOverview />
-              {/* Bottom-left toolbar (fit-view, auto-layout, templates). */}
-              <CanvasToolbar />
+              {/* Bottom-left toolbar (fit-view, auto-layout, templates).
+                  Toggleable from the View ▾ dropdown. */}
+              {showCanvasToolbar ? <CanvasToolbar /> : null}
               {/* Bottom-right FABs (new agent, new task). */}
               <CanvasFabs />
               {/* Live presence indicators for agents in the active team. */}
@@ -442,15 +473,22 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           )}
         </main>
 
-        {/* Right column: tabbed side panels (Tasks · History · Changes ·
-            Activity + BudgetMeter footer). Inspector is a fixed-position
-            drawer that layers on top when an agent is selected. */}
-        {activeTeam && !sidePanelsHidden ? (
-          <aside className="flex w-[340px] shrink-0 flex-col border-l border-border-soft bg-bg-2">
+        {/* Right dock: hosts the team-scoped tab strip (Tasks · History
+            · Changes · Activity) AND, when a single agent is selected,
+            the Inspector — same surface, same close. Width adapts so
+            the Inspector's denser content gets a bit more room. Phase
+            3 of the orchestrator UI proposal. */}
+        {activeTeam && !sidePanelsHidden && dockPanelOpen ? (
+          <aside
+            className={`flex shrink-0 flex-col border-l border-border-soft bg-bg-2 transition-[width] duration-150 ${
+              inspectorOpen && selectedAgentIds.length === 1
+                ? 'w-[440px]'
+                : 'w-[360px]'
+            }`}
+          >
             <SidePanels />
           </aside>
         ) : null}
-        {inspectorOpen ? <Inspector /> : null}
       </div>
 
       {/* Bottom bar removed — task submission lives in the right-side
@@ -497,7 +535,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       ) : null}
 
       {/* New task dialog (Ctrl+Shift+N). */}
-      <NewTaskDialog open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
+      {/* NewTaskDialog is mounted globally in App.tsx; opening here goes
+          through `useNewTaskDialog.show()` so context flows uniformly. */}
 
       {/* Team templates dialog (Templates button in the action bar). */}
       <TeamTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} />

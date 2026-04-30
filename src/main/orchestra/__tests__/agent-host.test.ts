@@ -38,6 +38,7 @@ function makeTeam(overrides: Partial<Team> = {}): Team {
 function makeAgent(overrides: Partial<Agent> = {}): Agent {
   return {
     id: 'agent-1',
+    instanceId: 'team-1',
     teamId: 'team-1',
     slug: 'dev',
     name: 'Dev',
@@ -58,6 +59,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 'task-1',
+    instanceId: 'team-1',
     teamId: 'team-1',
     title: 'Do the thing',
     body: 'Thing description',
@@ -295,6 +297,7 @@ describe('AgentHost — message forwarding', () => {
     last()!.emitFromChild({
       kind: 'message',
       entry: {
+        instanceId: 'team-1',
         teamId: 'team-1',
         taskId: 'task-1',
         fromAgentId: 'agent-1',

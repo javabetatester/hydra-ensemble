@@ -10,6 +10,14 @@ function makeRegistry(): OrchestraRegistry {
   return new OrchestraRegistry(createMemoryOrchestraStore())
 }
 
+function makeRegistryWithStore(): {
+  reg: OrchestraRegistry
+  store: ReturnType<typeof createMemoryOrchestraStore>
+} {
+  const store = createMemoryOrchestraStore()
+  return { reg: new OrchestraRegistry(store), store }
+}
+
 function seedTeam(reg: OrchestraRegistry, name = 'Acme'): Team {
   return reg.createTeam({
     name,
@@ -205,5 +213,174 @@ describe('OrchestraRegistry — edges', () => {
 
     const fromB = reg.descendants(b.id)
     expect([...fromB]).toEqual([c.id])
+  })
+})
+
+describe('OrchestraRegistry — template/instance pairing (phase 1)', () => {
+  it('createTeam emits a paired template and instance with deterministic ids', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({
+      name: 'Acme',
+      worktreePath: '/tmp/acme',
+      safeMode: 'prompt',
+      defaultModel: 'claude-opus-4-7'
+    })
+    const slice = store.read()
+    expect(slice.templates).toHaveLength(1)
+    expect(slice.instances).toHaveLength(1)
+    const [template] = slice.templates
+    const [instance] = slice.instances
+    expect(template!.id).toBe(`${team.id}-tpl`)
+    expect(template!.slug).toBe(team.slug)
+    expect(template!.name).toBe(team.name)
+    expect(template!.mainAgentSlug).toBeNull()
+    expect(instance!.id).toBe(team.id)
+    expect(instance!.templateId).toBe(template!.id)
+    expect(instance!.projectPath).toBe('/tmp/acme')
+    expect(instance!.worktreePath).toBe('/tmp/acme')
+  })
+
+  it('renameTeam keeps the template name in sync', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({ name: 'Old', worktreePath: '/tmp/x' })
+    reg.renameTeam(team.id, 'New')
+    const [template] = store.read().templates
+    expect(template!.name).toBe('New')
+  })
+
+  it('setSafeMode keeps the template safeMode in sync', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({ name: 'A', worktreePath: '/tmp/a', safeMode: 'prompt' })
+    reg.setSafeMode(team.id, 'strict')
+    const [template] = store.read().templates
+    expect(template!.safeMode).toBe('strict')
+  })
+
+  it('deleteTeam removes the paired template and instance', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const a = reg.createTeam({ name: 'A', worktreePath: '/tmp/a' })
+    const b = reg.createTeam({ name: 'B', worktreePath: '/tmp/b' })
+    reg.deleteTeam(a.id)
+    const slice = store.read()
+    expect(slice.teams).toHaveLength(1)
+    expect(slice.templates).toHaveLength(1)
+    expect(slice.instances).toHaveLength(1)
+    expect(slice.instances[0]!.id).toBe(b.id)
+    expect(slice.templates[0]!.id).toBe(`${b.id}-tpl`)
+  })
+
+  it('first agent populates template.mainAgentSlug', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({ name: 'T', worktreePath: '/tmp/t' })
+    const a1 = reg.createAgent({
+      teamId: team.id,
+      position: { x: 0, y: 0 },
+      name: 'Lead',
+      role: 'eng'
+    })
+    const [template] = store.read().templates
+    expect(template!.mainAgentSlug).toBe(a1.slug)
+  })
+
+  it('promoteMain rewrites template.mainAgentSlug to the new main', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({ name: 'T', worktreePath: '/tmp/t' })
+    reg.createAgent({
+      teamId: team.id,
+      position: { x: 0, y: 0 },
+      name: 'Lead',
+      role: 'eng'
+    })
+    const a2 = reg.createAgent({
+      teamId: team.id,
+      position: { x: 0, y: 0 },
+      name: 'Second',
+      role: 'eng'
+    })
+    reg.promoteMain(a2.id)
+    const [template] = store.read().templates
+    expect(template!.mainAgentSlug).toBe(a2.slug)
+  })
+
+  it('createTeamWithTemplate reuses an existing template — no duplicate template', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const source = reg.createTeam({ name: 'Source', worktreePath: '/tmp/source' })
+    const tpl = store.read().templates.find((t) => t.id === `${source.id}-tpl`)!
+
+    const { team: clone, instance } = reg.createTeamWithTemplate({
+      name: 'Clone',
+      worktreePath: '/tmp/clone',
+      templateId: tpl.id,
+      projectPath: '/tmp/clone'
+    })
+
+    const slice = store.read()
+    expect(slice.templates).toHaveLength(1)
+    expect(slice.instances).toHaveLength(2)
+    expect(instance.templateId).toBe(tpl.id)
+    expect(instance.id).toBe(clone.id)
+    expect(slice.instances.filter((i) => i.templateId === tpl.id)).toHaveLength(2)
+  })
+
+  it('deleting a team keeps the template alive when another instance still uses it', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const source = reg.createTeam({ name: 'Source', worktreePath: '/tmp/source' })
+    const tplId = `${source.id}-tpl`
+    const { team: clone } = reg.createTeamWithTemplate({
+      name: 'Clone',
+      worktreePath: '/tmp/clone',
+      templateId: tplId
+    })
+
+    reg.deleteTeam(source.id)
+    expect(store.read().templates.some((t) => t.id === tplId)).toBe(true)
+    expect(store.read().instances.map((i) => i.id)).toEqual([clone.id])
+
+    reg.deleteTeam(clone.id)
+    expect(store.read().templates.some((t) => t.id === tplId)).toBe(false)
+    expect(store.read().instances).toHaveLength(0)
+  })
+
+  it('exposes getInstance and listInstances filtered by projectPath', () => {
+    const { reg } = makeRegistryWithStore()
+    const a = reg.createTeam({ name: 'A', worktreePath: '/proj/a' })
+    const b = reg.createTeam({ name: 'B', worktreePath: '/proj/b' })
+    const c = reg.createTeam({ name: 'C', worktreePath: '/proj/a' })
+
+    expect(reg.getInstance(a.id)?.id).toBe(a.id)
+    expect(reg.getInstance('does-not-exist')).toBeUndefined()
+
+    const all = reg.listInstances()
+    expect(all.map((i) => i.id).sort()).toEqual([a.id, b.id, c.id].sort())
+
+    const inProjectA = reg.listInstances({ projectPath: '/proj/a' })
+    expect(inProjectA.map((i) => i.id).sort()).toEqual([a.id, c.id].sort())
+
+    const inProjectB = reg.listInstances({ projectPath: '/proj/b' })
+    expect(inProjectB.map((i) => i.id)).toEqual([b.id])
+  })
+
+  it('deleting the main agent reassigns template.mainAgentSlug or clears it', async () => {
+    const { reg, store } = makeRegistryWithStore()
+    const team = reg.createTeam({ name: 'T', worktreePath: '/tmp/t' })
+    const a1 = reg.createAgent({
+      teamId: team.id,
+      position: { x: 0, y: 0 },
+      name: 'Lead',
+      role: 'eng'
+    })
+    await new Promise((r) => setTimeout(r, 5))
+    const a2 = reg.createAgent({
+      teamId: team.id,
+      position: { x: 0, y: 0 },
+      name: 'Backup',
+      role: 'eng'
+    })
+
+    reg.deleteAgent(a1.id)
+    expect(store.read().templates[0]!.mainAgentSlug).toBe(a2.slug)
+
+    reg.deleteAgent(a2.id)
+    expect(store.read().templates[0]!.mainAgentSlug).toBeNull()
   })
 })

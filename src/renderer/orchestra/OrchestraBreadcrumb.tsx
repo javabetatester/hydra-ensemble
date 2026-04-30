@@ -27,50 +27,30 @@
  * parent owns the global keybind routing (see `useOrchestraKeybinds`).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder } from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 
-const STORAGE_KEYS = {
-  minimap: 'hydra.orchestra.view.minimap',
-  toolbar: 'hydra.orchestra.view.toolbar',
-  tasksPanel: 'hydra.orchestra.view.tasksPanel'
-} as const
-
-type ViewKey = keyof typeof STORAGE_KEYS
-
-interface ViewToggle {
-  key: ViewKey
-  label: string
-  /** Default ON — users expect a full canvas on first run and explicitly
-   *  hide chrome, not the other way round. */
-  defaultOn: boolean
+/** Last segment of a unix/windows path, or the full string if it has no
+ *  separators. Used to render a compact "project" crumb. */
+function basename(p: string): string {
+  if (!p) return ''
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? p
 }
 
-const VIEW_TOGGLES: ViewToggle[] = [
-  { key: 'minimap', label: 'Show minimap', defaultOn: true },
-  { key: 'toolbar', label: 'Show toolbar', defaultOn: true },
-  { key: 'tasksPanel', label: 'Show tasks panel', defaultOn: true }
+/** Toggles surfaced in the View ▾ dropdown. Order here drives the
+ *  vertical order in the menu. The toggle key matches the field name
+ *  on `useOrchestraPanels` so the wiring stays one-line below. */
+type ViewKey = 'templates' | 'projects' | 'tasksPanel' | 'minimap' | 'toolbar'
+
+const VIEW_TOGGLES: ReadonlyArray<{ key: ViewKey; label: string; shortcut?: string }> = [
+  { key: 'templates', label: 'Show Templates Library', shortcut: 'Ctrl+Shift+L' },
+  { key: 'projects', label: 'Show Projects & Teams', shortcut: 'Ctrl+Shift+P' },
+  { key: 'tasksPanel', label: 'Show tasks panel', shortcut: 'Ctrl+Shift+J' },
+  { key: 'minimap', label: 'Show minimap' },
+  { key: 'toolbar', label: 'Show toolbar' }
 ]
-
-function readFlag(key: ViewKey, defaultOn: boolean): boolean {
-  if (typeof window === 'undefined') return defaultOn
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS[key])
-    if (raw === null) return defaultOn
-    return raw !== 'false'
-  } catch {
-    return defaultOn
-  }
-}
-
-function writeFlag(key: ViewKey, on: boolean): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS[key], on ? 'true' : 'false')
-  } catch {
-    /* localStorage unavailable — tolerate it silently; in-memory state still
-     *  reflects the toggle for the rest of the session. */
-  }
-}
 
 interface Props {}
 
@@ -88,17 +68,6 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     [teams, activeTeamId]
   )
 
-  // Scope the live pill counters to the active team — otherwise a global
-  // count would mislead the user on multi-team workspaces.
-  const { teamAgentCount, teamTaskCount } = useMemo(() => {
-    if (!activeTeam) return { teamAgentCount: 0, teamTaskCount: 0 }
-    let a = 0
-    let t = 0
-    for (const ag of agents) if (ag.teamId === activeTeam.id) a++
-    for (const tk of tasks) if (tk.teamId === activeTeam.id) t++
-    return { teamAgentCount: a, teamTaskCount: t }
-  }, [activeTeam, agents, tasks])
-
   // Context label: agent selection takes precedence over task drawer so the
   // user always knows what the inspector is talking about.
   const contextLabel = useMemo<string | null>(() => {
@@ -114,14 +83,44 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     return null
   }, [agents, tasks, selectedAgentIds, taskDrawerTaskId])
 
-  // View dropdown — toggles hydrate lazily from localStorage on mount so the
-  // layout the user left with is the layout they come back to.
+  // View dropdown — backed by `useOrchestraPanels` so the keybinds
+  // (Ctrl+Shift+L/P/J) and the menu manipulate the same flags.
+  // Each flag is selected individually: returning a fresh object
+  // literal from a zustand selector triggers an infinite re-render
+  // loop because identity changes every render.
   const [viewOpen, setViewOpen] = useState<boolean>(false)
-  const [flags, setFlags] = useState<Record<ViewKey, boolean>>(() => ({
-    minimap: readFlag('minimap', true),
-    toolbar: readFlag('toolbar', true),
-    tasksPanel: readFlag('tasksPanel', true)
-  }))
+  const flagTemplates = useOrchestraPanels((s) => s.templates)
+  const flagProjects = useOrchestraPanels((s) => s.projects)
+  const flagTasksPanel = useOrchestraPanels((s) => s.tasksPanel)
+  const flagMinimap = useOrchestraPanels((s) => s.minimap)
+  const flagToolbar = useOrchestraPanels((s) => s.toolbar)
+  const panelFlags: Record<ViewKey, boolean> = {
+    templates: flagTemplates,
+    projects: flagProjects,
+    tasksPanel: flagTasksPanel,
+    minimap: flagMinimap,
+    toolbar: flagToolbar
+  }
+  const togglePanel = (key: ViewKey): void => {
+    const st = useOrchestraPanels.getState()
+    switch (key) {
+      case 'templates':
+        st.toggleTemplates()
+        return
+      case 'projects':
+        st.toggleProjects()
+        return
+      case 'tasksPanel':
+        st.toggleTasksPanel()
+        return
+      case 'minimap':
+        st.toggleMinimap()
+        return
+      case 'toolbar':
+        st.toggleToolbar()
+        return
+    }
+  }
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
@@ -145,14 +144,6 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     }
   }, [viewOpen])
 
-  const toggleFlag = (key: ViewKey): void => {
-    setFlags((prev) => {
-      const next = !prev[key]
-      writeFlag(key, next)
-      return { ...prev, [key]: next }
-    })
-  }
-
   const onTeamCrumbClick = (): void => {
     // When there is no active team, the crumb doubles as a CTA so users can
     // start from a blank team without rummaging through the rail.
@@ -168,12 +159,26 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
   // TODO: wire Ctrl+/ to focus this breadcrumb once the parent header routes
   // the global keybind via `useOrchestraKeybinds`.
 
-  const anyFlagOff = !flags.minimap || !flags.toolbar || !flags.tasksPanel
-  const ViewIcon = anyFlagOff ? EyeOff : Eye
+  const anyFlagOff =
+    !panelFlags.templates ||
+    !panelFlags.projects ||
+    !panelFlags.tasksPanel ||
+    !panelFlags.minimap ||
+    !panelFlags.toolbar
+  // The Templates panel defaults to closed, so "any flag off" being
+  // true at boot is normal — flip the icon only when the user has
+  // hidden something a beginner would expect to be on.
+  const userHidSomething =
+    !panelFlags.projects ||
+    !panelFlags.tasksPanel ||
+    !panelFlags.minimap ||
+    !panelFlags.toolbar
+  const ViewIcon = userHidSomething ? EyeOff : Eye
+  void anyFlagOff
 
   return (
     <div
-      className="flex h-7 w-full items-center justify-between gap-2 border-b border-border-soft bg-bg-2 px-3 py-1 text-[11px] text-text-3"
+      className="flex h-[22px] w-full items-center justify-between gap-2 border-b border-border-soft bg-bg-2 px-3 text-[11px] text-text-3"
       role="navigation"
       aria-label="Orchestrador breadcrumb"
     >
@@ -187,6 +192,36 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
         >
           Orchestrador
         </span>
+
+        {activeTeam?.worktreePath ? (
+          <>
+            <ChevronRight
+              size={11}
+              strokeWidth={1.75}
+              className="shrink-0 text-text-4"
+              aria-hidden
+            />
+            {/* Project crumb — surfaces which project the active team
+                 is bound to. The chip is a non-link label since the
+                 project switch lives in the global drawer; the title
+                 attribute exposes the full path for paths that exceed
+                 the truncation budget. */}
+            <span
+              className="flex min-w-0 items-center gap-1 rounded-sm bg-bg-3/60 px-1.5 py-0.5 font-mono text-[10px] text-text-2"
+              title={activeTeam.worktreePath}
+            >
+              <Folder
+                size={10}
+                strokeWidth={1.75}
+                className="shrink-0 text-accent-400"
+                aria-hidden
+              />
+              <span className="max-w-[160px] truncate">
+                {basename(activeTeam.worktreePath)}
+              </span>
+            </span>
+          </>
+        ) : null}
 
         <ChevronRight
           size={11}
@@ -231,18 +266,12 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
         ) : null}
       </div>
 
-      {/* Right: live pill + View dropdown (only when a team is active) */}
+      {/* Right: View dropdown (only when a team is active). The
+           counter pill that lived here moved to the header, removing
+           a redundant "N agents · M tasks" instance and freeing the
+           breadcrumb to be a pure navigation trail. */}
       {activeTeam ? (
         <div ref={wrapperRef} className="relative flex shrink-0 items-center gap-2">
-          <span
-            className="rounded-sm bg-bg-3 px-1.5 py-0.5 font-mono text-[10px] text-text-2"
-            aria-live="polite"
-            title="Agents and tasks in the active team"
-          >
-            {teamAgentCount} {teamAgentCount === 1 ? 'agent' : 'agents'} ·{' '}
-            {teamTaskCount} {teamTaskCount === 1 ? 'task' : 'tasks'}
-          </span>
-
           <button
             type="button"
             onClick={() => setViewOpen((v) => !v)}
@@ -258,12 +287,12 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
 
           {viewOpen ? (
             <div
-              className="absolute right-0 top-full z-50 mt-1 w-[180px] rounded-sm border border-border-mid bg-bg-2 py-1 shadow-pop"
+              className="absolute right-0 top-full z-50 mt-1 w-[230px] rounded-sm border border-border-mid bg-bg-2 py-1 shadow-pop"
               role="menu"
               aria-label="Orchestrador view toggles"
             >
               {VIEW_TOGGLES.map((t) => {
-                const on = flags[t.key]
+                const on = panelFlags[t.key]
                 const Icon = on ? Eye : EyeOff
                 return (
                   <button
@@ -271,7 +300,7 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
                     type="button"
                     role="menuitemcheckbox"
                     aria-checked={on}
-                    onClick={() => toggleFlag(t.key)}
+                    onClick={() => togglePanel(t.key)}
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px] text-text-2 hover:bg-bg-3 hover:text-text-1 focus:outline-none"
                   >
                     <Icon
@@ -281,6 +310,11 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
                       aria-hidden
                     />
                     <span className="flex-1 truncate">{t.label}</span>
+                    {t.shortcut ? (
+                      <span className="shrink-0 font-mono text-[9px] text-text-4">
+                        {t.shortcut}
+                      </span>
+                    ) : null}
                   </button>
                 )
               })}
