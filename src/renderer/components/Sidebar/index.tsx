@@ -138,17 +138,24 @@ export default function Sidebar() {
   const [expandedProject, setExpandedProject] = useState<string | null>(currentPath)
   const pendingExpand = useRef<string | null>(null)
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Latest-ref pattern: keeps `expandProject` reference-stable so the
+  // currentPath-sync effect below doesn't refire every time we mutate
+  // `expandedProject` (which would create a setState feedback loop and
+  // eventually trip "Maximum update depth exceeded").
+  const expandedProjectRef = useRef(expandedProject)
+  expandedProjectRef.current = expandedProject
 
   const expandProject = useCallback((path: string | null): void => {
+    const current = expandedProjectRef.current
     // Clear any pending transition
     if (expandTimer.current) {
       clearTimeout(expandTimer.current)
       expandTimer.current = null
     }
 
-    if (path === expandedProject) return
+    if (path === current) return
 
-    if (expandedProject && path) {
+    if (current && path) {
       // Sequential: close current first, then open new after animation
       setExpandedProject(null)
       pendingExpand.current = path
@@ -161,7 +168,7 @@ export default function Sidebar() {
       // Simple open or close
       setExpandedProject(path)
     }
-  }, [expandedProject])
+  }, [])
 
   const toggleProjectExpanded = (path: string): void => {
     expandProject(expandedProject === path ? null : path)
