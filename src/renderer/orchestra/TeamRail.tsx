@@ -13,6 +13,14 @@ import { useEditor } from '../state/editor'
 import { useOrchestra } from './state/orchestra'
 import DeleteTeamModal from './modals/DeleteTeamModal'
 
+/** Last segment of a unix/windows path. Used to surface the project
+ *  binding under each team's name without flooding the rail. */
+function basename(p: string): string {
+  if (!p) return ''
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? p
+}
+
 const INPUT_CLS =
   'min-w-0 flex-1 rounded-sm px-1.5 py-0.5 text-xs text-text-1 outline-none ring-1 ring-accent-500'
 
@@ -159,17 +167,25 @@ export default function TeamRail() {
             onKeyDown={onEnterEsc(() => void commitRename(), () => setRenamingId(null))}
             className={`${INPUT_CLS} bg-bg-3`} />
         ) : (
-          <button type="button" title={team.name}
+          <button type="button" title={`${team.name}\n${team.worktreePath}`}
             onClick={() => setActiveTeam(team.id)}
             onDoubleClick={() => beginRename(team)}
-            className="flex min-w-0 flex-1 items-center gap-1 truncate text-left">
-            <span className={`truncate ${active ? 'font-medium' : ''}`}>{team.name}</span>
-            {team.safeMode === 'yolo' && (
-              <span title="yolo safe mode"
-                className="shrink-0 rounded-sm bg-status-attention/20 px-1 text-[9px] font-medium uppercase tracking-wider text-status-attention">
-                yolo
-              </span>
-            )}
+            className="flex min-w-0 flex-1 flex-col items-start gap-0 text-left">
+            <span className="flex w-full min-w-0 items-center gap-1">
+              <span className={`min-w-0 truncate ${active ? 'font-medium' : ''}`}>{team.name}</span>
+              {team.safeMode === 'yolo' && (
+                <span title="yolo safe mode"
+                  className="shrink-0 rounded-sm bg-status-attention/20 px-1 text-[9px] font-medium uppercase tracking-wider text-status-attention">
+                  yolo
+                </span>
+              )}
+            </span>
+            {/* Project basename — surfaces the team↔project binding
+                 so two instances of the same template in different
+                 projects are visually distinguishable. */}
+            <span className="block w-full truncate font-mono text-[9px] leading-tight text-text-4">
+              {basename(team.worktreePath)}
+            </span>
           </button>
         )}
         {!isRenaming && (

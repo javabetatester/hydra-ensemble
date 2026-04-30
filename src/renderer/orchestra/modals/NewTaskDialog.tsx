@@ -309,38 +309,58 @@ export default function NewTaskDialog() {
                   </button>
                 </div>
               ) : availableInstances.length === 1 ? (
-                <div
-                  className="truncate rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2"
-                  title={
-                    teams.find((t) => t.id === availableInstances[0]!.id)
-                      ?.name ?? availableInstances[0]!.id
-                  }
-                >
-                  {teams.find((t) => t.id === availableInstances[0]!.id)?.name ??
-                    availableInstances[0]!.id}
-                </div>
+                (() => {
+                  const team = teams.find(
+                    (t) => t.id === availableInstances[0]!.id
+                  )
+                  return (
+                    <div
+                      className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5"
+                      title={team?.worktreePath}
+                    >
+                      <div className="truncate font-mono text-[11px] text-text-2">
+                        {team?.name ?? availableInstances[0]!.id}
+                      </div>
+                      {team?.worktreePath ? (
+                        <div className="truncate font-mono text-[10px] text-text-4">
+                          {team.worktreePath}
+                        </div>
+                      ) : null}
+                    </div>
+                  )
+                })()
               ) : (
-                <div className="relative">
-                  <select
-                    id="new-task-instance"
-                    value={selectedInstanceId ?? ''}
-                    onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-                    className="w-full appearance-none rounded-sm border border-border-mid bg-bg-1 px-2 py-1.5 pr-7 font-mono text-xs text-text-1 focus:border-accent-500 focus:outline-none"
-                  >
-                    {availableInstances.map((inst) => {
-                      const name = teams.find((t) => t.id === inst.id)?.name ?? inst.id
-                      return (
-                        <option key={inst.id} value={inst.id}>
-                          {name}
-                        </option>
-                      )
-                    })}
-                  </select>
-                  <ChevronDown
-                    size={12}
-                    strokeWidth={1.75}
-                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-3"
-                  />
+                <div className="space-y-1">
+                  <div className="relative">
+                    <select
+                      id="new-task-instance"
+                      value={selectedInstanceId ?? ''}
+                      onChange={(e) => setSelectedInstanceId(e.target.value || null)}
+                      className="w-full appearance-none rounded-sm border border-border-mid bg-bg-1 px-2 py-1.5 pr-7 font-mono text-xs text-text-1 focus:border-accent-500 focus:outline-none"
+                    >
+                      {availableInstances.map((inst) => {
+                        const name = teams.find((t) => t.id === inst.id)?.name ?? inst.id
+                        return (
+                          <option key={inst.id} value={inst.id}>
+                            {name}
+                          </option>
+                        )
+                      })}
+                    </select>
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={1.75}
+                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-3"
+                    />
+                  </div>
+                  {context.projectPath ? (
+                    <div
+                      className="truncate font-mono text-[10px] text-text-4"
+                      title={context.projectPath}
+                    >
+                      {context.projectPath}
+                    </div>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -354,10 +374,17 @@ export default function NewTaskDialog() {
               <label className="df-label mb-1.5 block">team</label>
               {selectedInstanceId && activeTeam ? (
                 <div
-                  className="truncate rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2"
-                  title={activeTeam.name}
+                  className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5"
+                  title={activeTeam.worktreePath}
                 >
-                  {activeTeam.name}
+                  <div className="truncate font-mono text-[11px] text-text-2">
+                    {activeTeam.name}
+                  </div>
+                  {activeTeam.worktreePath ? (
+                    <div className="truncate font-mono text-[10px] text-text-4">
+                      {activeTeam.worktreePath}
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="rounded-sm border border-status-attention/40 bg-status-attention/5 px-2.5 py-2 text-[11px] leading-relaxed text-text-2">

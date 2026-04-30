@@ -27,8 +27,16 @@
  * parent owns the global keybind routing (see `useOrchestraKeybinds`).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder } from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
+
+/** Last segment of a unix/windows path, or the full string if it has no
+ *  separators. Used to render a compact "project" crumb. */
+function basename(p: string): string {
+  if (!p) return ''
+  const parts = p.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] ?? p
+}
 
 const STORAGE_KEYS = {
   minimap: 'hydra.orchestra.view.minimap',
@@ -187,6 +195,36 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
         >
           Orchestrador
         </span>
+
+        {activeTeam?.worktreePath ? (
+          <>
+            <ChevronRight
+              size={11}
+              strokeWidth={1.75}
+              className="shrink-0 text-text-4"
+              aria-hidden
+            />
+            {/* Project crumb — surfaces which project the active team
+                 is bound to. The chip is a non-link label since the
+                 project switch lives in the global drawer; the title
+                 attribute exposes the full path for paths that exceed
+                 the truncation budget. */}
+            <span
+              className="flex min-w-0 items-center gap-1 rounded-sm bg-bg-3/60 px-1.5 py-0.5 font-mono text-[10px] text-text-2"
+              title={activeTeam.worktreePath}
+            >
+              <Folder
+                size={10}
+                strokeWidth={1.75}
+                className="shrink-0 text-accent-400"
+                aria-hidden
+              />
+              <span className="max-w-[160px] truncate">
+                {basename(activeTeam.worktreePath)}
+              </span>
+            </span>
+          </>
+        ) : null}
 
         <ChevronRight
           size={11}
