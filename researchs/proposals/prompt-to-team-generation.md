@@ -201,3 +201,7 @@ Mostrar essas métricas no preview do `ImportTeamDialog` ajuda o usuário a deci
 - [AgentMesh — Think-on-Process (arXiv 2507.19902)](https://arxiv.org/html/2507.19902v1)
 - [LLM Agents — Prompt Engineering Guide](https://www.promptingguide.ai/research/llm-agents)
 - [Anthropic Tool Use Documentation](https://docs.anthropic.com/en/docs/build-with-claude/tool-use)
+
+## Atualizações
+
+- 2026-04-30 — A pergunta "como aplicar um template em um projeto" passou a ter resposta concreta com [[team-template-instance-split]] (issue #12, PR #13). O `TeamExportV1` produzido por esta proposta é, na prática, um template-portátil; provisionar virou função de `OrchestraCore.applyTemplate({ templateId, worktreePath, projectPath })` e instâncias (n por template) carregam o estado de runtime separadamente.

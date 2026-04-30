@@ -69,6 +69,9 @@ related:
 
 ## 3. Persistent memory (memória organizacional) 🟢 / 🔴
 
+> [!tip] Desbloqueado por [[team-template-instance-split]] (issue #12, PR #13)
+> Schema v3 (Fase 5) introduziu `Agent.instanceId`, `ReportingEdge.instanceId` e `MessageLog.instanceId`. O escopo por instância exigido em [[dual-memory-architecture]] (*"memory deve ser escopada por team"*) agora é estrutural — basta a memória persistente passar a indexar por `instanceId`.
+
 **Por quê**: hoje cada conversa de agente começa do zero. Decisões anteriores, preferências do time, histórico de bugs — tudo perdido entre tarefas.
 
 **Como**:
@@ -116,6 +119,9 @@ related:
 ---
 
 ## 6. Métricas de qualidade do time 🔵 / 🟢
+
+> [!tip] Desbloqueado por [[team-template-instance-split]] (issue #12, PR #13)
+> Métricas têm sentido por instância (uma aplicação concreta do template em um projeto), não por template — instâncias diferentes podem ter desempenho desigual. O `TeamInstance` introduzido na Fase 1 é o eixo natural.
 
 **Por quê**: ajuda usuário a decidir se aceita um time gerado ou regenera.
 
@@ -181,6 +187,9 @@ related:
 ---
 
 ## 10. Telemetria / observabilidade do time 🔵 / 🟡
+
+> [!tip] Desbloqueado por [[team-template-instance-split]] (issue #12, PR #13)
+> Telemetria pode agora se ramificar em "por template" (compara o blueprint geral) e "por instância" (compara aplicações concretas em projetos diferentes). Sem o split, ambos os recortes colapsavam num só.
 
 **Por quê**: nenhuma forma hoje de comparar templates ou debug "por que esse time foi mal nessa tarefa".
 

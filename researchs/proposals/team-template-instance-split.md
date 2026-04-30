@@ -324,3 +324,19 @@ function migrateV1ToV2(v1: V1Slice): V2Slice {
 ## Atualizações
 
 - 2026-04-29 — versão inicial após criação da issue #12
+- 2026-04-30 — Fases 0–5 implementadas e empurradas no PR #13
+  ([javabetatester/hydra-ensemble#13](https://github.com/javabetatester/hydra-ensemble/pull/13)):
+  - **Fase 0** `refactor(orchestra): introduce TeamTemplate type alongside Team`
+  - **Fase 1** `feat(orchestra): split Team into TeamTemplate and TeamInstance with store migration`
+  - **Fase 2** `feat(orchestra): bind tasks to TeamInstance instead of Team`
+  - **Fase 3** `feat(orchestra): backend to apply a TeamTemplate to a project`
+  - **Fase 4** `feat(orchestra): create tasks from project context (sidebar/shortcut/palette)`
+  - **Fase 5** `feat(orchestra): scope runtime state to TeamInstance (schema v3)`
+- 2026-04-30 — **Pivô na Fase 5**: o plano original previa renomear
+  `teamId → instanceId` em todos os call sites (Agent, ReportingEdge,
+  MessageLog, …) e remover o tipo `Team` legado nesta mesma fase.
+  35+ arquivos seriam tocados em uma única revisão. Optei por escopar a
+  Fase 5 apenas à introdução de `instanceId` como campo canônico
+  (mantendo `teamId` como alias) e ao schema v3 com migração
+  `migrateV2ToV3`. A renomeação de call sites e a remoção de `Team`
+  ficam para um PR follow-up dedicado, mantendo este PR revisável.
