@@ -104,7 +104,7 @@ export default function AgentSessionsList({ projectPath }: Props): ReactNode {
                   e.stopPropagation()
                   void resume(projectPath, session.sessionId)
                 }}
-                className="mt-0.5 hidden shrink-0 items-center gap-0.5 rounded-sm bg-bg-3 px-1 py-0.5 text-[9px] font-medium text-text-2 transition-all hover:bg-accent-500/15 hover:text-accent-500 group-hover:inline-flex"
+                className="df-hover-reveal mt-0.5 inline-flex shrink-0 items-center gap-0.5 rounded-sm bg-bg-3 px-1 py-0.5 text-[9px] font-medium text-text-3 hover:bg-accent-500/15 hover:text-accent-500 group-hover:opacity-100"
                 title={`resume claude --resume ${session.sessionId}`}
                 aria-label="resume session"
               >

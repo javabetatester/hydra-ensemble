@@ -497,6 +497,7 @@ export interface WriteFileResult {
 
 import type {
   Agent,
+  GenerateTeamInput,
   MessageLog,
   NewAgentInput,
   NewEdgeInput,
@@ -511,6 +512,7 @@ import type {
   SubmitTaskInput,
   Task,
   Team,
+  TeamExportV1,
   Trigger,
   UpdateAgentInput,
   UUID
@@ -525,6 +527,8 @@ export interface HydraEnsembleApi {
     kill: (sessionId: string) => Promise<void>
     write: (sessionId: string, data: string) => Promise<void>
     resize: (sessionId: string, cols: number, rows: number) => Promise<void>
+    /** Save a clipboard image to a temp file and return its absolute path. */
+    saveClipboardImage: (base64: string, mimeType: string) => Promise<string>
     onData: (handler: (event: PtyDataEvent) => void) => () => void
     onExit: (handler: (event: PtyExitEvent) => void) => () => void
   }
@@ -680,6 +684,15 @@ export interface HydraEnsembleApi {
       delete: (id: UUID) => Promise<OrchestraResult<void>>
       readClaudeMd: (id: UUID) => Promise<OrchestraResult<string>>
       writeClaudeMd: (id: UUID, text: string) => Promise<OrchestraResult<void>>
+      export: (id: UUID) => Promise<OrchestraResult<string | null>>
+      importPick: () => Promise<OrchestraResult<TeamExportV1 | null>>
+      importProvision: (
+        data: TeamExportV1,
+        worktreePath: string
+      ) => Promise<OrchestraResult<unknown>>
+      generateFromPrompt: (
+        input: GenerateTeamInput
+      ) => Promise<OrchestraResult<TeamExportV1>>
     }
     agent: {
       list: (teamId: UUID) => Promise<Agent[]>

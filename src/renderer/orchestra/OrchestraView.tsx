@@ -38,6 +38,8 @@ import AgentWizard from './modals/AgentWizard'
 import NewTaskDialog from './modals/NewTaskDialog'
 import NewTeamDialog from './modals/NewTeamDialog'
 import TeamTemplatesDialog from './TeamTemplatesDialog'
+import ImportTeamDialog from './ImportTeamDialog'
+import GenerateTeamDialog from './GenerateTeamDialog'
 import TeamSwitcher from './TeamSwitcher'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
@@ -131,6 +133,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [newTeamOpen, setNewTeamOpen] = useState<boolean>(false)
   const [newTeamMode, setNewTeamMode] = useState<'blank' | 'template'>('blank')
   const [newTeamTemplateId, setNewTeamTemplateId] = useState<string | undefined>(undefined)
+  const [importOpen, setImportOpen] = useState<boolean>(false)
+  const [generateOpen, setGenerateOpen] = useState<boolean>(false)
 
   // Register Orchestra-wide keyboard shortcuts. Each shortcut dispatches
   // a custom window event; subscribers below translate into setOpen() calls.
@@ -156,7 +160,9 @@ export default function OrchestraView({ onBackToClassic }: Props) {
         setNewTeamTemplateId(undefined)
         setNewTeamOpen(true)
       }),
-      subscribe('orchestra:open-templates', () => setTemplatesOpen(true))
+      subscribe('orchestra:open-templates', () => setTemplatesOpen(true)),
+      subscribe('orchestra:import-team', () => setImportOpen(true)),
+      subscribe('orchestra:generate-team', () => setGenerateOpen(true))
     ]
     return () => {
       for (const off of offs) off()
@@ -495,6 +501,12 @@ export default function OrchestraView({ onBackToClassic }: Props) {
 
       {/* Team templates dialog (Templates button in the action bar). */}
       <TeamTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} />
+
+      {/* Import team from JSON file. */}
+      <ImportTeamDialog open={importOpen} onClose={() => setImportOpen(false)} />
+
+      {/* Generate team from prompt (Claude designs the team). */}
+      <GenerateTeamDialog open={generateOpen} onClose={() => setGenerateOpen(false)} />
 
       {/* Providers dialog — one place to configure Claude OAuth,
           Anthropic API key, OpenAI, OpenRouter, Codex CLI. Opened from

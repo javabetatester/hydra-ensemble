@@ -239,7 +239,7 @@ export default function SessionCard({
                   <Pin size={11} strokeWidth={1.75} fill="currentColor" />
                 </button>
               ) : null}
-              <div className="flex gap-0.5 opacity-0 transition group-hover:opacity-100">
+              <div className="df-hover-reveal flex gap-0.5 group-hover:opacity-100">
                 {!pinned ? (
                   <ActionBtn
                     onClick={() => togglePin(session.id)}

@@ -798,7 +798,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                     type="button"
                     onClick={() => closeFile(f.path)}
                     className={`rounded-sm p-0.5 text-text-4 hover:bg-bg-4 hover:text-text-1 ${
-                      active ? '' : 'opacity-0 group-hover:opacity-100'
+                      active ? '' : 'df-hover-reveal group-hover:opacity-100'
                     }`}
                     aria-label="Close tab"
                   >
@@ -836,7 +836,7 @@ export default function CodeEditor({ open, onClose, mode = 'inline' }: Props) {
                     type="button"
                     onClick={() => closeDiff(d.path)}
                     className={`rounded-sm p-0.5 text-text-4 hover:bg-bg-4 hover:text-text-1 ${
-                      active ? '' : 'opacity-0 group-hover:opacity-100'
+                      active ? '' : 'df-hover-reveal group-hover:opacity-100'
                     }`}
                     aria-label="Close diff tab"
                   >

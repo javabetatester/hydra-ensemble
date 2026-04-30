@@ -7,11 +7,13 @@
  * has one consistent error-handling branch. Contract lives in PLAN.md §10.
  */
 
-import { ipcMain, type BrowserWindow } from 'electron'
+import { readFile, stat, writeFile } from 'node:fs/promises'
+import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import type { OrchestraCore } from '../orchestra'
 import { getStore, patchStore } from '../store'
 import { safeSend } from '../lib/safeSend'
 import type {
+  GenerateTeamInput,
   NewAgentInput,
   NewEdgeInput,
   NewTeamInput,
@@ -21,6 +23,7 @@ import type {
   SafeMode,
   SecretStorage,
   SubmitTaskInput,
+  TeamExportV1,
   UpdateAgentInput,
   UUID
 } from '../../shared/orchestra'
@@ -300,4 +303,83 @@ export function registerOrchestraIpc(
   )
   ipcMain.handle('orchestra:apiKey.test', () => wrap(() => core.testApiKey()))
   ipcMain.handle('orchestra:apiKey.clear', () => wrap(() => core.clearApiKey()))
+
+  // team export / import
+  ipcMain.handle(
+    'orchestra:team.export',
+    async (_e, p: { id: UUID }): Promise<OrchestraResult<string | null>> => {
+      const err = needStr(p?.id, 'id')
+      if (err) return fail(err)
+      try {
+        const data = await core.exportTeam(p.id)
+        const result = await dialog.showSaveDialog({
+          title: 'Export team',
+          defaultPath: `${data.team.name.replace(/\s+/g, '-').toLowerCase()}.json`,
+          filters: [{ name: 'Team Export', extensions: ['json'] }]
+        })
+        if (result.canceled || !result.filePath) return ok(null)
+        await writeFile(result.filePath, JSON.stringify(data, null, 2), 'utf-8')
+        return ok(result.filePath)
+      } catch (e) {
+        return fail(errMsg(e))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'orchestra:team.importPick',
+    async (): Promise<OrchestraResult<TeamExportV1 | null>> => {
+      try {
+        const result = await dialog.showOpenDialog({
+          title: 'Import team',
+          filters: [{ name: 'Team Export', extensions: ['json'] }],
+          properties: ['openFile']
+        })
+        if (result.canceled || result.filePaths.length === 0) return ok(null)
+        const filePath = result.filePaths[0]!
+        const st = await stat(filePath)
+        if (st.size > 10 * 1024 * 1024) {
+          return fail('file too large (max 10 MB)')
+        }
+        const raw = await readFile(filePath, 'utf-8')
+        const parsed = JSON.parse(raw) as TeamExportV1
+        if (parsed.formatVersion !== 1) {
+          return fail(
+            `unsupported export version: ${parsed.formatVersion ?? 'missing'}`
+          )
+        }
+        if (!Array.isArray(parsed.agents) || parsed.agents.length === 0) {
+          return fail('export contains no agents')
+        }
+        if (!parsed.team?.name) {
+          return fail('export missing team name')
+        }
+        return ok(parsed)
+      } catch (e) {
+        return fail(errMsg(e))
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'orchestra:team.importProvision',
+    (_e, p: { data: TeamExportV1; worktreePath: string }) => {
+      const err = check(
+        needObj(p?.data, 'data'),
+        needStr(p?.worktreePath, 'worktreePath')
+      )
+      return err ? fail(err) : wrap(() => core.importTeam(p.data, p.worktreePath))
+    }
+  )
+
+  ipcMain.handle(
+    'orchestra:team.generateFromPrompt',
+    (_e, input: GenerateTeamInput) => {
+      const err = check(
+        needObj(input, 'input'),
+        needStr(input?.prompt, 'prompt')
+      )
+      return err ? fail(err) : wrap(() => core.generateTeamFromPrompt(input))
+    }
+  )
 }

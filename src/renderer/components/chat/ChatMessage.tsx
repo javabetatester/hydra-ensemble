@@ -274,7 +274,7 @@ export default function ChatMessage({
           {/* Assistant hover actions: copy text. Sits beneath the
               bubble so width changes don't reshuffle the layout. */}
           {!isUser ? (
-            <div className="mt-1 flex h-5 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="df-hover-reveal mt-1 flex h-5 items-center gap-1 group-hover:opacity-100">
               <button
                 type="button"
                 onClick={copyMessage}
@@ -304,7 +304,7 @@ export default function ChatMessage({
           type="button"
           disabled={!canRewind}
           onClick={() => onRewind(message)}
-          className="absolute right-4 top-3 flex items-center gap-1 rounded-sm border border-border-soft bg-bg-2 px-1.5 py-1 text-[10px] text-text-3 opacity-0 transition-opacity hover:border-border-mid hover:text-text-1 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
+          className="df-hover-reveal absolute right-4 top-3 flex items-center gap-1 rounded-sm border border-border-soft bg-bg-2 px-1.5 py-1 text-[10px] text-text-3 hover:border-border-mid hover:text-text-1 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
           title={
             canRewind
               ? 'rewind the session from this message'

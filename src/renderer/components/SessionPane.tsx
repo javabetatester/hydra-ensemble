@@ -89,7 +89,11 @@ export default function SessionPane({ session, visible }: Props) {
       const copyCombo = mac
         ? e.metaKey && !e.shiftKey && !e.ctrlKey && e.key.toLowerCase() === 'c'
         : e.ctrlKey && e.shiftKey && !e.metaKey && e.key.toLowerCase() === 'c'
-      const pasteCombo = mac
+      // Text paste: Cmd+V on macOS, Ctrl+Shift+V on Linux/Windows.
+      // On Linux, Ctrl+V (without shift) passes through as \x16 so
+      // CLI tools like Claude Code can handle image paste natively
+      // via the system clipboard (xclip / wl-paste).
+      const textPasteCombo = mac
         ? e.metaKey && !e.shiftKey && !e.ctrlKey && e.key.toLowerCase() === 'v'
         : e.ctrlKey && e.shiftKey && !e.metaKey && e.key.toLowerCase() === 'v'
       if (copyCombo) {
@@ -100,7 +104,7 @@ export default function SessionPane({ session, visible }: Props) {
         }
         return false
       }
-      if (pasteCombo) {
+      if (textPasteCombo) {
         e.preventDefault()
         void navigator.clipboard
           .readText()
@@ -108,6 +112,12 @@ export default function SessionPane({ session, visible }: Props) {
             if (text) void window.api.pty.write(ptyId, text)
           })
           .catch(() => undefined)
+        return false
+      }
+      // Shift+Enter inserts a newline instead of submitting the prompt.
+      if (e.shiftKey && e.key === 'Enter') {
+        e.preventDefault()
+        void window.api.pty.write(ptyId, '\n')
         return false
       }
       return true

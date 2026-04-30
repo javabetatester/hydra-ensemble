@@ -183,7 +183,7 @@ export default function EditorTabs(_props: Props = {}) {
                 e.stopPropagation()
                 close(tab.path)
               }}
-              className="shrink-0 rounded-sm p-0.5 text-text-4 opacity-60 hover:bg-bg-3 hover:text-text-1 hover:opacity-100"
+              className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-4 hover:bg-bg-3 hover:text-text-1"
             >
               <X size={11} strokeWidth={2} />
             </button>

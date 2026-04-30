@@ -64,11 +64,22 @@ describe('ProjectService', () => {
       await new Promise((r) => setTimeout(r, 5))
       svc.setCurrent(olderDir)
 
+      // list() preserves insertion order — see ProjectService.setCurrent
+      // ("Update timestamp in-place — don't reorder the array."). tmpDir
+      // was added later, so it stays on top regardless of which project
+      // is current.
       const ranked = svc.list()
-      expect(ranked[0]?.path).toBe(olderDir)
-      expect(ranked[1]?.path).toBe(tmpDir)
+      expect(ranked[0]?.path).toBe(tmpDir)
+      expect(ranked[1]?.path).toBe(olderDir)
+
+      // current() reflects the bump because it sorts by lastOpenedAt.
+      expect(svc.current()?.path).toBe(olderDir)
+
+      // The bumped olderDir now has a strictly newer timestamp than tmpDir.
+      const olderMeta = ranked.find((p) => p.path === olderDir)
+      const newerMeta = ranked.find((p) => p.path === tmpDir)
       expect(
-        ranked[0] && ranked[1] && ranked[0].lastOpenedAt > ranked[1].lastOpenedAt
+        olderMeta && newerMeta && olderMeta.lastOpenedAt > newerMeta.lastOpenedAt
       ).toBe(true)
     } finally {
       await rm(olderDir, { recursive: true, force: true })

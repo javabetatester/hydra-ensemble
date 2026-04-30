@@ -130,7 +130,7 @@ export default function TourLauncher() {
                             e.stopPropagation()
                             reset(t.id)
                           }}
-                          className="mt-0.5 shrink-0 rounded-sm p-1 text-text-4 opacity-0 hover:bg-bg-4 hover:text-text-1 group-hover:opacity-100"
+                          className="df-hover-reveal mt-0.5 shrink-0 rounded-sm p-1 text-text-4 hover:bg-bg-4 hover:text-text-1 group-hover:opacity-100"
                           title="Mark as not completed"
                           aria-label={`Reset ${t.label}`}
                         >
