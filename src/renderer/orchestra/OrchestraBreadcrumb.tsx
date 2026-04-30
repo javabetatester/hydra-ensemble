@@ -29,6 +29,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, Eye, EyeOff, Folder } from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 
 /** Last segment of a unix/windows path, or the full string if it has no
  *  separators. Used to render a compact "project" crumb. */
@@ -38,47 +39,18 @@ function basename(p: string): string {
   return parts[parts.length - 1] ?? p
 }
 
-const STORAGE_KEYS = {
-  minimap: 'hydra.orchestra.view.minimap',
-  toolbar: 'hydra.orchestra.view.toolbar',
-  tasksPanel: 'hydra.orchestra.view.tasksPanel'
-} as const
+/** Toggles surfaced in the View ▾ dropdown. Order here drives the
+ *  vertical order in the menu. The toggle key matches the field name
+ *  on `useOrchestraPanels` so the wiring stays one-line below. */
+type ViewKey = 'templates' | 'projects' | 'tasksPanel' | 'minimap' | 'toolbar'
 
-type ViewKey = keyof typeof STORAGE_KEYS
-
-interface ViewToggle {
-  key: ViewKey
-  label: string
-  /** Default ON — users expect a full canvas on first run and explicitly
-   *  hide chrome, not the other way round. */
-  defaultOn: boolean
-}
-
-const VIEW_TOGGLES: ViewToggle[] = [
-  { key: 'minimap', label: 'Show minimap', defaultOn: true },
-  { key: 'toolbar', label: 'Show toolbar', defaultOn: true },
-  { key: 'tasksPanel', label: 'Show tasks panel', defaultOn: true }
+const VIEW_TOGGLES: ReadonlyArray<{ key: ViewKey; label: string; shortcut?: string }> = [
+  { key: 'templates', label: 'Show Templates Library', shortcut: 'Ctrl+Shift+L' },
+  { key: 'projects', label: 'Show Projects & Teams', shortcut: 'Ctrl+Shift+P' },
+  { key: 'tasksPanel', label: 'Show tasks panel', shortcut: 'Ctrl+Shift+J' },
+  { key: 'minimap', label: 'Show minimap' },
+  { key: 'toolbar', label: 'Show toolbar' }
 ]
-
-function readFlag(key: ViewKey, defaultOn: boolean): boolean {
-  if (typeof window === 'undefined') return defaultOn
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS[key])
-    if (raw === null) return defaultOn
-    return raw !== 'false'
-  } catch {
-    return defaultOn
-  }
-}
-
-function writeFlag(key: ViewKey, on: boolean): void {
-  try {
-    localStorage.setItem(STORAGE_KEYS[key], on ? 'true' : 'false')
-  } catch {
-    /* localStorage unavailable — tolerate it silently; in-memory state still
-     *  reflects the toggle for the rest of the session. */
-  }
-}
 
 interface Props {}
 
@@ -111,14 +83,36 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     return null
   }, [agents, tasks, selectedAgentIds, taskDrawerTaskId])
 
-  // View dropdown — toggles hydrate lazily from localStorage on mount so the
-  // layout the user left with is the layout they come back to.
+  // View dropdown — backed by `useOrchestraPanels` so the keybinds
+  // (Ctrl+Shift+L/P/J) and the menu manipulate the same flags.
   const [viewOpen, setViewOpen] = useState<boolean>(false)
-  const [flags, setFlags] = useState<Record<ViewKey, boolean>>(() => ({
-    minimap: readFlag('minimap', true),
-    toolbar: readFlag('toolbar', true),
-    tasksPanel: readFlag('tasksPanel', true)
+  const panelFlags = useOrchestraPanels((s) => ({
+    templates: s.templates,
+    projects: s.projects,
+    tasksPanel: s.tasksPanel,
+    minimap: s.minimap,
+    toolbar: s.toolbar
   }))
+  const togglePanel = (key: ViewKey): void => {
+    const st = useOrchestraPanels.getState()
+    switch (key) {
+      case 'templates':
+        st.toggleTemplates()
+        return
+      case 'projects':
+        st.toggleProjects()
+        return
+      case 'tasksPanel':
+        st.toggleTasksPanel()
+        return
+      case 'minimap':
+        st.toggleMinimap()
+        return
+      case 'toolbar':
+        st.toggleToolbar()
+        return
+    }
+  }
 
   const wrapperRef = useRef<HTMLDivElement | null>(null)
 
@@ -142,14 +136,6 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     }
   }, [viewOpen])
 
-  const toggleFlag = (key: ViewKey): void => {
-    setFlags((prev) => {
-      const next = !prev[key]
-      writeFlag(key, next)
-      return { ...prev, [key]: next }
-    })
-  }
-
   const onTeamCrumbClick = (): void => {
     // When there is no active team, the crumb doubles as a CTA so users can
     // start from a blank team without rummaging through the rail.
@@ -165,8 +151,22 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
   // TODO: wire Ctrl+/ to focus this breadcrumb once the parent header routes
   // the global keybind via `useOrchestraKeybinds`.
 
-  const anyFlagOff = !flags.minimap || !flags.toolbar || !flags.tasksPanel
-  const ViewIcon = anyFlagOff ? EyeOff : Eye
+  const anyFlagOff =
+    !panelFlags.templates ||
+    !panelFlags.projects ||
+    !panelFlags.tasksPanel ||
+    !panelFlags.minimap ||
+    !panelFlags.toolbar
+  // The Templates panel defaults to closed, so "any flag off" being
+  // true at boot is normal — flip the icon only when the user has
+  // hidden something a beginner would expect to be on.
+  const userHidSomething =
+    !panelFlags.projects ||
+    !panelFlags.tasksPanel ||
+    !panelFlags.minimap ||
+    !panelFlags.toolbar
+  const ViewIcon = userHidSomething ? EyeOff : Eye
+  void anyFlagOff
 
   return (
     <div
@@ -279,12 +279,12 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
 
           {viewOpen ? (
             <div
-              className="absolute right-0 top-full z-50 mt-1 w-[180px] rounded-sm border border-border-mid bg-bg-2 py-1 shadow-pop"
+              className="absolute right-0 top-full z-50 mt-1 w-[230px] rounded-sm border border-border-mid bg-bg-2 py-1 shadow-pop"
               role="menu"
               aria-label="Orchestrador view toggles"
             >
               {VIEW_TOGGLES.map((t) => {
-                const on = flags[t.key]
+                const on = panelFlags[t.key]
                 const Icon = on ? Eye : EyeOff
                 return (
                   <button
@@ -292,7 +292,7 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
                     type="button"
                     role="menuitemcheckbox"
                     aria-checked={on}
-                    onClick={() => toggleFlag(t.key)}
+                    onClick={() => togglePanel(t.key)}
                     className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px] text-text-2 hover:bg-bg-3 hover:text-text-1 focus:outline-none"
                   >
                     <Icon
@@ -302,6 +302,11 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
                       aria-hidden
                     />
                     <span className="flex-1 truncate">{t.label}</span>
+                    {t.shortcut ? (
+                      <span className="shrink-0 font-mono text-[9px] text-text-4">
+                        {t.shortcut}
+                      </span>
+                    ) : null}
                   </button>
                 )
               })}

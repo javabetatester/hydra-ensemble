@@ -38,6 +38,7 @@ import type {
 import { useOrchestra } from './state/orchestra'
 import { useToasts } from '../state/toasts'
 import { useNewTaskDialog } from '../state/newTaskDialog'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 import { AgentCard, type AgentNode } from './AgentCard'
 import { ReportingEdge, type ReportingEdgeType } from './ReportingEdge'
 import { NewAgentPopover } from './modals/NewAgentPopover'
@@ -85,6 +86,7 @@ function CanvasInner() {
   const allAgents = useOrchestra((s) => s.agents)
   const allEdges = useOrchestra((s) => s.edges)
   const teams = useOrchestra((s) => s.teams)
+  const showMinimap = useOrchestraPanels((s) => s.minimap)
   const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
   const updateAgent = useOrchestra((s) => s.updateAgent)
   const deleteEdge = useOrchestra((s) => s.deleteEdge)
@@ -574,7 +576,7 @@ function CanvasInner() {
           showInteractive={false}
           className="!bg-[var(--color-bg-2)] !border !border-[var(--color-border-mid)]"
         />
-        <CanvasMinimap />
+        {showMinimap ? <CanvasMinimap /> : null}
       </ReactFlow>
 
       {popover && activeTeamId ? (

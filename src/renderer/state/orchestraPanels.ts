@@ -1,15 +1,15 @@
 /**
- * Persisted toggles for the Orchestrator's collapsible panels.
+ * Persisted toggles for every collapsible surface of the Orchestrator
+ * view. Single source of truth for the breadcrumb's `View ▾`
+ * dropdown, the sidebar/dock keybinds (Ctrl+Shift+L/P/J), and any
+ * future panel toggles.
  *
- * Mirrors the panel paradigm of the classic layout (`Ctrl+T` /
- * `Ctrl+E` / etc) — each panel is independently open/closeable so
- * the user can compose a layout that fits the task at hand instead
- * of paying for sub-tabs.
- *
- * Three toggles for now: Templates Library, Projects & Teams, Right
- * Dock. Inspector mode lives inside the Right Dock and is governed
- * by selection (see `SidePanels`); it doesn't need its own panel
- * flag.
+ * Replaces the earlier scattering: the View dropdown used to read
+ * `hydra.orchestra.view.{minimap,toolbar,tasksPanel}` directly from
+ * localStorage with no consumer wired up; the canvas-side panels
+ * I added had a parallel store. Both now live here under
+ * `hydra.orchestra.panels`, and consumers (Canvas chrome, Right
+ * Dock, Templates panel, Projects rail) all read this store.
  */
 
 import { create } from 'zustand'
@@ -21,16 +21,24 @@ interface OrchestraPanelsState {
   /** Projects & Teams (the new home of TeamRail) — left side,
    *  default open since it's the primary navigation surface. */
   projects: boolean
-  /** Right dock (Tasks / History / Changes / Activity / Inspector) —
-   *  default open. */
-  dock: boolean
+  /** Right dock (Tasks / History / Changes / Activity / Inspector). */
+  tasksPanel: boolean
+  /** Canvas minimap, anchored bottom-right of the workspace. */
+  minimap: boolean
+  /** Canvas toolbar (fit-view / auto-layout / templates), bottom-left. */
+  toolbar: boolean
 
   toggleTemplates: () => void
   toggleProjects: () => void
-  toggleDock: () => void
+  toggleTasksPanel: () => void
+  toggleMinimap: () => void
+  toggleToolbar: () => void
+
   setTemplates: (open: boolean) => void
   setProjects: (open: boolean) => void
-  setDock: (open: boolean) => void
+  setTasksPanel: (open: boolean) => void
+  setMinimap: (open: boolean) => void
+  setToolbar: (open: boolean) => void
 }
 
 export const useOrchestraPanels = create<OrchestraPanelsState>()(
@@ -38,13 +46,21 @@ export const useOrchestraPanels = create<OrchestraPanelsState>()(
     (set) => ({
       templates: false,
       projects: true,
-      dock: true,
+      tasksPanel: true,
+      minimap: true,
+      toolbar: true,
+
       toggleTemplates: () => set((s) => ({ templates: !s.templates })),
       toggleProjects: () => set((s) => ({ projects: !s.projects })),
-      toggleDock: () => set((s) => ({ dock: !s.dock })),
+      toggleTasksPanel: () => set((s) => ({ tasksPanel: !s.tasksPanel })),
+      toggleMinimap: () => set((s) => ({ minimap: !s.minimap })),
+      toggleToolbar: () => set((s) => ({ toolbar: !s.toolbar })),
+
       setTemplates: (open) => set({ templates: open }),
       setProjects: (open) => set({ projects: open }),
-      setDock: (open) => set({ dock: open })
+      setTasksPanel: (open) => set({ tasksPanel: open }),
+      setMinimap: (open) => set({ minimap: open }),
+      setToolbar: (open) => set({ toolbar: open })
     }),
     {
       name: 'hydra.orchestra.panels',

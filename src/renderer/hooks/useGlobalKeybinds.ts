@@ -174,7 +174,7 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
       },
       'orchestra.panel.dock': () => {
         if (!orchestraOpen) return
-        useOrchestraPanels.getState().toggleDock()
+        useOrchestraPanels.getState().toggleTasksPanel()
       }
     }
 

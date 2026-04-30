@@ -111,7 +111,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const inspectorOpen = useOrchestra((s) => s.inspectorOpen)
   const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
   const projectsPanelOpen = useOrchestraPanels((s) => s.projects)
-  const dockPanelOpen = useOrchestraPanels((s) => s.dock)
+  const dockPanelOpen = useOrchestraPanels((s) => s.tasksPanel)
+  const showCanvasToolbar = useOrchestraPanels((s) => s.toolbar)
   const init = useOrchestra((s) => s.init)
   const createTeam = useOrchestra((s) => s.createTeam)
 
@@ -459,8 +460,9 @@ export default function OrchestraView({ onBackToClassic }: Props) {
               <BudgetWarning />
               {/* Live counters + active-task chips pinned to the top. */}
               <TeamOverview />
-              {/* Bottom-left toolbar (fit-view, auto-layout, templates). */}
-              <CanvasToolbar />
+              {/* Bottom-left toolbar (fit-view, auto-layout, templates).
+                  Toggleable from the View ▾ dropdown. */}
+              {showCanvasToolbar ? <CanvasToolbar /> : null}
               {/* Bottom-right FABs (new agent, new task). */}
               <CanvasFabs />
               {/* Live presence indicators for agents in the active team. */}
