@@ -93,6 +93,12 @@ const LOG_CAP = 2000
  *  8 covers PM→Architect→Dev→QA→sub-QA with comfortable slack. */
 export const MAX_DELEGATION_DEPTH = 8
 
+/** Minimum gap between two submissions of the same title to the same
+ *  target. Lets a user fire off a new task with the same name a few
+ *  seconds later (intentional re-run via the UI) but blocks a
+ *  runaway agent that would otherwise spam identical submits. */
+export const SUBMIT_DEDUPE_WINDOW_MS = 5_000
+
 /** Length of the parent-task chain ending at `taskId`. The hard
  *  ceiling at 32 turns is a paranoia cap so a malformed parent graph
  *  (cycle in the data, not in the routing) can't loop the
@@ -333,6 +339,24 @@ export class OrchestraCore {
     if (!targetId) throw new Error('instanceId or teamId required')
     const team = this.registry.getTeam(targetId)
     if (!team) throw new Error('team not found')
+
+    // Dedupe near-duplicate submissions: if there's already a
+    // non-terminal task with the same title/target/assignee created
+    // in the last SUBMIT_DEDUPE_WINDOW_MS, return that one instead of
+    // minting a fresh duplicate. Catches the kind of agent runaway
+    // that produced 6 identical tasks in the issue #12 followup.
+    const dedupeCutoff = Date.now() - SUBMIT_DEDUPE_WINDOW_MS
+    const dupe = getStore().orchestra.tasks.find((t) => {
+      if (t.teamId !== targetId) return false
+      if (t.title !== input.title) return false
+      if (t.status === 'done' || t.status === 'failed') return false
+      if (Date.parse(t.createdAt) < dedupeCutoff) return false
+      // Same intended assignee (or both unassigned at submit time).
+      const wantsAgent = input.assignedAgentId ?? null
+      const hasAgent = t.assignedAgentId
+      return wantsAgent === hasAgent || wantsAgent === null
+    })
+    if (dupe) return dupe
 
     const now = new Date().toISOString()
     const task: Task = {
