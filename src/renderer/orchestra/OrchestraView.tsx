@@ -46,7 +46,6 @@ import OrchestraToasts from './OrchestraToasts'
 import ProvidersDialog from './ProvidersDialog'
 import ShortcutHud from './ShortcutHud'
 import AgentPresence from './AgentPresence'
-import TeamTabsStrip from './TeamTabsStrip'
 import BudgetWarning from './BudgetWarning'
 import OrchestraBreadcrumb from './OrchestraBreadcrumb'
 import {
@@ -413,8 +412,9 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       {/* Secondary header strip: breadcrumb path renders below the main header. */}
       <OrchestraBreadcrumb />
 
-      {/* Team tabs — only shown when there is more than one team to switch between. */}
-      {teams.length >= 2 ? <TeamTabsStrip /> : null}
+      {/* TeamTabsStrip retired in phase-5: TeamSwitcher in the header
+          plus the grouped TeamRail cover the same selector role
+          without a third surface. */}
 
       {/* Main 3-column body */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
