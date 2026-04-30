@@ -35,6 +35,8 @@ export interface GlobalKeybindDeps {
   currentProjectPath: string | null
   setCurrentProject: (path: string) => Promise<void>
   lastActiveByProject: Record<string, string>
+  /** Orchestrator: open the New-Task dialog scoped to a project. */
+  showNewOrchestraTask: (ctx?: { projectPath?: string }) => void
 }
 
 export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
@@ -59,7 +61,8 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
     projects,
     currentProjectPath,
     setCurrentProject,
-    lastActiveByProject
+    lastActiveByProject,
+    showNewOrchestraTask
   } = deps
 
   const overrides = useKeybinds((s) => s.overrides)
@@ -124,7 +127,11 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
       'panel.editor': () => togglePanelFor('editor'),
       'panel.sessions': () => useRightPanel.getState().toggle(),
       'palette.open': () => setPaletteOpen((v) => !v),
-      'help.open': () => setHelpOpen((v) => !v)
+      'help.open': () => setHelpOpen((v) => !v),
+      'orchestra.newTaskInProject': () =>
+        showNewOrchestraTask(
+          currentProjectPath ? { projectPath: currentProjectPath } : {}
+        )
     }
 
     const onKey = (e: KeyboardEvent): void => {

@@ -25,6 +25,9 @@ import Toasts from './components/Toasts'
 import SessionReplyToaster from './components/SessionReplyToaster'
 import CommandPalette from './components/CommandPalette'
 import HelpOverlay from './components/HelpOverlay'
+import NewTaskDialog from './orchestra/modals/NewTaskDialog'
+import ApplyTemplateDialog from './orchestra/modals/ApplyTemplateDialog'
+import { useNewTaskDialog } from './state/newTaskDialog'
 import NewSessionDialog from './components/NewSessionDialog'
 import TerminalsPanel from './components/TerminalsPanel'
 import WindowControls from './components/WindowControls'
@@ -192,6 +195,7 @@ export default function App() {
   const currentProjectPath = useProjects((s) => s.currentPath)
   const setCurrentProject = useProjects((s) => s.setCurrent)
   const lastActiveByProject = useSessions((s) => s.lastActiveByProject)
+  const showNewOrchestraTask = useNewTaskDialog((s) => s.show)
 
   useGlobalKeybinds({
     orchestraEnabled,
@@ -214,7 +218,8 @@ export default function App() {
     projects: projectsList,
     currentProjectPath,
     setCurrentProject,
-    lastActiveByProject
+    lastActiveByProject,
+    showNewOrchestraTask
   })
 
   return (
@@ -784,6 +789,8 @@ export default function App() {
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
       <NewSessionDialog open={spawnOpen} onClose={hideSpawn} />
+      <NewTaskDialog />
+      <ApplyTemplateDialog />
 
       {/* Guided-tour overlay. Always mounted; renders nothing when the
           store has no active tour id. */}

@@ -1,21 +1,25 @@
 /**
- * NewTaskDialog — centred modal that creates a new task in the active team.
+ * NewTaskDialog — centred modal that creates a new task in a chosen
+ * team-instance.
  *
- * Mirrors TaskBar's visual grammar (priority pills, chip tags) but adds an
- * explicit assignee dropdown the bar doesn't expose. See PRD F5 for the
- * submit flow; assignment is encoded as a `@<slug>` token + `assignee:<slug>`
- * tag because SubmitTaskInput has no `assignedAgentId` field yet.
+ * Self-contained: open state and initial context come from
+ * `useNewTaskDialog`, so any surface (CanvasFabs, command palette,
+ * sidebar button, global shortcut) can pop the dialog the same way.
+ * When opened with `context.projectPath`, the dialog resolves the
+ * project's instances via IPC and auto-selects the only one (or shows
+ * a picker for >1, an empty state for 0). Without context it falls
+ * back to the orchestrator's `activeTeamId`.
+ *
+ * Mirrors TaskBar's visual grammar (priority pills, chip tags) but
+ * adds an explicit assignee dropdown the bar doesn't expose.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Plus, X } from 'lucide-react'
-import type { Priority } from '../../../shared/orchestra'
+import type { Priority, TeamInstance, UUID } from '../../../shared/orchestra'
 import { useOrchestra } from '../state/orchestra'
 import { useToasts } from '../../state/toasts'
-
-interface Props {
-  open: boolean
-  onClose: () => void
-}
+import { useNewTaskDialog } from '../../state/newTaskDialog'
+import { useApplyTemplateDialog } from '../../state/applyTemplateDialog'
 
 /** Priority cycle order — matches TaskBar so the visual vocabulary is
  *  identical across entry points. */
@@ -36,7 +40,12 @@ const PRIORITY_STYLE: Record<Priority, string> = {
 const AUTO = '__auto__'
 const MAIN = '__main__'
 
-export default function NewTaskDialog({ open, onClose }: Props) {
+export default function NewTaskDialog() {
+  const open = useNewTaskDialog((s) => s.open)
+  const context = useNewTaskDialog((s) => s.context)
+  const onClose = useNewTaskDialog((s) => s.hide)
+  const showApplyTemplate = useApplyTemplateDialog((s) => s.show)
+
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
   const teams = useOrchestra((s) => s.teams)
   const agents = useOrchestra((s) => s.agents)
@@ -50,18 +59,26 @@ export default function NewTaskDialog({ open, onClose }: Props) {
   const [assignee, setAssignee] = useState<string>(AUTO)
   const [submitting, setSubmitting] = useState(false)
 
+  // Instance resolution. When the dialog opens with `context.instanceId`
+  // we use it directly; with `context.projectPath` we ask main for the
+  // instances bound to that project; otherwise we fall back to whatever
+  // the orchestra view considers active. The fallback path keeps the
+  // legacy "click the FAB inside OrchestraView" flow working.
+  const [availableInstances, setAvailableInstances] = useState<TeamInstance[]>([])
+  const [selectedInstanceId, setSelectedInstanceId] = useState<UUID | null>(null)
+
   const titleInputRef = useRef<HTMLInputElement>(null)
 
   const activeTeam = useMemo(
-    () => teams.find((t) => t.id === activeTeamId) ?? null,
-    [teams, activeTeamId]
+    () => teams.find((t) => t.id === selectedInstanceId) ?? null,
+    [teams, selectedInstanceId]
   )
   const teamAgents = useMemo(
     () =>
-      activeTeamId
-        ? agents.filter((a) => a.teamId === activeTeamId)
+      selectedInstanceId
+        ? agents.filter((a) => a.teamId === selectedInstanceId)
         : [],
-    [agents, activeTeamId]
+    [agents, selectedInstanceId]
   )
   const mainAgent = useMemo(() => {
     if (!activeTeam?.mainAgentId) return null
@@ -80,6 +97,43 @@ export default function NewTaskDialog({ open, onClose }: Props) {
     setAssignee(AUTO)
     setSubmitting(false)
   }, [open])
+
+  // Resolve the target instance from context. Re-runs whenever the
+  // dialog opens with new context. Project-scoped opens go through
+  // IPC; the others are local lookups.
+  useEffect(() => {
+    if (!open) {
+      setAvailableInstances([])
+      return
+    }
+    if (context.instanceId) {
+      setSelectedInstanceId(context.instanceId)
+      setAvailableInstances([])
+      return
+    }
+    if (context.projectPath) {
+      let cancelled = false
+      void window.api?.orchestra
+        ?.instance.list({ projectPath: context.projectPath })
+        .then((list) => {
+          if (cancelled) return
+          setAvailableInstances(list)
+          setSelectedInstanceId(list[0]?.id ?? null)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setAvailableInstances([])
+          setSelectedInstanceId(null)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+    // No context — use whatever the orchestrator considers active.
+    setAvailableInstances([])
+    setSelectedInstanceId(activeTeamId)
+    return undefined
+  }, [open, context.instanceId, context.projectPath, activeTeamId])
 
   // Autofocus the title after the fade-in settles. Focusing inside the
   // same microtask as mount occasionally misses because the backdrop
@@ -123,7 +177,7 @@ export default function NewTaskDialog({ open, onClose }: Props) {
   }, [])
 
   const canSubmit =
-    !submitting && title.trim().length > 0 && activeTeamId !== null
+    !submitting && title.trim().length > 0 && selectedInstanceId !== null
 
   const resolveAssignee = (): { agentId: string | null } => {
     if (assignee === AUTO) return { agentId: null }
@@ -133,7 +187,7 @@ export default function NewTaskDialog({ open, onClose }: Props) {
   }
 
   const submit = async (): Promise<void> => {
-    if (!canSubmit || !activeTeamId) return
+    if (!canSubmit || !selectedInstanceId) return
     // Fold any un-committed tag draft so "bug,urgent" + Enter without a
     // trailing comma doesn't drop "urgent".
     const draftTrimmed = tagDraft.trim()
@@ -147,7 +201,7 @@ export default function NewTaskDialog({ open, onClose }: Props) {
     setSubmitting(true)
     try {
       const task = await submitTask({
-        teamId: activeTeamId,
+        instanceId: selectedInstanceId,
         title: title.trim(),
         body,
         priority,
@@ -221,6 +275,67 @@ export default function NewTaskDialog({ open, onClose }: Props) {
         </header>
 
         <div className="flex flex-col gap-3 p-3">
+          {/* Target — visible only when invoked with a project context.
+               When the picker resolved a single instance (or the FAB
+               flow used activeTeamId), we hide this row and rely on
+               the header to keep the modal visually focused on the
+               task itself. */}
+          {context.projectPath ? (
+            <div>
+              <label className="df-label mb-1.5 block" htmlFor="new-task-instance">
+                team in this project
+              </label>
+              {availableInstances.length === 0 ? (
+                <div className="flex items-center justify-between gap-2 rounded-sm border border-status-attention/40 bg-status-attention/5 px-2.5 py-2 text-[11px] leading-relaxed text-text-2">
+                  <span>
+                    No team applied to{' '}
+                    <span className="font-mono text-text-1">{context.projectPath}</span>{' '}
+                    yet.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const project = context.projectPath
+                      onClose()
+                      showApplyTemplate({ projectPath: project })
+                    }}
+                    className="shrink-0 rounded-sm border border-border-soft bg-bg-1 px-2 py-0.5 font-mono text-[10px] text-text-2 hover:border-border-mid hover:text-text-1"
+                  >
+                    Apply template
+                  </button>
+                </div>
+              ) : availableInstances.length === 1 ? (
+                <div className="rounded-sm border border-border-soft bg-bg-1 px-2.5 py-1.5 font-mono text-[11px] text-text-2">
+                  {teams.find((t) => t.id === availableInstances[0]!.id)?.name ??
+                    availableInstances[0]!.id}
+                </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    id="new-task-instance"
+                    value={selectedInstanceId ?? ''}
+                    onChange={(e) => setSelectedInstanceId(e.target.value || null)}
+                    className="w-full appearance-none rounded-sm border border-border-mid bg-bg-1 px-2 py-1.5 pr-7 font-mono text-xs text-text-1 focus:border-accent-500 focus:outline-none"
+                  >
+                    {availableInstances.map((inst) => {
+                      const name = teams.find((t) => t.id === inst.id)?.name ?? inst.id
+                      return (
+                        <option key={inst.id} value={inst.id}>
+                          {name}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <ChevronDown
+                    size={12}
+                    strokeWidth={1.75}
+                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-3"
+                  />
+                </div>
+              )}
+            </div>
+          ) : null}
+
           {/* Title */}
           <div>
             <label className="df-label mb-1.5 block" htmlFor="new-task-title">

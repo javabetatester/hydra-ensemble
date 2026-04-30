@@ -28,6 +28,9 @@ export const ACTIONS: Action[] = [
   { id: 'project.next', label: 'Next project', group: 'Projects', default: 'mod+tab' },
   { id: 'project.prev', label: 'Previous project', group: 'Projects', default: 'mod+shift+tab' },
 
+  // Orchestrator
+  { id: 'orchestra.newTaskInProject', label: 'New orchestrator task in current project', group: 'Orchestrator', default: 'mod+shift+o' },
+
   // Panels
   { id: 'panel.terminals', label: 'Terminals panel', group: 'Panels', default: 'mod+backquote' },
   { id: 'drawer.projects', label: 'Projects drawer', group: 'Panels', default: 'mod+t' },

@@ -35,7 +35,7 @@ import OrchestraSearch from './OrchestraSearch'
 import NotificationsBell from './NotificationsBell'
 import TeamHealthPanel from './TeamHealthPanel'
 import AgentWizard from './modals/AgentWizard'
-import NewTaskDialog from './modals/NewTaskDialog'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 import NewTeamDialog from './modals/NewTeamDialog'
 import TeamTemplatesDialog from './TeamTemplatesDialog'
 import ImportTeamDialog from './ImportTeamDialog'
@@ -126,7 +126,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [healthOpen, setHealthOpen] = useState<boolean>(false)
   const [wizardOpen, setWizardOpen] = useState<boolean>(false)
-  const [newTaskOpen, setNewTaskOpen] = useState<boolean>(false)
+  const showNewTaskDialog = useNewTaskDialog((s) => s.show)
   const [templatesOpen, setTemplatesOpen] = useState<boolean>(false)
   const [providersOpen, setProvidersOpen] = useState<boolean>(false)
   const [sidePanelsHidden, setSidePanelsHidden] = useState<boolean>(false)
@@ -149,7 +149,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       onOrchestraEvent(ORCHESTRA_EVENTS.help, () => setHelpOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.search, () => setSearchOpen((v) => !v)),
       onOrchestraEvent(ORCHESTRA_EVENTS.settings, () => setSettingsOpen((v) => !v)),
-      onOrchestraEvent(ORCHESTRA_EVENTS.newTask, () => setNewTaskOpen(true)),
+      onOrchestraEvent(ORCHESTRA_EVENTS.newTask, () => showNewTaskDialog()),
       onOrchestraEvent(ORCHESTRA_EVENTS.newAgentWizard, () => setWizardOpen(true)),
       onOrchestraEvent(ORCHESTRA_EVENTS.healthToggle, () => setHealthOpen((v) => !v)),
       // Rail footer / empty-state / template buttons dispatch these;
@@ -497,7 +497,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
       ) : null}
 
       {/* New task dialog (Ctrl+Shift+N). */}
-      <NewTaskDialog open={newTaskOpen} onClose={() => setNewTaskOpen(false)} />
+      {/* NewTaskDialog is mounted globally in App.tsx; opening here goes
+          through `useNewTaskDialog.show()` so context flows uniformly. */}
 
       {/* Team templates dialog (Templates button in the action bar). */}
       <TeamTemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} />

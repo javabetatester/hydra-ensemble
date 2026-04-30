@@ -12,16 +12,16 @@ import { useState } from 'react'
 import { Plus, UserPlus, Users } from 'lucide-react'
 import { useOrchestra } from './state/orchestra'
 import NewAgentPopover from './modals/NewAgentPopover'
-import NewTaskDialog from './modals/NewTaskDialog'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 import { fmtShortcut } from '../lib/platform'
 
 interface Props {}
 
 export default function CanvasFabs(_props: Props) {
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
+  const showNewTask = useNewTaskDialog((s) => s.show)
 
   const [agentOpen, setAgentOpen] = useState(false)
-  const [taskOpen, setTaskOpen] = useState(false)
 
   const primaryDisabled = activeTeamId === null
 
@@ -31,7 +31,10 @@ export default function CanvasFabs(_props: Props) {
   }
 
   const openTask = (): void => {
-    setTaskOpen(true)
+    // Inside OrchestraView: open the task dialog without a project
+    // context so it falls back to the orchestrator's `activeTeamId`
+    // (the legacy FAB behaviour).
+    showNewTask()
   }
 
   // Centre of the viewport — used only when there's no cursor anchor to
@@ -85,8 +88,6 @@ export default function CanvasFabs(_props: Props) {
           position={{ x: centerX, y: centerY }}
         />
       )}
-
-      <NewTaskDialog open={taskOpen} onClose={() => setTaskOpen(false)} />
     </>
   )
 }

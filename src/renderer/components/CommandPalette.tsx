@@ -20,6 +20,8 @@ import { ToolkitIcon, guessIconForLabel } from '../lib/toolkit-icons'
 import { fmtShortcut } from '../lib/platform'
 import { useSpawnDialog } from '../state/spawn'
 import { useOrchestra } from '../orchestra/state/orchestra'
+import { useNewTaskDialog } from '../state/newTaskDialog'
+import { useApplyTemplateDialog } from '../state/applyTemplateDialog'
 import { Network } from 'lucide-react'
 
 interface PaletteItem {
@@ -216,6 +218,41 @@ export default function CommandPalette({ open, onClose }: Props) {
           const st = useOrchestra.getState()
           st.setOverlayOpen(false)
           void st.setSettings({ enabled: false })
+          onClose()
+        }
+      })
+      // Project-scoped task creation. Distinct from the FAB inside
+      // the Orchestrator canvas: this entry is invokable without
+      // mounting OrchestraView and pre-fills the project context so
+      // the dialog auto-resolves the right team-instance.
+      out.push({
+        id: 'cmd:orchestra.newTaskInProject',
+        label: currentPath
+          ? `New orchestrator task in current project`
+          : 'New orchestrator task',
+        hint: currentPath ?? 'opens the new task dialog',
+        shortcut: `${mod}${shiftSym}O`,
+        icon: <Plus size={14} strokeWidth={1.75} />,
+        group: 'Orchestrator',
+        run: () => {
+          useNewTaskDialog
+            .getState()
+            .show(currentPath ? { projectPath: currentPath } : {})
+          onClose()
+        }
+      })
+      out.push({
+        id: 'cmd:orchestra.applyTemplate',
+        label: currentPath
+          ? `Apply team template to current project`
+          : 'Apply team template…',
+        hint: currentPath ?? 'pick a template and a project',
+        icon: <Network size={14} strokeWidth={1.75} />,
+        group: 'Orchestrator',
+        run: () => {
+          useApplyTemplateDialog
+            .getState()
+            .show(currentPath ? { projectPath: currentPath } : {})
           onClose()
         }
       })
