@@ -191,15 +191,21 @@ export const useOrchestra = create<OrchestraState>()(
             ])
             const perTeam = await Promise.all(
               teams.map(async (t) => {
-                const [agents, edges] = await Promise.all([
+                const [agents, edges, tasks] = await Promise.all([
                   o.agent.list(t.id),
-                  o.edge.list(t.id)
+                  o.edge.list(t.id),
+                  o.task.list(t.id)
                 ])
-                return { agents, edges }
+                return { agents, edges, tasks }
               })
             )
             const agents = perTeam.flatMap((p) => p.agents)
             const edges = perTeam.flatMap((p) => p.edges)
+            // Without this, tasks were only ever populated through
+            // live `task.changed` events — so anything submitted in a
+            // previous session vanished from the right-dock and the
+            // History tab even though it was still on disk.
+            const tasks = perTeam.flatMap((p) => p.tasks)
 
             const prevActive = get().activeTeamId
             const activeTeamId =
@@ -212,6 +218,7 @@ export const useOrchestra = create<OrchestraState>()(
               teams,
               templates,
               instances,
+              tasks,
               agents,
               edges,
               activeTeamId,
