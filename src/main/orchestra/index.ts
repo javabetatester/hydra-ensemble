@@ -86,6 +86,12 @@ const NO_API_KEY_REASON = 'no_api_key'
 const TASKS_CAP = 500
 const ROUTES_CAP = 500
 const LOG_CAP = 2000
+/** Maximum depth of a `parentTaskId` chain. Once a delegation would
+ *  push the chain past this, we refuse — defense-in-depth against
+ *  any future routing quirk that could produce a self-referencing
+ *  delegation loop (the symptom that motivated #12 follow-up bcc6d2d).
+ *  8 covers PM→Architect→Dev→QA→sub-QA with comfortable slack. */
+const MAX_DELEGATION_DEPTH = 8
 
 export interface OrchestraCoreOptions {
   store?: OrchestraStore
@@ -997,6 +1003,12 @@ export class OrchestraCore {
     if (!validation.ok) return { ok: false, error: validation.error }
 
     const parent = this.mostRecentActiveTaskFor(fromId)
+    if (parent && this.delegationDepth(parent.id) >= MAX_DELEGATION_DEPTH) {
+      return {
+        ok: false,
+        error: `delegation depth exceeded (max ${MAX_DELEGATION_DEPTH})`
+      }
+    }
     const sub: SubmitInput = {
       teamId: from.teamId,
       // Honour the agent's chosen target. Without this, submitTask
@@ -1085,6 +1097,23 @@ export class OrchestraCore {
     })
     this.emit({ kind: 'task.changed', task: failed })
     return failed
+  }
+
+  /** Length of the parent-task chain ending at `taskId`. The hard
+   *  ceiling at 32 turns is a paranoia cap so a malformed parent
+   *  graph (cycle in the data, not in the routing) can't loop the
+   *  loop-detector. Real chains are 1–4 in practice. */
+  private delegationDepth(taskId: UUID | null): number {
+    let depth = 0
+    let cursor: UUID | null = taskId
+    const slice = getStore().orchestra
+    while (cursor && depth < 32) {
+      const t = slice.tasks.find((x) => x.id === cursor)
+      if (!t) break
+      depth++
+      cursor = t.parentTaskId
+    }
+    return depth
   }
 
   private mostRecentActiveTaskFor(agentId: UUID): Task | undefined {
