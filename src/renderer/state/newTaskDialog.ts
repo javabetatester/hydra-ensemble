@@ -18,6 +18,9 @@ export interface NewTaskInitialContext {
   /** Pre-fill from a project root. The dialog resolves the instance
    *  via `orchestra.instance.list({ projectPath })`. */
   projectPath?: string
+  /** Pre-select an agent to receive the task (skips auto-routing).
+   *  Used by the "Assign task" button on AgentCard. */
+  assignedAgentId?: UUID
 }
 
 interface NewTaskDialogState {

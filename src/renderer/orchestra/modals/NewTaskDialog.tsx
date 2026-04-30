@@ -3,15 +3,18 @@
  * team-instance.
  *
  * Self-contained: open state and initial context come from
- * `useNewTaskDialog`, so any surface (CanvasFabs, command palette,
- * sidebar button, global shortcut) can pop the dialog the same way.
- * When opened with `context.projectPath`, the dialog resolves the
- * project's instances via IPC and auto-selects the only one (or shows
- * a picker for >1, an empty state for 0). Without context it falls
- * back to the orchestrator's `activeTeamId`.
+ * `useNewTaskDialog`, so every surface that wants to create a task
+ * (CanvasFabs FAB, TasksPanel button, IssuesPanel button, AgentCard
+ * "Assign task" button, command palette entry, sidebar context menu,
+ * global shortcut, `/` on the canvas) routes through it. There is no
+ * other path to task submission in the UI.
  *
- * Mirrors TaskBar's visual grammar (priority pills, chip tags) but
- * adds an explicit assignee dropdown the bar doesn't expose.
+ * When opened with `context.projectPath`, the dialog resolves the
+ * project's instances via IPC and auto-selects the only one (or
+ * shows a picker for >1, an empty state for 0). With
+ * `context.assignedAgentId`, it pre-selects that agent in the
+ * assignee dropdown. Without context it falls back to the
+ * orchestrator's `activeTeamId`.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, Plus, X } from 'lucide-react'
@@ -21,12 +24,10 @@ import { useToasts } from '../../state/toasts'
 import { useNewTaskDialog } from '../../state/newTaskDialog'
 import { useApplyTemplateDialog } from '../../state/applyTemplateDialog'
 
-/** Priority cycle order — matches TaskBar so the visual vocabulary is
- *  identical across entry points. */
+/** Priority cycle order — visible left-to-right in the pill row. */
 const PRIORITIES: readonly Priority[] = ['P0', 'P1', 'P2', 'P3']
 
-/** Pill palette for each priority — re-declared here rather than imported
- *  from TaskBar so the dialog has no circular coupling to the bar. */
+/** Pill palette for each priority. */
 const PRIORITY_STYLE: Record<Priority, string> = {
   P0: 'border-red-500/60 bg-red-500/15 text-red-300',
   P1: 'border-amber-500/60 bg-amber-500/15 text-amber-300',
@@ -94,9 +95,9 @@ export default function NewTaskDialog() {
     setPriority('P2')
     setTags([])
     setTagDraft('')
-    setAssignee(AUTO)
+    setAssignee(context.assignedAgentId ?? AUTO)
     setSubmitting(false)
-  }, [open])
+  }, [open, context.assignedAgentId])
 
   // Resolve the target instance from context. Re-runs whenever the
   // dialog opens with new context. Project-scoped opens go through

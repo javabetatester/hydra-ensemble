@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import type { Agent, AgentState } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 
 /**
  * Custom react-flow node for an Orchestra agent.
@@ -318,14 +319,7 @@ function AgentCardImpl(props: NodeProps<AgentNode>) {
           aria-label="assign task"
           onClick={(e) => {
             e.stopPropagation()
-            // TODO: top-level NewTaskDialog should subscribe to this event
-            // (`orchestra:new-task`) and open itself pre-filled with
-            // `assignedAgentId`. Listener not implemented yet.
-            window.dispatchEvent(
-              new CustomEvent('orchestra:new-task', {
-                detail: { assignedAgentId: agent.id }
-              })
-            )
+            useNewTaskDialog.getState().show({ assignedAgentId: agent.id })
           }}
           className="flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-bg-2)] border border-[var(--color-border-mid)] text-[var(--color-text-3)] hover:text-[var(--color-text-1)] hover:bg-[var(--color-bg-3)]"
         >

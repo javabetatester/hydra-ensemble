@@ -37,6 +37,7 @@ import type {
 } from '../../shared/orchestra'
 import { useOrchestra } from './state/orchestra'
 import { useToasts } from '../state/toasts'
+import { useNewTaskDialog } from '../state/newTaskDialog'
 import { AgentCard, type AgentNode } from './AgentCard'
 import { ReportingEdge, type ReportingEdgeType } from './ReportingEdge'
 import { NewAgentPopover } from './modals/NewAgentPopover'
@@ -469,7 +470,11 @@ function CanvasInner() {
       if (e.key === '/') {
         if (inInput) return
         e.preventDefault()
-        window.dispatchEvent(new CustomEvent('orchestra:focus-task-bar'))
+        // The legacy TaskBar component used to capture this — it has
+        // since been retired. Open the canonical NewTaskDialog
+        // instead so '/' on the canvas keeps its "start typing a
+        // task" intent.
+        useNewTaskDialog.getState().show()
         return
       }
     }
