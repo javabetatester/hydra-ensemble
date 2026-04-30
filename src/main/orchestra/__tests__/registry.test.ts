@@ -302,6 +302,45 @@ describe('OrchestraRegistry — template/instance pairing (phase 1)', () => {
     expect(template!.mainAgentSlug).toBe(a2.slug)
   })
 
+  it('createTeamWithTemplate reuses an existing template — no duplicate template', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const source = reg.createTeam({ name: 'Source', worktreePath: '/tmp/source' })
+    const tpl = store.read().templates.find((t) => t.id === `${source.id}-tpl`)!
+
+    const { team: clone, instance } = reg.createTeamWithTemplate({
+      name: 'Clone',
+      worktreePath: '/tmp/clone',
+      templateId: tpl.id,
+      projectPath: '/tmp/clone'
+    })
+
+    const slice = store.read()
+    expect(slice.templates).toHaveLength(1)
+    expect(slice.instances).toHaveLength(2)
+    expect(instance.templateId).toBe(tpl.id)
+    expect(instance.id).toBe(clone.id)
+    expect(slice.instances.filter((i) => i.templateId === tpl.id)).toHaveLength(2)
+  })
+
+  it('deleting a team keeps the template alive when another instance still uses it', () => {
+    const { reg, store } = makeRegistryWithStore()
+    const source = reg.createTeam({ name: 'Source', worktreePath: '/tmp/source' })
+    const tplId = `${source.id}-tpl`
+    const { team: clone } = reg.createTeamWithTemplate({
+      name: 'Clone',
+      worktreePath: '/tmp/clone',
+      templateId: tplId
+    })
+
+    reg.deleteTeam(source.id)
+    expect(store.read().templates.some((t) => t.id === tplId)).toBe(true)
+    expect(store.read().instances.map((i) => i.id)).toEqual([clone.id])
+
+    reg.deleteTeam(clone.id)
+    expect(store.read().templates.some((t) => t.id === tplId)).toBe(false)
+    expect(store.read().instances).toHaveLength(0)
+  })
+
   it('exposes getInstance and listInstances filtered by projectPath', () => {
     const { reg } = makeRegistryWithStore()
     const a = reg.createTeam({ name: 'A', worktreePath: '/proj/a' })

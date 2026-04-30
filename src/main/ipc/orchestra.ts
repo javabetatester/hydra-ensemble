@@ -267,9 +267,16 @@ export function registerOrchestraIpc(
 
   // tasks
   ipcMain.handle('orchestra:task.submit', (_e, input: SubmitTaskInput) => {
+    // Phase 2: instanceId OR teamId is acceptable. While the
+    // template/instance split is in flight (issue #12) the two are
+    // equal — phase 5 drops `teamId` from the wire.
+    const hasTarget =
+      typeof input?.instanceId === 'string' && input.instanceId.length > 0
+        ? true
+        : typeof input?.teamId === 'string' && input.teamId.length > 0
     const err = check(
       needObj(input, 'input'),
-      needStr(input?.teamId, 'teamId'),
+      hasTarget ? null : 'invalid input: instanceId or teamId',
       needStr(input?.title, 'title'),
       typeof input?.body === 'string' ? null : 'invalid input: body'
     )
@@ -380,6 +387,42 @@ export function registerOrchestraIpc(
         needStr(input?.prompt, 'prompt')
       )
       return err ? fail(err) : wrap(() => core.generateTeamFromPrompt(input))
+    }
+  )
+
+  // ----------------------------------------------------- templates / instances
+  // Phase 3 of issue #12. Templates are read straight from the registry;
+  // instances can be listed (optionally filtered by projectPath) and
+  // created by applying an existing template to a new project.
+
+  ipcMain.handle('orchestra:template.list', () =>
+    ok(core.listTemplates())
+  )
+
+  ipcMain.handle('orchestra:instance.list', (_e, p?: { projectPath?: string }) => {
+    if (p?.projectPath !== undefined && typeof p.projectPath !== 'string') {
+      return fail('invalid input: projectPath')
+    }
+    return ok(core.listInstances(p ?? {}))
+  })
+
+  ipcMain.handle(
+    'orchestra:instance.apply',
+    (
+      _e,
+      input: {
+        templateId: UUID
+        worktreePath: string
+        name?: string
+        projectPath?: string
+      }
+    ) => {
+      const err = check(
+        needObj(input, 'input'),
+        needStr(input?.templateId, 'templateId'),
+        needStr(input?.worktreePath, 'worktreePath')
+      )
+      return err ? fail(err) : wrap(() => core.applyTemplate(input))
     }
   )
 }

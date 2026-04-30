@@ -76,6 +76,7 @@ import type {
   Task,
   Team,
   TeamExportV1,
+  TeamInstance,
   Trigger,
   UUID,
   UpdateAgentInput
@@ -162,6 +163,20 @@ export class OrchestraCore {
   // -------------------------------------------------------------------- teams
 
   listTeams(): Team[] { return this.registry.listTeams() }
+
+  // ---------------------------------------------------- templates / instances
+  // Phase 3 of issue #12 — public read surface for template/instance.
+  // `listInstances` accepts an optional projectPath filter so the
+  // renderer can derive "team(s) available for this project" without
+  // pulling the full slice.
+
+  listTemplates() {
+    return this.registry.listTemplates()
+  }
+
+  listInstances(filter: { projectPath?: string } = {}) {
+    return this.registry.listInstances(filter)
+  }
 
   async createTeam(input: NewTeamInput): Promise<Team> {
     const team = this.registry.createTeam(input)
@@ -667,6 +682,124 @@ export class OrchestraCore {
     }
 
     return this.registry.getTeam(team.id) ?? team
+  }
+
+  /**
+   * Apply an existing `TeamTemplate` to a project — provisions a new
+   * team-instance in `worktreePath` bound to `templateId`, with agents
+   * and edges cloned from a source instance that already uses the same
+   * template (if any).
+   *
+   * Phase 3 of issue #12. Differs from `importTeam` in two ways:
+   *
+   * 1. The template id is preserved — multiple instances can share one
+   *    template (n:m between templates and projects). `importTeam`
+   *    always mints a fresh template.
+   * 2. The agent/edge content is read from a sibling instance instead
+   *    of an external `TeamExportV1`.
+   */
+  async applyTemplate(input: {
+    templateId: UUID
+    name?: string
+    worktreePath: string
+    projectPath?: string
+  }): Promise<TeamInstance> {
+    const template = this.registry.getTemplate(input.templateId)
+    if (!template) throw new Error('template not found')
+
+    // Pick any sibling instance to clone agents/edges from. There's
+    // always at least one until phase 5 retires the paired-on-create
+    // behaviour, since `createTeam` mints a sibling alongside its
+    // template.
+    const sibling = this.registry
+      .listInstances()
+      .find((inst) => inst.templateId === template.id)
+
+    const exported = sibling
+      ? await this.exportTeam(sibling.id)
+      : null
+
+    const name = input.name?.trim() || template.name
+
+    const { team } = this.registry.createTeamWithTemplate({
+      name,
+      worktreePath: input.worktreePath,
+      templateId: template.id,
+      projectPath: input.projectPath ?? input.worktreePath
+    })
+
+    if (!existsSync(teamDir(team.slug))) {
+      try { await createTeamFolder(team.slug) } catch { /* best-effort */ }
+    }
+
+    if (exported) {
+      if (exported.team.claudeMd) {
+        await this.writeTeamClaudeMd(team.id, exported.team.claudeMd)
+      }
+
+      const slugToId = new Map<string, UUID>()
+      let mainAgentId: UUID | null = null
+
+      for (const agentDef of exported.agents) {
+        const agent = await this.createAgent({
+          teamId: team.id,
+          position: agentDef.position,
+          name: agentDef.name,
+          role: agentDef.role,
+          description: agentDef.description,
+          model: agentDef.model,
+          color: agentDef.color,
+          preset: 'blank'
+        })
+
+        await this.writeAgentSoul(agent.id, agentDef.soul)
+        if (agentDef.skills.length > 0) {
+          await this.writeAgentSkills(agent.id, agentDef.skills)
+        }
+        if (agentDef.triggers.length > 0) {
+          const withIds = agentDef.triggers.map((t) => ({ ...t, id: randomUUID() }))
+          await this.writeAgentTriggers(agent.id, withIds)
+        }
+
+        if (agentDef.maxTokens !== 8192 || agentDef.provider) {
+          await this.updateAgent({
+            id: agent.id,
+            patch: {
+              ...(agentDef.maxTokens !== 8192 ? { maxTokens: agentDef.maxTokens } : {}),
+              ...(agentDef.provider ? { provider: agentDef.provider } : {})
+            }
+          })
+        }
+
+        slugToId.set(agentDef.slug, agent.id)
+        if (agentDef.isMain) mainAgentId = agent.id
+      }
+
+      for (const edgeDef of exported.edges) {
+        const parentId = slugToId.get(edgeDef.parentSlug)
+        const childId = slugToId.get(edgeDef.childSlug)
+        if (!parentId || !childId) continue
+        try {
+          await this.createEdge({
+            teamId: team.id,
+            parentAgentId: parentId,
+            childAgentId: childId,
+            delegationMode: edgeDef.delegationMode
+          })
+        } catch { /* skip cycles, etc. */ }
+      }
+
+      if (mainAgentId) {
+        const current = this.registry.getTeam(team.id)
+        if (current && current.mainAgentId !== mainAgentId) {
+          await this.promoteMain(mainAgentId)
+        }
+      }
+    }
+
+    const instance = this.registry.getInstance(team.id)
+    if (!instance) throw new Error('instance not found after apply')
+    return instance
   }
 
   /**

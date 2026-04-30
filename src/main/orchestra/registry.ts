@@ -98,6 +98,10 @@ export class OrchestraRegistry {
     return this.read().templates.find((t) => t.id === id)
   }
 
+  listTemplates(): TeamTemplate[] {
+    return [...this.read().templates]
+  }
+
   getInstance(id: UUID): TeamInstance | undefined {
     return this.read().instances.find((i) => i.id === id)
   }
@@ -195,12 +199,24 @@ export class OrchestraRegistry {
   deleteTeam(id: UUID): void {
     const state = this.read()
     if (!state.teams.some((t) => t.id === id)) return
-    const tplId = templateIdFor(id)
+    const removed = state.instances.find((inst) => inst.id === id)
+    const remainingInstances = state.instances.filter((inst) => inst.id !== id)
+    // Drop the template only if no other instance still references it.
+    // Once `applyTemplate` lands (phase 3), one template can back several
+    // instances across projects — deleting one instance must not
+    // invalidate the others.
+    const orphanTemplateId =
+      removed &&
+      !remainingInstances.some((inst) => inst.templateId === removed.templateId)
+        ? removed.templateId
+        : null
     this.write({
       ...state,
       teams: state.teams.filter((t) => t.id !== id),
-      templates: state.templates.filter((tpl) => tpl.id !== tplId),
-      instances: state.instances.filter((inst) => inst.id !== id),
+      templates: orphanTemplateId
+        ? state.templates.filter((tpl) => tpl.id !== orphanTemplateId)
+        : state.templates,
+      instances: remainingInstances,
       agents: state.agents.filter((a) => a.teamId !== id),
       edges: state.edges.filter((e) => e.teamId !== id),
       tasks: state.tasks.filter((t) => t.teamId !== id),
@@ -210,6 +226,56 @@ export class OrchestraRegistry {
       }),
       messageLog: state.messageLog.filter((m) => m.teamId !== id)
     })
+  }
+
+  /**
+   * Phase-3 entry point: create a fresh team-instance bound to an
+   * **existing** template instead of minting a new one alongside the
+   * team. Used by `applyTemplate` to apply the same template to a
+   * different project. Phase 5 will fold this into a single `createInstance`
+   * once the legacy `Team` shape is gone.
+   */
+  createTeamWithTemplate(input: {
+    name: string
+    worktreePath: string
+    templateId: UUID
+    projectPath?: string
+  }): { team: Team; instance: TeamInstance } {
+    const name = input.name?.trim() ?? ''
+    if (name.length === 0) throw new Error('empty name')
+
+    const state = this.read()
+    const template = state.templates.find((t) => t.id === input.templateId)
+    if (!template) throw new Error('template not found')
+
+    const slug = slugify(name, state.teams.map((t) => t.slug))
+    const now = new Date().toISOString()
+    const team: Team = {
+      id: randomUUID(),
+      slug,
+      name,
+      worktreePath: input.worktreePath,
+      safeMode: template.safeMode,
+      defaultModel: template.defaultModel,
+      apiKeyRef: template.apiKeyRef,
+      mainAgentId: null,
+      canvas: { ...template.canvas },
+      createdAt: now,
+      updatedAt: now
+    }
+    const instance: TeamInstance = {
+      id: team.id,
+      templateId: template.id,
+      projectPath: input.projectPath ?? input.worktreePath,
+      worktreePath: input.worktreePath,
+      createdAt: now
+    }
+    this.write({
+      ...state,
+      teams: [...state.teams, team],
+      instances: [...state.instances, instance]
+    })
+    return { team: { ...team }, instance: { ...instance } }
   }
 
   // agents

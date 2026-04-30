@@ -14,6 +14,7 @@ import type {
   SubmitTaskInput,
   Task,
   Team,
+  TeamInstance,
   UpdateAgentInput,
   UUID
 } from '../../../shared/orchestra'
@@ -84,6 +85,14 @@ interface OrchestraState extends PersistedView {
   // task
   submitTask: (input: SubmitTaskInput) => Promise<Task | null>
   cancelTask: (id: UUID) => Promise<void>
+
+  // templates / instances (phase 3 of issue #12)
+  applyTemplate: (input: {
+    templateId: UUID
+    worktreePath: string
+    name?: string
+    projectPath?: string
+  }) => Promise<TeamInstance | null>
 }
 
 const DEFAULT_SETTINGS: OrchestraSettings = {
@@ -318,6 +327,20 @@ export const useOrchestra = create<OrchestraState>()(
         if (!o) return
         const res = await o.task.cancel(id)
         if (!res.ok) toastError('Cancel task failed', res.error)
+      },
+
+      applyTemplate: async (input) => {
+        const o = api()
+        if (!o) return null
+        const res = await o.instance.apply(input)
+        if (!res.ok) {
+          toastError('Apply template failed', res.error)
+          return null
+        }
+        // The team.changed event from main will land shortly and update
+        // `teams[]`; no need to mirror the result into a local instances
+        // slice yet — phase 4 wires the UI surfaces that need it.
+        return res.value
       },
 
       setSettings: async (patch) => {

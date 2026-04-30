@@ -513,6 +513,8 @@ import type {
   Task,
   Team,
   TeamExportV1,
+  TeamInstance,
+  TeamTemplate,
   Trigger,
   UpdateAgentInput,
   UUID
@@ -718,6 +720,18 @@ export interface HydraEnsembleApi {
       submit: (input: SubmitTaskInput) => Promise<OrchestraResult<Task>>
       cancel: (id: UUID) => Promise<OrchestraResult<void>>
       list: (teamId: UUID) => Promise<Task[]>
+    }
+    template: {
+      list: () => Promise<TeamTemplate[]>
+    }
+    instance: {
+      list: (filter?: { projectPath?: string }) => Promise<TeamInstance[]>
+      apply: (input: {
+        templateId: UUID
+        worktreePath: string
+        name?: string
+        projectPath?: string
+      }) => Promise<OrchestraResult<TeamInstance>>
     }
     messageLog: {
       forTask: (taskId: UUID) => Promise<MessageLog[]>

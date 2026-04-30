@@ -290,6 +290,19 @@ const api: HydraEnsembleApi = {
       cancel: (id: UUID) => ipcRenderer.invoke('orchestra:task.cancel', { id }),
       list: (teamId: UUID) => unwrapList('orchestra:task.list', { teamId })
     },
+    template: {
+      list: () => unwrapList('orchestra:template.list')
+    },
+    instance: {
+      list: (filter: { projectPath?: string } = {}) =>
+        unwrapList('orchestra:instance.list', filter),
+      apply: (input: {
+        templateId: UUID
+        worktreePath: string
+        name?: string
+        projectPath?: string
+      }) => ipcRenderer.invoke('orchestra:instance.apply', input)
+    },
     messageLog: {
       forTask: (taskId: UUID) =>
         unwrapList('orchestra:messageLog.forTask', { taskId })
