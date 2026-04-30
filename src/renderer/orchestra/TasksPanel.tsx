@@ -55,6 +55,8 @@ export default function TasksPanel() {
   const tasks = useOrchestra((s) => s.tasks)
   const agents = useOrchestra((s) => s.agents)
   const setTaskDrawer = useOrchestra((s) => s.setTaskDrawer)
+  const cancelTask = useOrchestra((s) => s.cancelTask)
+  const rerunTask = useOrchestra((s) => s.rerunTask)
 
   const [filter, setFilter] = useState<FilterKey>('all')
   const showNewTaskDialog = useNewTaskDialog((s) => s.show)
@@ -207,6 +209,8 @@ export default function TasksPanel() {
                   task={t}
                   assigneeName={resolveAssigneeName(t)}
                   onClick={() => setTaskDrawer(t.id)}
+                  onStop={(task) => void cancelTask(task.id)}
+                  onRerun={(task) => void rerunTask(task.id)}
                 />
               </li>
             ))}

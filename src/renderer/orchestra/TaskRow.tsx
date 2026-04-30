@@ -17,8 +17,10 @@ import {
   CircleDashed,
   CircleX,
   Loader2,
+  RotateCcw,
   Route as RouteIcon,
-  Settings
+  Settings,
+  Square
 } from 'lucide-react'
 import type { Priority, Task, TaskStatus } from '../../shared/orchestra'
 import { relativeTime } from '../lib/time'
@@ -38,7 +40,25 @@ interface Props {
    *  whether to surface the "fix" provider chip. */
   failureReason?: string
   onClick: () => void
+  /** Optional inline-action callbacks. When provided, hover-reveal
+   *  buttons appear on the meta row: Stop for in-flight tasks
+   *  (queued/routing/in_progress/blocked), Re-run for terminal ones
+   *  (done/failed). Both swallow click propagation so the row's
+   *  drawer-open handler doesn't fire. */
+  onStop?: (task: Task) => void
+  onRerun?: (task: Task) => void
 }
+
+const ACTIVE_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  'queued',
+  'routing',
+  'in_progress',
+  'blocked'
+])
+const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  'done',
+  'failed'
+])
 
 /** Priority pill palette — kept in sync with TaskBar.tsx. P3 is the muted
  *  neutral, P0 the alarming red. */
@@ -115,7 +135,9 @@ export default function TaskRow({
   assigneeName,
   autoRouted = false,
   failureReason,
-  onClick
+  onClick,
+  onStop,
+  onRerun
 }: Props) {
   const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -144,6 +166,20 @@ export default function TaskRow({
       e.stopPropagation()
     }
   }
+
+  const swallowKey = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+  }
+  const handleStop = (e: MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation()
+    onStop?.(task)
+  }
+  const handleRerun = (e: MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation()
+    onRerun?.(task)
+  }
+  const showStop = !!onStop && ACTIVE_STATUSES.has(task.status)
+  const showRerun = !!onRerun && TERMINAL_STATUSES.has(task.status)
 
   return (
     <div
@@ -242,6 +278,31 @@ export default function TaskRow({
         <span className="ml-auto shrink-0 font-mono text-[10px] text-text-4">
           {relativeTime(task.createdAt)}
         </span>
+
+        {showStop ? (
+          <button
+            type="button"
+            onClick={handleStop}
+            onKeyDown={swallowKey}
+            title="Stop task"
+            aria-label={`Stop task ${task.title}`}
+            className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-4 hover:bg-bg-3 hover:text-status-attention"
+          >
+            <Square size={11} strokeWidth={2} />
+          </button>
+        ) : null}
+        {showRerun ? (
+          <button
+            type="button"
+            onClick={handleRerun}
+            onKeyDown={swallowKey}
+            title="Re-run task"
+            aria-label={`Re-run task ${task.title}`}
+            className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-4 hover:bg-bg-3 hover:text-accent-400"
+          >
+            <RotateCcw size={11} strokeWidth={2} />
+          </button>
+        ) : null}
       </div>
     </div>
   )
