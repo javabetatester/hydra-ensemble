@@ -199,6 +199,7 @@ export default function App() {
 
   useGlobalKeybinds({
     orchestraEnabled,
+    orchestraOpen,
     toggleOrchestra,
     setOrchestraOpen,
     setOrchestraSettings,

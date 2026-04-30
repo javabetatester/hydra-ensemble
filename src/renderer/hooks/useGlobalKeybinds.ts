@@ -14,6 +14,10 @@ import { useRightPanel, type PanelKind } from '../state/panels'
  */
 export interface GlobalKeybindDeps {
   orchestraEnabled: boolean
+  /** Whether the Orchestrator overlay is currently mounted (vs just
+   *  enabled). Used to make `Ctrl+Q` and `Ctrl+Shift+O` context-aware
+   *  switches between the orchestrator and classic layouts. */
+  orchestraOpen: boolean
   toggleOrchestra: () => void
   setOrchestraOpen: (v: boolean) => void
   setOrchestraSettings: (patch: { enabled: boolean }) => Promise<void>
@@ -42,6 +46,7 @@ export interface GlobalKeybindDeps {
 export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
   const {
     orchestraEnabled,
+    orchestraOpen,
     toggleOrchestra,
     setOrchestraOpen,
     setOrchestraSettings,
@@ -125,13 +130,36 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
       'drawer.projects': () => setDrawerOpen((v) => !v),
       'panel.dashboard': () => togglePanelFor('dashboard'),
       'panel.editor': () => togglePanelFor('editor'),
-      'panel.sessions': () => useRightPanel.getState().toggle(),
+      // panel.sessions is the classic-layout toggle; when the
+      // orchestrator overlay is up, the same key acts as "exit
+      // orchestrator" so users can mirror the open shortcut below.
+      'panel.sessions': () => {
+        if (orchestraOpen) {
+          setOrchestraOpen(false)
+          return
+        }
+        useRightPanel.getState().toggle()
+      },
       'palette.open': () => setPaletteOpen((v) => !v),
       'help.open': () => setHelpOpen((v) => !v),
-      'orchestra.newTaskInProject': () =>
+      // orchestra.newTaskInProject is dual-purpose:
+      //   - In classic layout: open the orchestrator overlay (no
+      //     modal). This is the symmetric counterpart to panel.sessions
+      //     above, so Ctrl+Q exits and Ctrl+Shift+O enters.
+      //   - In the orchestrator: open NewTaskDialog with the current
+      //     project as initial context.
+      'orchestra.newTaskInProject': () => {
+        if (!orchestraOpen) {
+          if (!orchestraEnabled) {
+            void setOrchestraSettings({ enabled: true })
+          }
+          setOrchestraOpen(true)
+          return
+        }
         showNewOrchestraTask(
           currentProjectPath ? { projectPath: currentProjectPath } : {}
         )
+      }
     }
 
     const onKey = (e: KeyboardEvent): void => {
