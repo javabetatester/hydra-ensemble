@@ -223,6 +223,15 @@ export default function App() {
     showNewOrchestraTask
   })
 
+  // ProjectChip in OrchestraView dispatches this when its inline list
+  // overflows (>6 projects) and the user picks "More projects…".
+  useEffect(() => {
+    const open = (): void => setDrawerOpen(true)
+    window.addEventListener('orchestra:open-projects-drawer', open)
+    return () =>
+      window.removeEventListener('orchestra:open-projects-drawer', open)
+  }, [])
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg-0 text-text-1">
       {/* Manager drawer — collapsible AND user-resizable. Width is
