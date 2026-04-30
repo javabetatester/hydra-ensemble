@@ -3,6 +3,7 @@ import { useKeybinds, resolveBind } from '../state/keybinds'
 import { comboFromEvent, matchesCombo } from '../lib/keybind'
 import { hasMod } from '../lib/platform'
 import { useRightPanel, type PanelKind } from '../state/panels'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 
 /**
  * Global keybind dispatcher previously embedded in App.tsx.
@@ -159,6 +160,21 @@ export function useGlobalKeybinds(deps: GlobalKeybindDeps): void {
         showNewOrchestraTask(
           currentProjectPath ? { projectPath: currentProjectPath } : {}
         )
+      },
+      // Orchestrator panel toggles. No-op outside the orchestrator
+      // overlay so they don't intercept Ctrl+Shift+L/P/J in the
+      // classic layout (where they'd be jarring no-ops).
+      'orchestra.panel.templates': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleTemplates()
+      },
+      'orchestra.panel.projects': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleProjects()
+      },
+      'orchestra.panel.dock': () => {
+        if (!orchestraOpen) return
+        useOrchestraPanels.getState().toggleDock()
       }
     }
 

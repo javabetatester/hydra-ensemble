@@ -30,6 +30,9 @@ export const ACTIONS: Action[] = [
 
   // Orchestrator
   { id: 'orchestra.newTaskInProject', label: 'Open Orchestrator · New task in current project', group: 'Orchestrator', default: 'mod+shift+o' },
+  { id: 'orchestra.panel.templates', label: 'Toggle Templates Library', group: 'Orchestrator', default: 'mod+shift+l' },
+  { id: 'orchestra.panel.projects', label: 'Toggle Projects & Teams panel', group: 'Orchestrator', default: 'mod+shift+p' },
+  { id: 'orchestra.panel.dock', label: 'Toggle right dock (Tasks / Inspector)', group: 'Orchestrator', default: 'mod+shift+j' },
 
   // Panels
   { id: 'panel.terminals', label: 'Terminals panel', group: 'Panels', default: 'mod+backquote' },
