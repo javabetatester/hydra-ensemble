@@ -999,6 +999,13 @@ export class OrchestraCore {
     const parent = this.mostRecentActiveTaskFor(fromId)
     const sub: SubmitInput = {
       teamId: from.teamId,
+      // Honour the agent's chosen target. Without this, submitTask
+      // falls into Router.pickAgent, which re-routes; when no trigger
+      // matches positively the router falls back to the team's main
+      // agent — and the main delegates again, looping forever.
+      // validateDelegation already proved toAgentId is a valid
+      // descendant in the DAG, so trusting it here is safe.
+      assignedAgentId: req.toAgentId,
       title: req.sub.title,
       body: req.sub.body,
       priority: req.sub.priority,
