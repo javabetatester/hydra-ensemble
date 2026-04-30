@@ -12,6 +12,7 @@ import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import { useEditor } from '../state/editor'
 import { useOrchestra } from './state/orchestra'
 import DeleteTeamModal from './modals/DeleteTeamModal'
+import TeamRailGroup, { type GroupStatus } from './TeamRailGroup'
 
 /** Last segment of a unix/windows path. Used to surface the project
  *  binding under each team's name without flooding the rail. */
@@ -19,6 +20,27 @@ function basename(p: string): string {
   if (!p) return ''
   const parts = p.split(/[\\/]/).filter(Boolean)
   return parts[parts.length - 1] ?? p
+}
+
+/** Persisted collapse state per project path. The key is namespaced by
+ *  path so users can fold "noisy" projects independently. */
+const COLLAPSE_PREFIX = 'hydra.orchestra.rail.group.'
+
+function readCollapsed(path: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return localStorage.getItem(COLLAPSE_PREFIX + path) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function writeCollapsed(path: string, collapsed: boolean): void {
+  try {
+    localStorage.setItem(COLLAPSE_PREFIX + path, collapsed ? 'true' : 'false')
+  } catch {
+    /* localStorage unavailable; in-memory state still reflects toggle. */
+  }
 }
 
 const INPUT_CLS =
@@ -35,6 +57,7 @@ const onEnterEsc = (
 /** Left 220px rail of the Orchestra workspace. See PRD §10.F2 / §11. */
 export default function TeamRail() {
   const teams = useOrchestra((s) => s.teams)
+  const agents = useOrchestra((s) => s.agents)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
   const setActiveTeam = useOrchestra((s) => s.setActiveTeam)
   const createTeam = useOrchestra((s) => s.createTeam)
@@ -60,6 +83,61 @@ export default function TeamRail() {
   const activeTeam = useMemo(
     () => teams.find((t) => t.id === activeTeamId) ?? null,
     [teams, activeTeamId]
+  )
+
+  /** Group teams by their worktreePath. Order preserves the first
+   *  appearance of each path in `teams[]` so the rail order is stable
+   *  across renders. Grouping is auto-elided when there's only one
+   *  project — no point showing a group header for a single bucket. */
+  const groups = useMemo(() => {
+    const buckets = new Map<string, Team[]>()
+    for (const t of teams) {
+      const k = t.worktreePath || ''
+      const list = buckets.get(k)
+      if (list) list.push(t)
+      else buckets.set(k, [t])
+    }
+    return Array.from(buckets.entries()).map(([path, list]) => ({
+      path,
+      teams: list
+    }))
+  }, [teams])
+
+  /** When exactly one group is present, the group header would be
+   *  pure noise — the basename is already on each row. */
+  const showGroups = groups.length > 1
+
+  /** Per-path collapse state (persisted). Initialised lazily; updates
+   *  go straight to localStorage via `writeCollapsed`. */
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {}
+    for (const g of groups) init[g.path] = readCollapsed(g.path)
+    return init
+  })
+
+  const toggleCollapsed = useCallback((path: string): void => {
+    setCollapsed((prev) => {
+      const next = !(prev[path] ?? false)
+      writeCollapsed(path, next)
+      return { ...prev, [path]: next }
+    })
+  }, [])
+
+  /** Aggregate status dot for a group. Priority: any agent with
+   *  state `error` → attention; else any `running` → running; else
+   *  idle. Mirrors the canvas' agent-state vocabulary. */
+  const groupStatus = useCallback(
+    (groupTeams: Team[]): GroupStatus => {
+      const ids = new Set(groupTeams.map((t) => t.id))
+      let hasRunning = false
+      for (const a of agents) {
+        if (!ids.has(a.teamId)) continue
+        if (a.state === 'error') return 'attention'
+        if (a.state === 'running') hasRunning = true
+      }
+      return hasRunning ? 'running' : 'idle'
+    },
+    [agents]
   )
 
   const cancelCreate = useCallback((): void => { setCreating(false); setDraftName('') }, [])
@@ -227,7 +305,28 @@ export default function TeamRail() {
           </div>
         ) : (
           <div className="flex flex-col gap-0.5 px-1">
-            {teams.map(renderRow)}
+            {showGroups
+              ? groups.map((g) => {
+                  const isCollapsed = collapsed[g.path] ?? false
+                  return (
+                    <div key={g.path || '__none__'} className="flex flex-col gap-0.5">
+                      <TeamRailGroup
+                        projectPath={g.path}
+                        basename={basename(g.path)}
+                        teamCount={g.teams.length}
+                        expanded={!isCollapsed}
+                        onToggle={() => toggleCollapsed(g.path)}
+                        status={groupStatus(g.teams)}
+                      />
+                      {!isCollapsed
+                        ? g.teams.map((t) => (
+                            <div key={t.id} className="pl-2">{renderRow(t)}</div>
+                          ))
+                        : null}
+                    </div>
+                  )
+                })
+              : teams.map(renderRow)}
             {creating && (
               <div className="flex items-center gap-1.5 rounded-sm bg-bg-3 px-2 py-1.5">
                 <ChevronRight size={12} strokeWidth={1.75} aria-hidden className="text-accent-400" />
