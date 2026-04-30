@@ -41,6 +41,7 @@ import TeamTemplatesDialog from './TeamTemplatesDialog'
 import ImportTeamDialog from './ImportTeamDialog'
 import GenerateTeamDialog from './GenerateTeamDialog'
 import TeamSwitcher from './TeamSwitcher'
+import ProjectChip from './ProjectChip'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
 import ProvidersDialog from './ProvidersDialog'
@@ -203,6 +204,14 @@ export default function OrchestraView({ onBackToClassic }: Props) {
     () => (activeTeam ? agents.filter((a) => a.teamId === activeTeam.id) : []),
     [agents, activeTeam]
   )
+  /** Tasks scoped to the active team — surfaced in the header counter
+   *  next to the agent count so the breadcrumb's pill can be retired. */
+  const activeTeamTaskCount = useMemo(() => {
+    if (!activeTeam) return 0
+    let n = 0
+    for (const t of tasks) if (t.teamId === activeTeam.id) n++
+    return n
+  }, [tasks, activeTeam])
   /** Count of tasks in the active team that failed in the last 24h —
    *  surfaces as a red dot on the Health button. */
   const recentFailureCount = useMemo(() => {
@@ -271,11 +280,12 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           · surface still shifting, expect rough edges
         </span>
       </div>
-      {/* Top header strip — 48px, two logical groups separated by a visible
-          divider on the right. See PRD.md §11. */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-4">
-        {/* Left group: navigation + brand + team picker */}
-        <div className="flex min-w-0 items-center gap-3">
+      {/* Top header strip — 40px (was 48), two logical groups separated
+          by a visible divider on the right. Trimmed in phase-1 of the
+          orchestrator UI proposal so the canvas gains vertical room. */}
+      <header className="flex h-10 shrink-0 items-center justify-between border-b border-border-soft bg-bg-2 px-4">
+        {/* Left group: navigation + brand + project + team picker */}
+        <div className="flex min-w-0 items-center gap-2.5">
           <button
             type="button"
             onClick={onBackToClassic}
@@ -295,6 +305,10 @@ export default function OrchestraView({ onBackToClassic }: Props) {
                 className="h-5 w-px bg-border-soft"
                 aria-hidden
               />
+              {/* Project chip — first thing after the brand so the
+                   "where am I" answer is unmissable. Followed by the
+                   team picker. */}
+              <ProjectChip />
               <div className="flex items-center gap-1.5">
                 <TeamSwitcher />
                 {activeTeam?.mainAgentId ? (
@@ -307,8 +321,16 @@ export default function OrchestraView({ onBackToClassic }: Props) {
                   </span>
                 ) : null}
                 {activeAgents.length > 0 ? (
-                  <span className="font-mono text-[10px] text-text-4">
+                  <span
+                    className="font-mono text-[10px] text-text-4"
+                    title="Agents · tasks in the active team"
+                  >
                     {activeAgents.length} {activeAgents.length === 1 ? 'agent' : 'agents'}
+                    {activeTeamTaskCount > 0
+                      ? ` · ${activeTeamTaskCount} ${
+                          activeTeamTaskCount === 1 ? 'task' : 'tasks'
+                        }`
+                      : ''}
                   </span>
                 ) : null}
               </div>

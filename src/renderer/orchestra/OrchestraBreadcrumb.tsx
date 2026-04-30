@@ -96,17 +96,6 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
     [teams, activeTeamId]
   )
 
-  // Scope the live pill counters to the active team — otherwise a global
-  // count would mislead the user on multi-team workspaces.
-  const { teamAgentCount, teamTaskCount } = useMemo(() => {
-    if (!activeTeam) return { teamAgentCount: 0, teamTaskCount: 0 }
-    let a = 0
-    let t = 0
-    for (const ag of agents) if (ag.teamId === activeTeam.id) a++
-    for (const tk of tasks) if (tk.teamId === activeTeam.id) t++
-    return { teamAgentCount: a, teamTaskCount: t }
-  }, [activeTeam, agents, tasks])
-
   // Context label: agent selection takes precedence over task drawer so the
   // user always knows what the inspector is talking about.
   const contextLabel = useMemo<string | null>(() => {
@@ -181,7 +170,7 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
 
   return (
     <div
-      className="flex h-7 w-full items-center justify-between gap-2 border-b border-border-soft bg-bg-2 px-3 py-1 text-[11px] text-text-3"
+      className="flex h-[22px] w-full items-center justify-between gap-2 border-b border-border-soft bg-bg-2 px-3 text-[11px] text-text-3"
       role="navigation"
       aria-label="Orchestrador breadcrumb"
     >
@@ -269,18 +258,12 @@ export default function OrchestraBreadcrumb(_props: Props = {}) {
         ) : null}
       </div>
 
-      {/* Right: live pill + View dropdown (only when a team is active) */}
+      {/* Right: View dropdown (only when a team is active). The
+           counter pill that lived here moved to the header, removing
+           a redundant "N agents · M tasks" instance and freeing the
+           breadcrumb to be a pure navigation trail. */}
       {activeTeam ? (
         <div ref={wrapperRef} className="relative flex shrink-0 items-center gap-2">
-          <span
-            className="rounded-sm bg-bg-3 px-1.5 py-0.5 font-mono text-[10px] text-text-2"
-            aria-live="polite"
-            title="Agents and tasks in the active team"
-          >
-            {teamAgentCount} {teamAgentCount === 1 ? 'agent' : 'agents'} ·{' '}
-            {teamTaskCount} {teamTaskCount === 1 ? 'task' : 'tasks'}
-          </span>
-
           <button
             type="button"
             onClick={() => setViewOpen((v) => !v)}
