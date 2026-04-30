@@ -90,6 +90,24 @@ export class OrchestraRegistry {
     return this.read().teams.find((t) => t.id === id)
   }
 
+  // template / instance — phase 2 readers. Mirror the legacy team
+  // surface so callers can migrate gradually. Phase 5 makes these the
+  // primary surface and removes the team-keyed methods above.
+
+  getTemplate(id: UUID): TeamTemplate | undefined {
+    return this.read().templates.find((t) => t.id === id)
+  }
+
+  getInstance(id: UUID): TeamInstance | undefined {
+    return this.read().instances.find((i) => i.id === id)
+  }
+
+  listInstances(filter: { projectPath?: string } = {}): TeamInstance[] {
+    const { instances } = this.read()
+    if (filter.projectPath === undefined) return [...instances]
+    return instances.filter((i) => i.projectPath === filter.projectPath)
+  }
+
   createTeam(input: NewTeamInput): Team {
     const name = input.name?.trim() ?? ''
     if (name.length === 0) throw new Error('empty name')

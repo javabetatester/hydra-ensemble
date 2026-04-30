@@ -35,6 +35,7 @@ function makeAgent(patch: Partial<Agent> = {}): Agent {
 function makeTask(patch: Partial<Task> = {}): Task {
   return {
     id: 'task-1',
+    instanceId: 'team-1',
     teamId: 'team-1',
     title: 'T',
     body: '',

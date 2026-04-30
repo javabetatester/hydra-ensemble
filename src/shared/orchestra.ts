@@ -163,6 +163,10 @@ export interface ReportingEdge {
 
 export interface Task {
   id: UUID
+  /** Owning team-instance. During the template/instance split,
+   *  `instanceId === teamId` (see issue #12, phase 2). Phase 5 retires
+   *  `teamId`. */
+  instanceId: UUID
   teamId: UUID
   title: string
   body: string
@@ -300,7 +304,13 @@ export interface NewEdgeInput {
 }
 
 export interface SubmitTaskInput {
-  teamId: UUID
+  /** Target team-instance for the task. Preferred over `teamId`. While
+   *  the template/instance split is in flight, `instance.id === legacy
+   *  team.id` so either field resolves to the same target. Phase 5
+   *  retires `teamId` here too. */
+  instanceId?: UUID
+  /** Legacy alias for `instanceId`. At least one of the two must be set. */
+  teamId?: UUID
   title: string
   body: string
   priority?: Priority

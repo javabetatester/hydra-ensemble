@@ -302,6 +302,25 @@ describe('OrchestraRegistry — template/instance pairing (phase 1)', () => {
     expect(template!.mainAgentSlug).toBe(a2.slug)
   })
 
+  it('exposes getInstance and listInstances filtered by projectPath', () => {
+    const { reg } = makeRegistryWithStore()
+    const a = reg.createTeam({ name: 'A', worktreePath: '/proj/a' })
+    const b = reg.createTeam({ name: 'B', worktreePath: '/proj/b' })
+    const c = reg.createTeam({ name: 'C', worktreePath: '/proj/a' })
+
+    expect(reg.getInstance(a.id)?.id).toBe(a.id)
+    expect(reg.getInstance('does-not-exist')).toBeUndefined()
+
+    const all = reg.listInstances()
+    expect(all.map((i) => i.id).sort()).toEqual([a.id, b.id, c.id].sort())
+
+    const inProjectA = reg.listInstances({ projectPath: '/proj/a' })
+    expect(inProjectA.map((i) => i.id).sort()).toEqual([a.id, c.id].sort())
+
+    const inProjectB = reg.listInstances({ projectPath: '/proj/b' })
+    expect(inProjectB.map((i) => i.id)).toEqual([b.id])
+  })
+
   it('deleting the main agent reassigns template.mainAgentSlug or clears it', async () => {
     const { reg, store } = makeRegistryWithStore()
     const team = reg.createTeam({ name: 'T', worktreePath: '/tmp/t' })

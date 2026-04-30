@@ -283,13 +283,19 @@ export class OrchestraCore {
   }
 
   async submitTask(input: SubmitTaskInput): Promise<Task> {
-    const team = this.registry.getTeam(input.teamId)
+    // Phase 2 of issue #12: prefer `instanceId`, fall back to legacy
+    // `teamId`. While the split is in flight `instance.id === team.id`
+    // so the two paths converge on the same target.
+    const targetId = input.instanceId ?? input.teamId
+    if (!targetId) throw new Error('instanceId or teamId required')
+    const team = this.registry.getTeam(targetId)
     if (!team) throw new Error('team not found')
 
     const now = new Date().toISOString()
     const task: Task = {
       id: randomUUID(),
-      teamId: input.teamId,
+      instanceId: targetId,
+      teamId: targetId,
       title: input.title,
       body: input.body,
       priority: input.priority ?? 'P2',

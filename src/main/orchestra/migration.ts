@@ -35,6 +35,11 @@ import type {
  * Shape of the persisted slice in schema v1 — frozen here so the
  * migration keeps compiling even after the shared types finish moving
  * to v2-only.
+ *
+ * `tasks` are typed as the legacy shape (no `instanceId`) so the
+ * backfill step in `migrateV1ToV2` is the only place that has to know
+ * the v1 contract. The shared `Task` type already carries `instanceId`
+ * since phase 2; here we keep using `Omit` to model the input.
  */
 export interface LegacyOrchestraSliceV1 {
   schemaVersion: 1
@@ -42,7 +47,7 @@ export interface LegacyOrchestraSliceV1 {
   teams: Team[]
   agents: Agent[]
   edges: ReportingEdge[]
-  tasks: Task[]
+  tasks: Array<Omit<Task, 'instanceId'>>
   routes: Route[]
   messageLog: MessageLog[]
 }
@@ -89,7 +94,10 @@ export function migrateV1ToV2(v1: LegacyOrchestraSliceV1): OrchestraStoreSlice {
     instances,
     agents: v1.agents,
     edges: v1.edges,
-    tasks: v1.tasks,
+    // Backfill `instanceId` from the legacy `teamId` — they're the
+    // same value during the split (see invariant above), so existing
+    // tasks just need the field populated.
+    tasks: v1.tasks.map((t) => ({ ...t, instanceId: t.teamId })),
     routes: v1.routes,
     messageLog: v1.messageLog
   }

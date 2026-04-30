@@ -120,7 +120,43 @@ describe('migrateV1ToV2', () => {
     const instance = v2.instances[0]!
     expect(instance.id).toBe('team-1')
     expect(v2.tasks[0]!.teamId).toBe(instance.id)
+    expect(v2.tasks[0]!.instanceId).toBe(instance.id)
     expect(v2.agents[0]!.teamId).toBe(instance.id)
+  })
+
+  it('backfills task.instanceId from the legacy task.teamId', () => {
+    const v1 = emptyV1()
+    v1.teams = [makeTeam(), makeTeam({ id: 'team-2', slug: 'b', worktreePath: '/x' })]
+    v1.tasks = [
+      {
+        id: 'a',
+        teamId: 'team-1',
+        title: 'a',
+        body: '',
+        priority: 'P2',
+        tags: [],
+        status: 'queued',
+        assignedAgentId: null,
+        parentTaskId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      },
+      {
+        id: 'b',
+        teamId: 'team-2',
+        title: 'b',
+        body: '',
+        priority: 'P2',
+        tags: [],
+        status: 'queued',
+        assignedAgentId: null,
+        parentTaskId: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+    ]
+    const v2 = migrateV1ToV2(v1)
+    expect(v2.tasks.map((t) => t.instanceId)).toEqual(['team-1', 'team-2'])
   })
 
   it('resolves mainAgentId to mainAgentSlug on the template', () => {

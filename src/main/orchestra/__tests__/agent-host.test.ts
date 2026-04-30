@@ -58,6 +58,7 @@ function makeAgent(overrides: Partial<Agent> = {}): Agent {
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 'task-1',
+    instanceId: 'team-1',
     teamId: 'team-1',
     title: 'Do the thing',
     body: 'Thing description',
