@@ -49,6 +49,37 @@ export interface Team {
   updatedAt: ISO
 }
 
+/**
+ * Reusable, project-agnostic definition of a team — the "how" of running
+ * a kind of task. Carries metadata and provisioning defaults but **no**
+ * project-specific runtime state (worktree, runtime mutations, message
+ * log, telemetry — those belong on `TeamInstance`, introduced in phase 1).
+ *
+ * Today's `Team` collapses template + instance into a single object.
+ * This type is introduced ahead of the full split so subsequent phases
+ * can rebind `Agent`, `Task`, `MessageLog`, etc. against it without a
+ * single oversized commit. Nothing in the codebase consumes it yet — see
+ * `researchs/proposals/team-template-instance-split.md` and issue #12
+ * for the migration plan.
+ */
+export interface TeamTemplate {
+  id: UUID
+  slug: string
+  name: string
+  safeMode: SafeMode
+  defaultModel: string
+  apiKeyRef: string
+  /** Slug of the entry-point agent. We key by slug (stable across
+   *  instances) instead of agent id, since agent ids only exist once
+   *  the template is applied to a project. */
+  mainAgentSlug: string | null
+  /** Default canvas layout to seed each new instance. Each instance
+   *  gets its own copy on creation and mutates independently. */
+  canvas: { zoom: number; panX: number; panY: number }
+  createdAt: ISO
+  updatedAt: ISO
+}
+
 /** Which backend the runner should use for this agent.
  *  - `claude-cli`   — spawn `claude -p` and reuse the OAuth login in ~/.claude
  *  - `anthropic-api` — call Anthropic SDK with ANTHROPIC_API_KEY
