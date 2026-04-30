@@ -1,0 +1,225 @@
+{
+  "main": {
+    "id": "629da0b71f68b1de",
+    "type": "split",
+    "children": [
+      {
+        "id": "bcb4724c87b6b983",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "d6020932ef19a988",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "AGENTS.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "AGENTS"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9be02a22be289a79",
+    "type": "split",
+    "children": [
+      {
+        "id": "a34e0d7c34aa8266",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "88353b854468dd15",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Explorador de arquivos"
+            }
+          },
+          {
+            "id": "4373196ab74fdbbd",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Procurar"
+            }
+          },
+          {
+            "id": "7055e2254969999c",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Marcadores"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "b2fd794e7c4ff8c5",
+    "type": "split",
+    "children": [
+      {
+        "id": "f76f8ed55477f261",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "756c3047bb978cc4",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "AGENTS.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Links inversos para AGENTS"
+            }
+          },
+          {
+            "id": "8cb9a6d2db5f6bad",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "AGENTS.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Links de saída para AGENTS"
+            }
+          },
+          {
+            "id": "7070c0d83bbd87a5",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Etiquetas"
+            }
+          },
+          {
+            "id": "1d18e80603117c1d",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "Todas as propriedades"
+            }
+          },
+          {
+            "id": "6e2e0b4ab3aed73e",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "AGENTS.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Sumário de AGENTS"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Abrir a troca rápida": false,
+      "graph:Abrir visualização em gráfico": false,
+      "canvas:Criar novo canvas": false,
+      "daily-notes:Abrir a nota de hoje": false,
+      "templates:Inserir modelo": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Criar nova base": false
+    }
+  },
+  "active": "d6020932ef19a988",
+  "lastOpenFiles": [
+    "proposals/team-template-instance-split.md",
+    "proposals/prompt-to-team-generation.md",
+    "_Home.md",
+    "AGENTS.md",
+    "techniques/chain-prompting.md",
+    "glossary/mtld.md",
+    "glossary/bertscore.md",
+    "_Home.md.tmp.3843959.1777432014923",
+    "_meta/conventions.md.tmp.3843959.1777432008884",
+    "_Home.md.tmp.3843959.1777432003470",
+    "AGENTS.md.tmp.3843959.1777431997339",
+    "techniques/dual-memory-architecture.md",
+    "techniques/dual-memory-architecture.md.tmp.3843959.1777431827678",
+    "techniques/tool-use-structured-output.md",
+    "techniques/few-shot-prompting.md",
+    "techniques/few-shot-prompting.md.tmp.3843959.1777431803349",
+    "techniques/chain-prompting.md.tmp.3843959.1777431788460",
+    "techniques/persona-pattern-prompting.md",
+    "techniques/persona-pattern-prompting.md.tmp.3843959.1777431777284",
+    "glossary/tf-idf.md",
+    "glossary/tf-idf.md.tmp.3843959.1777431761982",
+    "glossary/mtld.md.tmp.3843959.1777431757066",
+    "glossary/mcp-protocol.md",
+    "glossary/a2a-protocol.md",
+    "glossary/top.md",
+    "glossary/dylan.md",
+    "glossary/drtag.md",
+    "glossary/iaag.md",
+    "proposals/orchestra-improvement-catalog.md",
+    "mcp-protocol.md",
+    "topics/state-of-multi-agent-orchestration.md",
+    "few-shot-prompting.md",
+    "URL.md",
+    "multi-agent-orchestration-2026.md",
+    "_templates/research-note.md",
+    "_meta/conventions.md"
+  ]
+}
