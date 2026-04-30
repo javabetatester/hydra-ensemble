@@ -57,6 +57,7 @@ export default function TasksPanel() {
   const setTaskDrawer = useOrchestra((s) => s.setTaskDrawer)
   const cancelTask = useOrchestra((s) => s.cancelTask)
   const rerunTask = useOrchestra((s) => s.rerunTask)
+  const deleteTask = useOrchestra((s) => s.deleteTask)
 
   const [filter, setFilter] = useState<FilterKey>('all')
   const showNewTaskDialog = useNewTaskDialog((s) => s.show)
@@ -211,6 +212,7 @@ export default function TasksPanel() {
                   onClick={() => setTaskDrawer(t.id)}
                   onStop={(task) => void cancelTask(task.id)}
                   onRerun={(task) => void rerunTask(task.id)}
+                  onDelete={(task) => void deleteTask(task.id)}
                 />
               </li>
             ))}

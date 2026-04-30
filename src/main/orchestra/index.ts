@@ -490,6 +490,28 @@ export class OrchestraCore {
     this.emit({ kind: 'task.changed', task: cancelled })
   }
 
+  /**
+   * Hard-remove a task (and its orphaned routes/messageLog entries).
+   * Refuses when the task is still active — callers should cancel
+   * first. Surfaces the deletion via `task.deleted` event so the
+   * renderer can drop the row from any list.
+   */
+  async deleteTask(id: UUID): Promise<void> {
+    const task = this.findTask(id)
+    if (!task) return
+    if (task.status !== 'done' && task.status !== 'failed') {
+      throw new Error('cancel the task before deleting')
+    }
+    const slice = getStore().orchestra
+    this.writeSlice({
+      ...slice,
+      tasks: slice.tasks.filter((t) => t.id !== id),
+      routes: slice.routes.filter((r) => r.taskId !== id),
+      messageLog: slice.messageLog.filter((m) => m.taskId !== id)
+    })
+    this.emit({ kind: 'task.deleted', taskId: id })
+  }
+
   messageLogForTask(taskId: UUID): MessageLog[] {
     return this.log.listForTask(taskId)
   }

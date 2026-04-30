@@ -286,6 +286,10 @@ export function registerOrchestraIpc(
     const err = needStr(p?.id, 'id')
     return err ? fail(err) : wrap(() => core.cancelTask(p.id))
   })
+  ipcMain.handle('orchestra:task.delete', (_e, p: { id: UUID }) => {
+    const err = needStr(p?.id, 'id')
+    return err ? fail(err) : wrap(() => core.deleteTask(p.id))
+  })
   ipcMain.handle('orchestra:task.list', (_e, p: { teamId: UUID }) => {
     const err = needStr(p?.teamId, 'teamId')
     return err ? fail(err) : ok(core.listTasks(p.teamId))

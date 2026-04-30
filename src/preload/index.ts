@@ -288,6 +288,7 @@ const api: HydraEnsembleApi = {
     task: {
       submit: (input: SubmitTaskInput) => ipcRenderer.invoke('orchestra:task.submit', input),
       cancel: (id: UUID) => ipcRenderer.invoke('orchestra:task.cancel', { id }),
+      delete: (id: UUID) => ipcRenderer.invoke('orchestra:task.delete', { id }),
       list: (teamId: UUID) => unwrapList('orchestra:task.list', { teamId })
     },
     template: {

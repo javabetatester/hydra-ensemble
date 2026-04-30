@@ -94,6 +94,9 @@ interface OrchestraState extends PersistedView {
   // task
   submitTask: (input: SubmitTaskInput) => Promise<Task | null>
   cancelTask: (id: UUID) => Promise<void>
+  /** Hard-delete a terminal (done/failed) task. Cancel first if
+   *  still active. Returns silently if the task isn't in the store. */
+  deleteTask: (id: UUID) => Promise<void>
   /** Clone a task and submit the copy. Title gets a `Re-run:`
    *  prefix (idempotent — no double prefix on re-run-of-re-run);
    *  priority, body, tags, and assignedAgentId are preserved.
@@ -361,6 +364,13 @@ export const useOrchestra = create<OrchestraState>()(
         if (!res.ok) toastError('Cancel task failed', res.error)
       },
 
+      deleteTask: async (id) => {
+        const o = api()
+        if (!o) return
+        const res = await o.task.delete(id)
+        if (!res.ok) toastError('Delete task failed', res.error)
+      },
+
       rerunTask: async (id) => {
         const task = get().tasks.find((t) => t.id === id)
         if (!task) return null
@@ -489,6 +499,15 @@ function handleEvent(evt: OrchestraEvent, set: SetFn, get: GetFn): void {
       return
     case 'task.changed':
       set((s) => ({ tasks: upsert(s.tasks, evt.task) }))
+      return
+    case 'task.deleted':
+      set((s) => ({
+        tasks: removeById(s.tasks, evt.taskId),
+        routes: s.routes.filter((r) => r.taskId !== evt.taskId),
+        // Drawer closes if it was pointing at the now-gone task.
+        taskDrawerTaskId:
+          s.taskDrawerTaskId === evt.taskId ? null : s.taskDrawerTaskId
+      }))
       return
     case 'route.added':
       set((s) => ({ routes: [...s.routes, evt.route] }))

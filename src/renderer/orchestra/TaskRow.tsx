@@ -20,7 +20,8 @@ import {
   RotateCcw,
   Route as RouteIcon,
   Settings,
-  Square
+  Square,
+  Trash2
 } from 'lucide-react'
 import type { Priority, Task, TaskStatus } from '../../shared/orchestra'
 import { relativeTime } from '../lib/time'
@@ -42,11 +43,12 @@ interface Props {
   onClick: () => void
   /** Optional inline-action callbacks. When provided, hover-reveal
    *  buttons appear on the meta row: Stop for in-flight tasks
-   *  (queued/routing/in_progress/blocked), Re-run for terminal ones
-   *  (done/failed). Both swallow click propagation so the row's
-   *  drawer-open handler doesn't fire. */
+   *  (queued/routing/in_progress/blocked), Re-run + Delete for
+   *  terminal ones (done/failed). All three swallow click
+   *  propagation so the row's drawer-open handler doesn't fire. */
   onStop?: (task: Task) => void
   onRerun?: (task: Task) => void
+  onDelete?: (task: Task) => void
 }
 
 const ACTIVE_STATUSES: ReadonlySet<TaskStatus> = new Set([
@@ -137,7 +139,8 @@ export default function TaskRow({
   failureReason,
   onClick,
   onStop,
-  onRerun
+  onRerun,
+  onDelete
 }: Props) {
   const onKey = (e: KeyboardEvent<HTMLDivElement>): void => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -178,8 +181,13 @@ export default function TaskRow({
     e.stopPropagation()
     onRerun?.(task)
   }
+  const handleDelete = (e: MouseEvent<HTMLButtonElement>): void => {
+    e.stopPropagation()
+    onDelete?.(task)
+  }
   const showStop = !!onStop && ACTIVE_STATUSES.has(task.status)
   const showRerun = !!onRerun && TERMINAL_STATUSES.has(task.status)
+  const showDelete = !!onDelete && TERMINAL_STATUSES.has(task.status)
 
   return (
     <div
@@ -301,6 +309,18 @@ export default function TaskRow({
             className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-4 hover:bg-bg-3 hover:text-accent-400"
           >
             <RotateCcw size={11} strokeWidth={2} />
+          </button>
+        ) : null}
+        {showDelete ? (
+          <button
+            type="button"
+            onClick={handleDelete}
+            onKeyDown={swallowKey}
+            title="Delete task from history"
+            aria-label={`Delete task ${task.title}`}
+            className="df-hover-reveal shrink-0 rounded-sm p-0.5 text-text-4 hover:bg-bg-3 hover:text-status-attention"
+          >
+            <Trash2 size={11} strokeWidth={2} />
           </button>
         ) : null}
       </div>

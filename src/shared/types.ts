@@ -719,6 +719,7 @@ export interface HydraEnsembleApi {
     task: {
       submit: (input: SubmitTaskInput) => Promise<OrchestraResult<Task>>
       cancel: (id: UUID) => Promise<OrchestraResult<void>>
+      delete: (id: UUID) => Promise<OrchestraResult<void>>
       list: (teamId: UUID) => Promise<Task[]>
     }
     template: {

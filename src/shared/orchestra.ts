@@ -262,6 +262,7 @@ export type OrchestraEvent =
   | { kind: 'edge.changed'; edge: ReportingEdge }
   | { kind: 'edge.deleted'; edgeId: UUID }
   | { kind: 'task.changed'; task: Task }
+  | { kind: 'task.deleted'; taskId: UUID }
   | { kind: 'route.added'; route: Route }
   | { kind: 'messageLog.appended'; entry: MessageLog }
   | { kind: 'apiKey.changed' }
