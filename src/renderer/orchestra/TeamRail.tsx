@@ -6,13 +6,14 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent
 } from 'react'
-import { Activity, ChevronRight, Download, HelpCircle, Plus, Search, Settings, Sparkles, Trash2, Upload, Users } from 'lucide-react'
+import { Activity, ChevronRight, Download, FolderTree, HelpCircle, Plus, Search, Settings, Sparkles, Trash2, Upload, Users, X } from 'lucide-react'
 import type { SafeMode, Team, UUID } from '../../shared/orchestra'
 import ContextMenu, { type ContextMenuItem } from '../components/ContextMenu'
 import { useEditor } from '../state/editor'
 import { useOrchestra } from './state/orchestra'
 import DeleteTeamModal from './modals/DeleteTeamModal'
 import TeamRailGroup, { type GroupStatus } from './TeamRailGroup'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 
 /** Last segment of a unix/windows path. Used to surface the project
  *  binding under each team's name without flooding the rail. */
@@ -59,6 +60,7 @@ export default function TeamRail() {
   const teams = useOrchestra((s) => s.teams)
   const agents = useOrchestra((s) => s.agents)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
+  const togglePanel = useOrchestraPanels((s) => s.toggleProjects)
   const setActiveTeam = useOrchestra((s) => s.setActiveTeam)
   const createTeam = useOrchestra((s) => s.createTeam)
   const renameTeam = useOrchestra((s) => s.renameTeam)
@@ -280,11 +282,22 @@ export default function TeamRail() {
   const empty = teams.length === 0 && !creating
 
   return (
-    <aside aria-label="Teams" data-coach="team-rail"
+    <aside aria-label="Projects & teams" data-coach="team-rail"
       className="flex h-full w-[220px] shrink-0 flex-col border-r border-border-soft bg-bg-2 text-text-2">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border-soft px-3">
-        <Users size={13} strokeWidth={1.75} className="text-text-4" />
-        <span className="df-label">teams</span>
+      <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-border-soft px-3">
+        <div className="flex items-center gap-2">
+          <FolderTree size={13} strokeWidth={1.75} className="text-accent-400" />
+          <span className="df-label">projects · teams</span>
+        </div>
+        <button
+          type="button"
+          onClick={togglePanel}
+          title="Close (Ctrl+Shift+P)"
+          aria-label="Close projects panel"
+          className="rounded-sm p-1 text-text-4 hover:bg-bg-3 hover:text-text-1"
+        >
+          <X size={12} strokeWidth={1.75} />
+        </button>
       </header>
 
       <div ref={listRef} tabIndex={0} onKeyDown={onRailKeyDown}

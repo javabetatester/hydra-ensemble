@@ -42,6 +42,7 @@ import GenerateTeamDialog from './GenerateTeamDialog'
 import TeamSwitcher from './TeamSwitcher'
 import ProjectChip from './ProjectChip'
 import TemplatesPanel from './TemplatesPanel'
+import { useOrchestraPanels } from '../state/orchestraPanels'
 import BulkActionsBar from './BulkActionsBar'
 import OrchestraToasts from './OrchestraToasts'
 import ProvidersDialog from './ProvidersDialog'
@@ -109,6 +110,8 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
   const inspectorOpen = useOrchestra((s) => s.inspectorOpen)
   const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
+  const projectsPanelOpen = useOrchestraPanels((s) => s.projects)
+  const dockPanelOpen = useOrchestraPanels((s) => s.dock)
   const init = useOrchestra((s) => s.init)
   const createTeam = useOrchestra((s) => s.createTeam)
 
@@ -419,12 +422,12 @@ export default function OrchestraView({ onBackToClassic }: Props) {
 
       {/* Main multi-panel body. Templates Library is the leftmost
           panel when toggled on (Ctrl+Shift+L), then the
-          Projects/Teams rail, then the canvas, then the right dock. */}
+          Projects/Teams rail (Ctrl+Shift+P), then the canvas, then
+          the right dock (Ctrl+Shift+J). Each panel is independently
+          collapsible — see useOrchestraPanels. */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <TemplatesPanel />
-        <aside className="flex w-[220px] shrink-0 flex-col border-r border-border-soft bg-bg-2">
-          <TeamRail />
-        </aside>
+        {projectsPanelOpen ? <TeamRail /> : null}
 
         <main className="relative flex min-w-0 flex-1 flex-col bg-bg-1">
           {/* Subtle accent stripe along the top edge when any task is
@@ -473,7 +476,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
             the Inspector — same surface, same close. Width adapts so
             the Inspector's denser content gets a bit more room. Phase
             3 of the orchestrator UI proposal. */}
-        {activeTeam && !sidePanelsHidden ? (
+        {activeTeam && !sidePanelsHidden && dockPanelOpen ? (
           <aside
             className={`flex shrink-0 flex-col border-l border-border-soft bg-bg-2 transition-[width] duration-150 ${
               inspectorOpen && selectedAgentIds.length === 1
