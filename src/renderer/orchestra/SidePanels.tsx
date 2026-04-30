@@ -23,6 +23,7 @@ import TasksHistoryPanel from './TasksHistoryPanel'
 import TeamChangesPanel from './TeamChangesPanel'
 import ActivityFeed from './ActivityFeed'
 import BudgetMeter from './BudgetMeter'
+import Inspector from './Inspector'
 
 type TabId = 'tasks' | 'history' | 'changes' | 'activity'
 
@@ -68,6 +69,12 @@ function readInitialTab(): TabId {
 export default function SidePanels() {
   const [activeTab, setActiveTab] = useState<TabId>(readInitialTab)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
+  const inspectorOpen = useOrchestra((s) => s.inspectorOpen)
+  const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
+  // Phase-3: when an agent is selected and the user wants the
+  // Inspector open, replace the team-scoped tab strip with it. Single
+  // dock surface, single close button — see issue #12 follow-up plan.
+  const showInspector = inspectorOpen && selectedAgentIds.length === 1
 
   // Persist tab selection. Swallow errors so a broken localStorage never
   // crashes the renderer.
@@ -82,6 +89,19 @@ export default function SidePanels() {
   const handleSelect = useCallback((id: TabId) => {
     setActiveTab(id)
   }, [])
+
+  if (showInspector) {
+    return (
+      <div className="flex h-full w-full flex-col overflow-hidden border-l border-border-soft bg-bg-2 text-text-1">
+        <Inspector />
+        {activeTeamId !== null && (
+          <div className="border-t border-border-soft bg-bg-1">
+            <BudgetMeter compact teamId={activeTeamId} />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden border-l border-border-soft bg-bg-2 text-text-1">

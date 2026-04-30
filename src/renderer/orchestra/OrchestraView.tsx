@@ -21,7 +21,6 @@ import {
 import { useOrchestra } from './state/orchestra'
 import TeamRail from './TeamRail'
 import Canvas from './Canvas'
-import Inspector from './Inspector'
 import SidePanels from './SidePanels'
 import TeamOverview from './TeamOverview'
 import CanvasFabs from './CanvasFabs'
@@ -109,6 +108,7 @@ export default function OrchestraView({ onBackToClassic }: Props) {
   const agents = useOrchestra((s) => s.agents)
   const activeTeamId = useOrchestra((s) => s.activeTeamId)
   const inspectorOpen = useOrchestra((s) => s.inspectorOpen)
+  const selectedAgentIds = useOrchestra((s) => s.selectedAgentIds)
   const init = useOrchestra((s) => s.init)
   const createTeam = useOrchestra((s) => s.createTeam)
 
@@ -464,15 +464,22 @@ export default function OrchestraView({ onBackToClassic }: Props) {
           )}
         </main>
 
-        {/* Right column: tabbed side panels (Tasks · History · Changes ·
-            Activity + BudgetMeter footer). Inspector is a fixed-position
-            drawer that layers on top when an agent is selected. */}
+        {/* Right dock: hosts the team-scoped tab strip (Tasks · History
+            · Changes · Activity) AND, when a single agent is selected,
+            the Inspector — same surface, same close. Width adapts so
+            the Inspector's denser content gets a bit more room. Phase
+            3 of the orchestrator UI proposal. */}
         {activeTeam && !sidePanelsHidden ? (
-          <aside className="flex w-[340px] shrink-0 flex-col border-l border-border-soft bg-bg-2">
+          <aside
+            className={`flex shrink-0 flex-col border-l border-border-soft bg-bg-2 transition-[width] duration-150 ${
+              inspectorOpen && selectedAgentIds.length === 1
+                ? 'w-[440px]'
+                : 'w-[360px]'
+            }`}
+          >
             <SidePanels />
           </aside>
         ) : null}
-        {inspectorOpen ? <Inspector /> : null}
       </div>
 
       {/* Bottom bar removed — task submission lives in the right-side
